@@ -54,12 +54,27 @@ Node 22:n asennus: ks. `.clinerules/implementation_plan.md` §2.
 
 ```bash
 npm install          # asentaa riippuvuudet kaikille workspace-paketeille
-npm run build        # kääntää paketit (event-contracts → sdk → observability)
+npm run build        # kääntää paketit (event-contracts → sdk → observability → infra)
 npm test             # ajaa vitest-testit
 npm run test:watch   # testit watch-tilassa
 npm run lint         # ESLint
 npm run format       # Prettier
 ```
+
+## Infra (AWS CDK)
+
+`infra/` sisältää koko AWS-arkkitehtuurin kahdeksana stackina
+(foundation, data, eventing, ingestion, event-processing, api, frontend,
+monitoring). Komennot (Node 22 + CDK CLI vaaditaan):
+
+```bash
+npm run synth        # syntesoi kaikki stackit (cdk synth)
+npm run diff         # näyttää muutokset AWS:ään nähden
+npm run deploy       # deployaa kaikki stackit (cdk deploy --all)
+cd infra && npx cdk bootstrap   # kerran per tili/region ennen deployta
+```
+
+Ympäristö valitaan kontekstilla: `npx cdk deploy --all -c env=test`.
 
 ## Lisenssit ja attribuutio
 

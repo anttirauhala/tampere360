@@ -2,7 +2,9 @@
 
 > Lähdeaineisto: `.clinerules/architechture.md` (773 riviä) + lähteiden validointi 6.9.2026
 > Projektin juuri: `/home/opti/projects/fibo2`
-> Tilanne: tyhjä hakemisto, toteutus alkaa vaiheesta 0
+> Tilanne: Vaihe 0 ✅ (commit 1e8de8d), Vaihe 1 ✅ (commit 2cc49a6: CDK-infra,
+> `cdk synth` onnistuu 8 stackille, 34 testiä + lint puhtaat). Seuraavaksi
+> Vaihe 2 (FMI CAP päästä päähän: `cdk bootstrap` + `cdk deploy` + adapterit).
 
 ## 1. Yhteenveto
 
