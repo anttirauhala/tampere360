@@ -1,0 +1,15 @@
+{
+  "name": "@tampere247/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tampere247 — Query-Lambda: GET /v1/situations, /v1/situations/{id}, /v1/categories, /v1/sources, /v1/health/sources",
+  "main": "dist/handler.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@tampere247/event-contracts": "0.1.0",
+    "@tampere247/observability": "0.1.0"
+  }
+}

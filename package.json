@@ -13,17 +13,22 @@
     "infra"
   ],
   "scripts": {
-    "build": "npm run build -w @tampere247/event-contracts && npm run build -w @tampere247/source-adapter-sdk && npm run build -w @tampere247/observability",
+    "build": "npm run build -w @tampere247/event-contracts && npm run build -w @tampere247/source-adapter-sdk && npm run build -w @tampere247/observability && npm run build -w @tampere247/infra",
     "pretest": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "synth": "npm run synth -w @tampere247/infra",
+    "diff": "npm run diff -w @tampere247/infra",
+    "deploy": "npm run deploy -w @tampere247/infra"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
+    "@types/aws-lambda": "^8.10.163",
     "@types/node": "^22.10.0",
+    "esbuild": "^0.28.0",
     "eslint": "^9.15.0",
     "prettier": "^3.4.1",
     "typescript": "^5.7.2",

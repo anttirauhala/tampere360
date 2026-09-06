@@ -7,6 +7,7 @@
  */
 
 import type { EventCategory, Severity, SituationStatus, SourceSystem } from './enums';
+import type { Tampere247Event } from './event';
 
 /** EventBridge event busin `source`-kenttä. */
 export const EVENT_SOURCE = 'tampere247';
@@ -35,6 +36,18 @@ export interface SourceEventIngestedDetail {
   processingKey: string;
   source: SourceSystem;
   sourceId: string;
+  batchId: string;
+  occurredAt: string;
+}
+
+/**
+ * `SourceEventNormalized`-tapahtuman detail: normalisointi-Lambda julkaisee
+ * tämän custom-busille SQS:stä lukemansa raakaerän pohjalta. Situation-
+ * processor (catch-all-säännön kohde) kuluttaa tämän ja tekee validoinnin,
+ * aluesuodatuksen, deduplikoinnin ja DynamoDB-kirjoitukset.
+ */
+export interface SourceEventNormalizedDetail {
+  event: Tampere247Event;
   batchId: string;
   occurredAt: string;
 }
