@@ -1,0 +1,33 @@
+{
+  "name": "tampere247",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tampere247 — Tampereen seudun reaaliaikainen tilannekuva. Serverless, tapahtumavetoinen AWS-arkkitehtuuri (CDK v2, TypeScript).",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "infra"
+  ],
+  "scripts": {
+    "build": "npm run build -w @tampere247/event-contracts && npm run build -w @tampere247/source-adapter-sdk && npm run build -w @tampere247/observability",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.4.1",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.16.0",
+    "vitest": "^3.0.0"
+  }
+}

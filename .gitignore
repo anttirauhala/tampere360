@@ -1,0 +1,26 @@
+# Riippuvuudet
+node_modules/
+
+# Build-tuotteet
+dist/
+*.tsbuildinfo
+
+# Testikattavuus
+coverage/
+
+# AWS CDK
+cdk.out/
+cdk.context.json
+
+# Ympäristömuuttujat ja salaisuudet
+.env
+.env.*
+
+# Editorit ja käyttöjärjestelmä
+.idea/
+.vscode/
+.DS_Store
+
+# Lokit
+*.log
+npm-debug.log*
