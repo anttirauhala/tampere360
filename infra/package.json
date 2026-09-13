@@ -1,10 +1,10 @@
 {
-  "name": "@tampere247/infra",
+  "name": "@tampere360/infra",
   "version": "0.1.0",
   "private": true,
-  "description": "Tampere247 AWS-infrastruktuuri (AWS CDK v2, TypeScript)",
+  "description": "Tampere360 AWS-infrastruktuuri (AWS CDK v2, TypeScript)",
   "bin": {
-    "tampere247-infra": "bin/app.js"
+    "tampere360-infra": "bin/app.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -15,7 +15,7 @@
     "destroy": "cdk destroy --all"
   },
   "dependencies": {
-    "@tampere247/event-contracts": "0.1.0",
+    "@tampere360/event-contracts": "0.1.0",
     "aws-cdk-lib": "^2.268.0",
     "constructs": "^10.4.2"
   },

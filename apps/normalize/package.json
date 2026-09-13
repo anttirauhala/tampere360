@@ -1,15 +1,15 @@
 {
-  "name": "@tampere247/normalize",
+  "name": "@tampere360/normalize",
   "version": "0.1.0",
   "private": true,
-  "description": "Tampere247 — normalisointi-Lambda: SQS raw-erä → Tampere247Event → EventBridge custom bus",
+  "description": "Tampere360 — normalisointi-Lambda: SQS raw-erä → Tampere360Event → EventBridge custom bus",
   "main": "dist/handler.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@tampere247/event-contracts": "0.1.0",
-    "@tampere247/observability": "0.1.0"
+    "@tampere360/event-contracts": "0.1.0",
+    "@tampere360/observability": "0.1.0"
   }
 }

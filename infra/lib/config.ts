@@ -1,5 +1,5 @@
 /**
- * Tampere247 — infra-konfiguraatio.
+ * Tampere360 — infra-konfiguraatio.
  *
  * Lähdekohtaiset ajastukset ja Lambda-entryt keskitetysti, jotta
  * IngestionStack voi luoda Scheduler+Lambda-parin per lähde silmukassa.
@@ -83,7 +83,7 @@ export const SOURCE_DEFINITIONS: SourceDefinition[] = [
   },
 ];
 
-/** Yhteinen resurssinimeäminen: tampere247-{env}-{suffix}. */
+/** Yhteinen resurssinimeäminen: tampere360-{env}-{suffix}. */
 export function resourceName(envName: EnvName, suffix: string): string {
-  return `tampere247-${envName}-${suffix}`;
+  return `tampere360-${envName}-${suffix}`;
 }

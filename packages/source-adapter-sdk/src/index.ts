@@ -1,5 +1,5 @@
 /**
- * @tampere247/source-adapter-sdk
+ * @tampere360/source-adapter-sdk
  *
  * Lähdeadapteri-SDK: EventSourceAdapter-rajapinta ja yhteiset apurit
  * (HTTP-haku uudelleenyrityksillä, SHA-256-tarkisteet, ULID-tunnisteet).

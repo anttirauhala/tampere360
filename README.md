@@ -1,4 +1,4 @@
-# Tampere247
+# Tampere360
 
 Tampereen seudun reaaliaikainen tilannekuva: liikennehäiriöt, poliisitiedotteet,
 pelastustoimi, säävaroitukset, yleisötapahtumat ja joukkoliikenne — kaikki
@@ -14,7 +14,7 @@ Visit Tampere/Eventz, Nysse GTFS-RT, pelastustoimi)
   → EventBridge Scheduler
   → lähdekohtaiset Lambda-adapterit (raakadata S3:een)
   → SQS ingestion queue
-  → normalisointi-Lambda (yhteinen Tampere247Event-malli)
+  → normalisointi-Lambda (yhteinen Tampere360Event-malli)
   → EventBridge custom bus
   → prosessointi (validointi, aluesuodatus, deduplikointi)
   → DynamoDB

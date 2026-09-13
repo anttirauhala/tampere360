@@ -1,16 +1,16 @@
 /**
- * Tampere247 — EventBridge custom busin domain-tapahtumat (arkkitehtuuri §3).
+ * Tampere360 — EventBridge custom busin domain-tapahtumat (arkkitehtuuri §3).
  *
- * Lähde: 'tampere247', detailType kertoo tapahtuman tyypin.
+ * Lähde: 'tampere360', detailType kertoo tapahtuman tyypin.
  * Uudet prosessorit (ilmoitukset, tilastot) liitetään uusina
  * EventBridge-sääntöinä ilman muutoksia putkeen.
  */
 
 import type { EventCategory, Severity, SituationStatus, SourceSystem } from './enums';
-import type { Tampere247Event } from './event';
+import type { Tampere360Event } from './event';
 
 /** EventBridge event busin `source`-kenttä. */
-export const EVENT_SOURCE = 'tampere247';
+export const EVENT_SOURCE = 'tampere360';
 
 /** Domain-tapahtumatyypit. */
 export const DomainEventType = {
@@ -47,7 +47,7 @@ export interface SourceEventIngestedDetail {
  * aluesuodatuksen, deduplikoinnin ja DynamoDB-kirjoitukset.
  */
 export interface SourceEventNormalizedDetail {
-  event: Tampere247Event;
+  event: Tampere360Event;
   batchId: string;
   occurredAt: string;
 }

@@ -22,7 +22,7 @@ export interface MetricDatum {
 /**
  * Julkaise mittareita EMF-muodossa (stdout → CloudWatch Logs → mittarit).
  *
- * @param namespace Mittariavaruus, esim. "Tampere247/Ingestion"
+ * @param namespace Mittariavaruus, esim. "Tampere360/Ingestion"
  * @param metrics Julkaistavat mittarit
  * @param dimensions Ulottuvuudet, esim. { source: 'FMI_CAP' }
  */

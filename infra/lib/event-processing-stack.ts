@@ -24,7 +24,7 @@ import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { Construct } from 'constructs';
 
-import { EVENT_SOURCE } from '@tampere247/event-contracts';
+import { EVENT_SOURCE } from '@tampere360/event-contracts';
 
 import type { AppContext } from './config';
 import { resourceName } from './config';
@@ -64,7 +64,7 @@ export class EventProcessingStack extends cdk.Stack {
         handler: 'handler',
         functionName: resourceName(appContext.envName, 'situation-processor'),
         description:
-          'Tampere247 situation-processor: validointi, aluesuodatus, dedup, DynamoDB-kirjoitukset',
+          'Tampere360 situation-processor: validointi, aluesuodatus, dedup, DynamoDB-kirjoitukset',
         runtime: lambda.Runtime.NODEJS_22_X,
         memorySize: 256,
         timeout: cdk.Duration.seconds(60),
@@ -82,12 +82,12 @@ export class EventProcessingStack extends cdk.Stack {
     sourceEventsTable.grantReadWriteData(this.situationProcessorFunction);
     eventBus.grantPutEventsTo(this.situationProcessorFunction);
 
-    // Catch-all-sääntö: kaikki tampere247-domain-tapahtumat prosessorille.
+    // Catch-all-sääntö: kaikki tampere360-domain-tapahtumat prosessorille.
     // MaxEventAge 1 h: vanhoja tapahtumia ei kirjoiteta tilannekuvaan (§11).
     const rule = new events.Rule(this, 'DomainEventsCatchAllRule', {
       eventBus,
       eventPattern: { source: [EVENT_SOURCE] },
-      description: 'Tampere247 domain-tapahtumat -> situation-processor',
+      description: 'Tampere360 domain-tapahtumat -> situation-processor',
     });
     rule.addTarget(
       new eventsTargets.LambdaFunction(this.situationProcessorFunction, {

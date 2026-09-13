@@ -1,8 +1,8 @@
 {
-  "name": "@tampere247/observability",
+  "name": "@tampere360/observability",
   "version": "0.1.0",
   "private": true,
-  "description": "Tampere247 havaittavuus: jäsennelty JSON-logitus, correlation ID (AsyncLocalStorage), CloudWatch-mittariapurit",
+  "description": "Tampere360 havaittavuus: jäsennelty JSON-logitus, correlation ID (AsyncLocalStorage), CloudWatch-mittariapurit",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -13,6 +13,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@tampere247/event-contracts": "0.1.0"
+    "@tampere360/event-contracts": "0.1.0"
   }
 }

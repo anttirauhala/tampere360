@@ -4,12 +4,12 @@
  * Peto-media lopetti automaattiset ensitiedotteet 1.9.2026. Uusi
  * valtakunnallinen pelastustoimen mediapalvelu julkaistaan syksyllä 2026.
  * Tämä adapteri on kokeellinen stub — disabloitu Parameter Storessa
- * (/tampere247/{env}/sources/rescue/enabled = false), kunnes lähde
+ * (/tampere360/{env}/sources/rescue/enabled = false), kunnes lähde
  * julkaistaan. Vaihto (PetoAdapter → RescueMediaAdapter) ei vaadi muutoksia
  * normalisointiin tai UI:hin — molemmat näkevät tyypin RESCUE_INCIDENT.
  */
 
-import { createLogger } from '@tampere247/observability';
+import { createLogger } from '@tampere360/observability';
 
 const logger = createLogger({
   service: 'ingest-rescue',

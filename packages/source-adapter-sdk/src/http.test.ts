@@ -91,7 +91,7 @@ describe('fetchWithRetry', () => {
     expect(call).toBeDefined();
     const init = call?.[1] as RequestInit;
     expect(init.headers).toMatchObject({
-      'user-agent': expect.stringContaining('tampere247-ingest'),
+      'user-agent': expect.stringContaining('tampere360-ingest'),
     });
   });
 });

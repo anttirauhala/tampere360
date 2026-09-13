@@ -6,7 +6,7 @@
  * validoinnissa 6.9.2026). Tallennetaan sellaisenaan, geokoodataan.
  */
 
-import { createLogger } from '@tampere247/observability';
+import { createLogger } from '@tampere360/observability';
 
 const logger = createLogger({
   service: 'ingest-police',

@@ -6,7 +6,7 @@
  * traffic-incidents.tampere.fi/api/v1 → jäsennä JSON/D2Light → S3 → SQS.
  */
 
-import { createLogger } from '@tampere247/observability';
+import { createLogger } from '@tampere360/observability';
 
 const logger = createLogger({
   service: 'ingest-tampere-traffic',

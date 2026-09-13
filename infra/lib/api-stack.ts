@@ -57,7 +57,7 @@ export class ApiStack extends cdk.Stack {
       entry: path.join(__dirname, '../../apps/api/src/handler.ts'),
       handler: 'handler',
       functionName: resourceName(appContext.envName, 'api'),
-      description: 'Tampere247 query-API: /v1/situations, /v1/sources, /v1/health/sources, ...',
+      description: 'Tampere360 query-API: /v1/situations, /v1/sources, /v1/health/sources, ...',
       runtime: lambda.Runtime.NODEJS_22_X,
       memorySize: 256,
       timeout: cdk.Duration.seconds(30),
@@ -81,7 +81,7 @@ export class ApiStack extends cdk.Stack {
 
     this.httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       apiName: resourceName(appContext.envName, 'api'),
-      description: 'Tampere247 query-API',
+      description: 'Tampere360 query-API',
       createDefaultStage: false,
       corsPreflight: {
         // MVP: CloudFront-domain; oma domain myöhemmin (tarkennetaan §14).

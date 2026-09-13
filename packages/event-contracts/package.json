@@ -1,8 +1,8 @@
 {
-  "name": "@tampere247/event-contracts",
+  "name": "@tampere360/event-contracts",
   "version": "0.1.0",
   "private": true,
-  "description": "Tampere247 yhteinen tapahtumamalli ja sopimustyypit (Tampere247Event, RawSourceBatch, domain-eventit)",
+  "description": "Tampere360 yhteinen tapahtumamalli ja sopimustyypit (Tampere360Event, RawSourceBatch, domain-eventit)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [

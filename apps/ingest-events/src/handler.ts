@@ -6,7 +6,7 @@
  * kalenteri oli myös hetkellisesti alhaalla).
  */
 
-import { createLogger } from '@tampere247/observability';
+import { createLogger } from '@tampere360/observability';
 
 const logger = createLogger({
   service: 'ingest-events',

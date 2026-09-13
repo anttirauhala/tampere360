@@ -13,7 +13,7 @@
  * DynamoDB-kyselyt (cursor-sivutus) toteutetaan Vaiheessa 2.
  */
 
-import { createLogger } from '@tampere247/observability';
+import { createLogger } from '@tampere360/observability';
 import type { APIGatewayProxyResultV2, APIGatewayProxyEventV2 } from 'aws-lambda';
 
 const logger = createLogger({

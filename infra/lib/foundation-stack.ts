@@ -25,7 +25,7 @@ export class FoundationStack extends cdk.Stack {
 
     this.dataKey = new kms.Key(this, 'DataKey', {
       alias: resourceName(appContext.envName, 'data-key'),
-      description: 'Tampere247 — tapahtuma- ja käyttäjädatan salausavain',
+      description: 'Tampere360 — tapahtuma- ja käyttäjädatan salausavain',
       enableKeyRotation: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });

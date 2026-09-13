@@ -1,15 +1,15 @@
 {
-  "name": "@tampere247/situation-processor",
+  "name": "@tampere360/situation-processor",
   "version": "0.1.0",
   "private": true,
-  "description": "Tampere247 — situation-processor: validointi, aluesuodatus, deduplikointi, DynamoDB-kirjoitukset",
+  "description": "Tampere360 — situation-processor: validointi, aluesuodatus, deduplikointi, DynamoDB-kirjoitukset",
   "main": "dist/handler.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@tampere247/event-contracts": "0.1.0",
-    "@tampere247/observability": "0.1.0"
+    "@tampere360/event-contracts": "0.1.0",
+    "@tampere360/observability": "0.1.0"
   }
 }

@@ -13,7 +13,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as events from 'aws-cdk-lib/aws-events';
 import { Construct } from 'constructs';
 
-import { EVENT_SOURCE } from '@tampere247/event-contracts';
+import { EVENT_SOURCE } from '@tampere360/event-contracts';
 
 import type { AppContext } from './config';
 import { resourceName } from './config';
@@ -23,7 +23,7 @@ export interface EventingStackProps extends cdk.StackProps {
 }
 
 export class EventingStack extends cdk.Stack {
-  /** Custom event bus: tampere247-domain-tapahtumien reititin. */
+  /** Custom event bus: tampere360-domain-tapahtumien reititin. */
   public readonly eventBus: events.EventBus;
 
   constructor(scope: Construct, id: string, props: EventingStackProps) {
@@ -33,7 +33,7 @@ export class EventingStack extends cdk.Stack {
 
     this.eventBus = new events.EventBus(this, 'EventBus', {
       eventBusName: resourceName(appContext.envName, 'events'),
-      description: 'Tampere247 domain-tapahtumat (normalisoidut tilanteet)',
+      description: 'Tampere360 domain-tapahtumat (normalisoidut tilanteet)',
     });
 
     // Arkistointi mahdollistaa tapahtumien uudelleenajon ja virhetutkinnan
@@ -42,7 +42,7 @@ export class EventingStack extends cdk.Stack {
       sourceEventBus: this.eventBus,
       eventPattern: { source: [EVENT_SOURCE] },
       retention: cdk.Duration.days(30),
-      description: 'Tampere247 domain-tapahtumien arkisto (30 pv)',
+      description: 'Tampere360 domain-tapahtumien arkisto (30 pv)',
     });
 
     new cdk.CfnOutput(this, 'EventBusName', { value: this.eventBus.eventBusName });

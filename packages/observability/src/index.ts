@@ -1,5 +1,5 @@
 /**
- * @tampere247/observability
+ * @tampere360/observability
  *
  * Jäsennelty logitus, correlation ID -konteksti ja CloudWatch-mittariapurit.
  */

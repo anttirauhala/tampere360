@@ -39,7 +39,7 @@ export class HttpFetchError extends Error {
 }
 
 const DEFAULT_RETRY_STATUSES: readonly number[] = [408, 425, 429, 500, 502, 503, 504];
-const DEFAULT_USER_AGENT = 'tampere247-ingest/0.1 (+https://tampere247.example)';
+const DEFAULT_USER_AGENT = 'tampere360-ingest/0.1 (+https://tampere360.example)';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {

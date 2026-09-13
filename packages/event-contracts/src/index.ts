@@ -1,8 +1,8 @@
 /**
- * @tampere247/event-contracts
+ * @tampere360/event-contracts
  *
- * Tampere247-järjestelmän yhteiset sopimustyypit:
- * - Tampere247Event: normalisoitu tapahtumamalli
+ * Tampere360-järjestelmän yhteiset sopimustyypit:
+ * - Tampere360Event: normalisoitu tapahtumamalli
  * - RawSourceBatch / ParsedSourceEvent / SourceCheckpoint: keräysputki
  * - Domain-eventit: EventBridge custom bus
  */

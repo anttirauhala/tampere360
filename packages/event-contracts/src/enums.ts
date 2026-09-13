@@ -1,5 +1,5 @@
 /**
- * Tampere247 — yhteiset enumeraatiot.
+ * Tampere360 — yhteiset enumeraatiot.
  *
  * Toteutus const object + type -kuviona (ei TS `enum`), jotta tyypit
  * toimivat sellaisenaan sekä runtime-arvoina että tyyppinä ja ovat

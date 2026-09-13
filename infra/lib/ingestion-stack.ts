@@ -121,7 +121,7 @@ export class IngestionStack extends cdk.Stack {
       entry: path.join(__dirname, '../../apps/normalize/src/handler.ts'),
       handler: 'handler',
       functionName: resourceName(appContext.envName, 'normalize'),
-      description: 'Tampere247 normalisointi: SQS raakaerä -> Tampere247Event -> EventBridge',
+      description: 'Tampere360 normalisointi: SQS raakaerä -> Tampere360Event -> EventBridge',
       runtime: lambda.Runtime.NODEJS_22_X,
       memorySize: 256,
       timeout: cdk.Duration.seconds(60),
@@ -189,7 +189,7 @@ export class IngestionStack extends cdk.Stack {
     ingestionStateTable.grantReadWriteData(fn);
 
     // Lähdekohtainen Parameter Store -konfiguraatio (§8).
-    const paramPrefix = `/tampere247/${env}/sources/${source.id}`;
+    const paramPrefix = `/tampere360/${env}/sources/${source.id}`;
     const baseUrlBySource: Record<string, string> = {
       'fmi-cap': 'https://alerts.fmi.fi/cap/feed/rss_fi-FI.rss',
       'tampere-traffic': 'https://traffic-incidents.tampere.fi/api/v1',

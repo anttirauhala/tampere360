@@ -1,12 +1,12 @@
 /**
- * Kelvollinen esimerkki-Tampere247Event testien ja kehityksen tueksi.
+ * Kelvollinen esimerkki-Tampere360Event testien ja kehityksen tueksi.
  */
 
-import type { Tampere247Event } from './event';
+import type { Tampere360Event } from './event';
 import { SCHEMA_VERSION } from './event';
 
-export function createSampleEvent(overrides: Partial<Tampere247Event> = {}): Tampere247Event {
-  const base: Tampere247Event = {
+export function createSampleEvent(overrides: Partial<Tampere360Event> = {}): Tampere360Event {
+  const base: Tampere360Event = {
     schemaVersion: SCHEMA_VERSION,
     id: '01J7Z8V2K4SAMPLEEVENT0001',
     canonicalKey: 'weather:fmi-cap:2.49.0.1.246.0.0.2026.example',

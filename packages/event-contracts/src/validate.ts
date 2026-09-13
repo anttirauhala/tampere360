@@ -1,5 +1,5 @@
 /**
- * Tampere247Event-runtime-validointi (kevyt, ei ulkoisia riippuvuuksia).
+ * Tampere360Event-runtime-validointi (kevyt, ei ulkoisia riippuvuuksia).
  * Käytetään normalisoinnissa ja prosessorissa ennen DynamoDB-kirjoitusta.
  */
 
@@ -11,7 +11,7 @@ import {
   SituationStatus,
   SourceSystem,
 } from './enums';
-import type { Tampere247Event } from './event';
+import type { Tampere360Event } from './event';
 
 export interface ValidationResult {
   ok: boolean;
@@ -27,8 +27,8 @@ const isIsoDate = (value: unknown): boolean =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** Validoi tuntemattoman arvon Tampere247Event-mallia vasten. */
-export function validateTampere247Event(value: unknown): ValidationResult {
+/** Validoi tuntemattoman arvon Tampere360Event-mallia vasten. */
+export function validateTampere360Event(value: unknown): ValidationResult {
   const errors: string[] = [];
 
   if (!isRecord(value)) {
@@ -87,7 +87,7 @@ export function validateTampere247Event(value: unknown): ValidationResult {
   return { ok: errors.length === 0, errors };
 }
 
-/** Tyyppivartija: palauttaa true jos arvo on validi Tampere247Event. */
-export function isTampere247Event(value: unknown): value is Tampere247Event {
-  return validateTampere247Event(value).ok;
+/** Tyyppivartija: palauttaa true jos arvo on validi Tampere360Event. */
+export function isTampere360Event(value: unknown): value is Tampere360Event {
+  return validateTampere360Event(value).ok;
 }

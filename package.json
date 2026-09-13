@@ -1,8 +1,8 @@
 {
-  "name": "tampere247",
+  "name": "tampere360",
   "version": "0.1.0",
   "private": true,
-  "description": "Tampere247 — Tampereen seudun reaaliaikainen tilannekuva. Serverless, tapahtumavetoinen AWS-arkkitehtuuri (CDK v2, TypeScript).",
+  "description": "Tampere360 — Tampereen seudun reaaliaikainen tilannekuva. Serverless, tapahtumavetoinen AWS-arkkitehtuuri (CDK v2, TypeScript).",
   "license": "MIT",
   "engines": {
     "node": ">=22"
@@ -13,16 +13,16 @@
     "infra"
   ],
   "scripts": {
-    "build": "npm run build -w @tampere247/event-contracts && npm run build -w @tampere247/source-adapter-sdk && npm run build -w @tampere247/observability && npm run build -w @tampere247/infra",
+    "build": "npm run build -w @tampere360/event-contracts && npm run build -w @tampere360/source-adapter-sdk && npm run build -w @tampere360/observability && npm run build -w @tampere360/infra",
     "pretest": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "synth": "npm run synth -w @tampere247/infra",
-    "diff": "npm run diff -w @tampere247/infra",
-    "deploy": "npm run deploy -w @tampere247/infra"
+    "synth": "npm run synth -w @tampere360/infra",
+    "diff": "npm run diff -w @tampere360/infra",
+    "deploy": "npm run deploy -w @tampere360/infra"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",

@@ -1,7 +1,7 @@
 /**
- * Tampere247 — yhteinen tapahtumamalli (arkkitehtuuri §3).
+ * Tampere360 — yhteinen tapahtumamalli (arkkitehtuuri §3).
  *
- * Kaikki ulkoiset lähteet muunnetaan tähän Tampere247Event-malliin.
+ * Kaikki ulkoiset lähteet muunnetaan tähän Tampere360Event-malliin.
  * Malli erottaa: tapahtuman oman tunnisteen, lähdejärjestelmän tunnisteen,
  * kanonisen duplikaattiavaimen, julkaisu-/päivitys-/voimassaoloajat, tilan,
  * vakavuuden, sijainnin ja geometrian, lähteen ja lisenssin, kieliversiot
@@ -83,7 +83,7 @@ export interface Attribution {
 }
 
 /** Normalisoitu tapahtuma — putken yhteinen valuutta. */
-export interface Tampere247Event {
+export interface Tampere360Event {
   schemaVersion: string;
   /** Tapahtuman oma tunniste (ULID). */
   id: string;

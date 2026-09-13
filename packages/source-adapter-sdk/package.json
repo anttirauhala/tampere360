@@ -1,8 +1,8 @@
 {
-  "name": "@tampere247/source-adapter-sdk",
+  "name": "@tampere360/source-adapter-sdk",
   "version": "0.1.0",
   "private": true,
-  "description": "Tampere247 lähdeadapteri-SDK: EventSourceAdapter-rajapinta, haku uudelleenyrityksillä, SHA-256-tarkisteet, ULID-tunnisteet, S3/SQS-apurit",
+  "description": "Tampere360 lähdeadapteri-SDK: EventSourceAdapter-rajapinta, haku uudelleenyrityksillä, SHA-256-tarkisteet, ULID-tunnisteet, S3/SQS-apurit",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -13,6 +13,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@tampere247/event-contracts": "0.1.0"
+    "@tampere360/event-contracts": "0.1.0"
   }
 }

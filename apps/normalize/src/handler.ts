@@ -1,16 +1,16 @@
 /**
  * normalize — normalisointi-Lambda (arkkitehtuuri §2–3).
  *
- * SQS ingestion queue -> normalisointi -> Tampere247Event ->
+ * SQS ingestion queue -> normalisointi -> Tampere360Event ->
  * SourceEventNormalized-domain-eventti EventBridge custom busille.
  *
  * TODO (Vaihe 2): lue ParsedSourceEvent SQS-viestistä, muunna
- * Tampere247Event-malliin, laske contentHash/canonicalKey, julkaise
- * EventBridgeen (@tampere247/event-contracts DomainEventType.SourceEventNormalized).
+ * Tampere360Event-malliin, laske contentHash/canonicalKey, julkaise
+ * EventBridgeen (@tampere360/event-contracts DomainEventType.SourceEventNormalized).
  * Käytä reportBatchItemFailures-tukea osittaisiin epäonnistumisiin.
  */
 
-import { createLogger } from '@tampere247/observability';
+import { createLogger } from '@tampere360/observability';
 import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
 
 const logger = createLogger({

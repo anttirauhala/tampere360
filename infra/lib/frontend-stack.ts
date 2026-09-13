@@ -81,7 +81,7 @@ export class FrontendStack extends cdk.Stack {
     });
 
     this.distribution = new cloudfront.Distribution(this, 'Distribution', {
-      comment: `Tampere247 ${appContext.envName} -frontend`,
+      comment: `Tampere360 ${appContext.envName} -frontend`,
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(this.webBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

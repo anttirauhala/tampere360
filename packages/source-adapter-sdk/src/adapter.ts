@@ -21,7 +21,7 @@ import type {
   RawSourceBatch,
   SourceCheckpoint,
   SourceSystem,
-} from '@tampere247/event-contracts';
+} from '@tampere360/event-contracts';
 
 export interface EventSourceAdapter {
   /** Lähdejärjestelmä, jota adapteri edustaa. */

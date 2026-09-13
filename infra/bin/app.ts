@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Tampere247 CDK-sovellus (arkkitehtuuri §14).
+ * Tampere360 CDK-sovellus (arkkitehtuuri §14).
  *
  * Stack-järjestys: Foundation → Data → Eventing → Ingestion →
  * EventProcessing → Api → Frontend → Monitoring.
@@ -45,10 +45,10 @@ const appContext: AppContext = {
   wafEnabled: app.node.tryGetContext('wafEnabled') === true,
 };
 
-cdk.Tags.of(app).add('project', 'tampere247');
+cdk.Tags.of(app).add('project', 'tampere360');
 cdk.Tags.of(app).add('environment', envName);
 
-const prefix = `tampere247-${envName}`;
+const prefix = `tampere360-${envName}`;
 
 const foundation = new FoundationStack(app, `${prefix}-foundation`, { appContext, env });
 

@@ -43,7 +43,7 @@ export class MonitoringStack extends cdk.Stack {
 
     const alarmTopic = new sns.Topic(this, 'AlarmTopic', {
       topicName: resourceName(appContext.envName, 'alarms'),
-      displayName: 'Tampere247 hälytykset',
+      displayName: 'Tampere360 hälytykset',
     });
     const alarmAction = new cloudwatchActions.SnsAction(alarmTopic);
 

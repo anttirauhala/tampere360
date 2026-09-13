@@ -1,38 +1,38 @@
 import { describe, expect, it } from 'vitest';
 
 import { createSampleEvent } from './sample';
-import { isTampere247Event, validateTampere247Event } from './validate';
+import { isTampere360Event, validateTampere360Event } from './validate';
 
-describe('validateTampere247Event', () => {
+describe('validateTampere360Event', () => {
   it('hyväksyy kelvollisen tapahtuman', () => {
-    const result = validateTampere247Event(createSampleEvent());
+    const result = validateTampere360Event(createSampleEvent());
     expect(result.ok).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
 
   it('tyyppivartija toimii', () => {
-    expect(isTampere247Event(createSampleEvent())).toBe(true);
-    expect(isTampere247Event({})).toBe(false);
-    expect(isTampere247Event(null)).toBe(false);
+    expect(isTampere360Event(createSampleEvent())).toBe(true);
+    expect(isTampere360Event({})).toBe(false);
+    expect(isTampere360Event(null)).toBe(false);
   });
 
   it('hylkää puuttuvan title.fi-kentän', () => {
     const event = createSampleEvent({ title: { fi: '' } });
-    const result = validateTampere247Event(event);
+    const result = validateTampere360Event(event);
     expect(result.ok).toBe(false);
     expect(result.errors).toContain('title.fi missing or empty');
   });
 
   it('hylkää virheellisen kategorian', () => {
     const event = createSampleEvent({ category: 'UNKNOWN' as never });
-    const result = validateTampere247Event(event);
+    const result = validateTampere360Event(event);
     expect(result.ok).toBe(false);
     expect(result.errors).toContain('category invalid');
   });
 
   it('hylkää virheellisen severity-arvon', () => {
     const event = createSampleEvent({ severity: 'CATASTROPHIC' as never });
-    const result = validateTampere247Event(event);
+    const result = validateTampere360Event(event);
     expect(result.ok).toBe(false);
     expect(result.errors).toContain('severity invalid');
   });
@@ -40,22 +40,22 @@ describe('validateTampere247Event', () => {
   it('hylkää puuttuvan source.sourceId-kentän', () => {
     const event = createSampleEvent();
     event.source.sourceId = '';
-    const result = validateTampere247Event(event);
+    const result = validateTampere360Event(event);
     expect(result.ok).toBe(false);
     expect(result.errors).toContain('source.sourceId missing or empty');
   });
 
   it('hylkää virheellisen aikaleiman', () => {
     const event = createSampleEvent({ publishedAt: 'ei-aikaleima' });
-    const result = validateTampere247Event(event);
+    const result = validateTampere360Event(event);
     expect(result.ok).toBe(false);
     expect(result.errors).toContain('publishedAt invalid timestamp');
   });
 
   it('hylkää ei-olio-arvon', () => {
-    expect(validateTampere247Event('string').ok).toBe(false);
-    expect(validateTampere247Event(null).ok).toBe(false);
-    expect(validateTampere247Event([1, 2, 3]).ok).toBe(false);
+    expect(validateTampere360Event('string').ok).toBe(false);
+    expect(validateTampere360Event(null).ok).toBe(false);
+    expect(validateTampere360Event([1, 2, 3]).ok).toBe(false);
   });
 
   it('kerää useita virheitä kerralla', () => {
@@ -64,7 +64,7 @@ describe('validateTampere247Event', () => {
       canonicalKey: '',
       contentHash: '',
     });
-    const result = validateTampere247Event(event);
+    const result = validateTampere360Event(event);
     expect(result.ok).toBe(false);
     expect(result.errors.length).toBeGreaterThanOrEqual(3);
   });

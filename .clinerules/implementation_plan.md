@@ -1,4 +1,4 @@
-# Tampere247 — Toteutussuunnitelma
+# Tampere360 — Toteutussuunnitelma
 
 > Lähdeaineisto: `.clinerules/architechture.md` (773 riviä) + lähteiden validointi 6.9.2026
 > Projektin juuri: `/home/opti/projects/fibo2`
@@ -8,7 +8,7 @@
 
 ## 1. Yhteenveto
 
-Tampere247 on palvelu, joka kokoaa Tampereen alueen ajankohtaiset tilanteet
+Tampere360 on palvelu, joka kokoaa Tampereen alueen ajankohtaiset tilanteet
 (liikennehäiriöt, poliisitiedotteet, pelastustoimi, säävaroitukset, yleisötapahtumat,
 joukkoliikenne) yhdeksi reaaliaikaiseksi tilannekuvaksi. Toteutus on täysin
 serverless AWS:ssä, tapahtumavetoinen ja rakennetaan Infra as Code -menetelmällä
@@ -90,7 +90,7 @@ Tietolähdekohtaiset Lambda-adapterit
 SQS ingestion queue (+ DLQ)
 │
 ▼
-Normalisointi-Lambda → Tampere247Event-malli
+Normalisointi-Lambda → Tampere360Event-malli
 │
 ▼
 EventBridge custom event bus (+ arkisto)
@@ -137,7 +137,7 @@ myöhemmin uusina EventBridge-sääntöinä ilman muutoksia putkeen.
 ## 4. Repositoriorakenne
 
 ```
-fibo2/                          (= tampere247-repo)
+fibo2/                          (= tampere360-repo)
 ├── package.json                # npm workspaces
 ├── tsconfig.base.json
 ├── .gitignore, README.md
@@ -176,7 +176,7 @@ fibo2/                          (= tampere247-repo)
 Huom: kaikkia Lambda-funktioita EI tehdä omiksi CDK-stackeikseen —
 CloudFormation-riippuvuuksien hallinta monimutkaistuisi turhaan.
 
-## 5. Yhteinen tapahtumamalli (Tampere247Event)
+## 5. Yhteinen tapahtumamalli (Tampere360Event)
 
 Kaikki lähteet muunnetaan samaan malliin:
 
@@ -274,7 +274,7 @@ OpenSearch Serverless vasta myöhemmin (vapaasanahaku, relevanssi, geohaut).
 ### S3 raakadata
 
 ```
-s3://tampere247-raw/source=tampere-traffic/year=2026/month=09/day=06/hour=10/...
+s3://tampere360-raw/source=tampere-traffic/year=2026/month=09/day=06/hour=10/...
 ```
 
 Hyödyt: adapteri ajettavissa uudelleen vanhaa dataa vasten, normalisointia
@@ -316,9 +316,9 @@ Pelastuslähteen vaihto on pelkkä uusi toteutus (`PetoAdapter` →
 
 Konfiguraatiot Parameter Storeen:
 ```
-/tampere247/{env}/sources/{name}/enabled
-/tampere247/{env}/sources/{name}/base-url
-/tampere247/{env}/sources/{name}/poll-interval
+/tampere360/{env}/sources/{name}/enabled
+/tampere360/{env}/sources/{name}/base-url
+/tampere360/{env}/sources/{name}/poll-interval
 ```
 Salaisuudet (API-avaimet) Secrets Manageriin.
 
@@ -469,7 +469,7 @@ GitHub Actions -workflow lisätään kun repo on GitHubissa.
 ### Vaihe 0 — Pohja
 - git init, .gitignore, README
 - npm workspaces -monorepo, tsconfig.base.json, vitest, eslint/prettier
-- `packages/event-contracts`: Tampere247Event, RawSourceBatch,
+- `packages/event-contracts`: Tampere360Event, RawSourceBatch,
   ParsedSourceEvent, SourceCheckpoint, enumit, domain-eventit
 - `packages/source-adapter-sdk`: EventSourceAdapter-rajapinta, fetch/retry,
   SHA-256-tarkiste, correlation ID

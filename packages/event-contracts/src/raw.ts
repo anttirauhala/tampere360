@@ -1,5 +1,5 @@
 /**
- * Tampere247 — keräysputken raakadatatyypit (arkkitehtuuri §1–2).
+ * Tampere360 — keräysputken raakadatatyypit (arkkitehtuuri §1–2).
  *
  * Adapteri: fetch → raakadata S3:een → RawSourceBatch → parse →
  * ParsedSourceEvent[] → SQS → normalisointi.
