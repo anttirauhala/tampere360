@@ -75,3 +75,11 @@ export interface SourceCheckpoint {
   /** Virheilmoitus, jos status = ERROR. */
   error?: string;
 }
+
+/** Yksi SQS-viesti: adapteri → normalisointi (§2). */
+export interface IngestMessage {
+  schemaVersion: '1.0';
+  batch: RawSourceBatch;
+  events: ParsedSourceEvent[];
+  correlationId: string;
+}

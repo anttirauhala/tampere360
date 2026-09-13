@@ -2,13 +2,11 @@
   "name": "@tampere360/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Tampere360 — Query-Lambda: GET /v1/situations, /v1/situations/{id}, /v1/categories, /v1/sources, /v1/health/sources",
   "main": "dist/handler.js",
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "clean": "rm -rf dist"
-  },
+  "scripts": { "build": "tsc -p tsconfig.json", "clean": "rm -rf dist" },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
     "@tampere360/event-contracts": "0.1.0",
     "@tampere360/observability": "0.1.0"
   }
