@@ -1,6 +1,6 @@
 /**
  * normalize — normalisointi-Lambda (arkkitehtuuri §2–3).
- * Tukee FMI_CAP, TAMPERE_TRAFFIC, VISIT_TAMPERE, NYSSE_ALERTS.
+ * Tukee FMI_CAP, TAMPERE_TRAFFIC, VISIT_TAMPERE, NYSSE_ALERTS, POLICE_RSS.
  */
 
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
@@ -48,15 +48,13 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
   }
   if (source === 'VISIT_TAMPERE') {
     const loc = raw?.location as Record<string, unknown> | undefined;
-    const lat = (loc?.coordinates as Record<string, unknown> | undefined)?.lat as number | undefined;
-    const lon = (loc?.coordinates as Record<string, unknown> | undefined)?.lon as number | undefined;
     return {
       type: 'PUBLIC_EVENT' as const, category: 'EVENT' as const, severity: 'INFO',
       title: { fi: String(raw?.name ?? 'Tapahtuma') },
       description: raw?.description ? { fi: String(raw.description) } : undefined,
       attribution: { name: 'Visit Tampere', required: true },
       areaCodes: ['TAMPERE'],
-      location: { municipality: 'Tampere', latitude: lat ?? null, longitude: lon ?? null },
+      location: { municipality: 'Tampere', latitude: null, longitude: null },
       validity: { startsAt: raw?.startDate ? String(raw.startDate) : null, endsAt: raw?.endDate ? String(raw.endDate) : null },
     };
   }
@@ -71,6 +69,21 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       areaCodes: ['TAMPERE'] as string[],
       location: { municipality: 'Tampere', latitude: null, longitude: null },
       validity: { startsAt: raw?.effectiveStart ? String(raw.effectiveStart) : null, endsAt: raw?.effectiveEnd ? String(raw.effectiveEnd) : null },
+    };
+  }
+  if (source === 'POLICE_RSS') {
+    const title = String(raw?.title ?? '');
+    // Yksinkertainen päättely: onko otsikossa vakava = MAJOR, muuten INFO
+    const isMajor = /vakava|kuoli|kadonnut|etsitään|puukko|ase/i.test(title);
+    return {
+      type: 'POLICE_ANNOUNCEMENT' as const, category: 'POLICE' as const,
+      severity: isMajor ? 'MAJOR' : 'INFO',
+      title: { fi: title },
+      description: raw?.description ? { fi: String(raw.description).replace(/<[^>]*>/g, '') } : undefined,
+      attribution: { name: 'Sisä-Suomen poliisilaitos', required: true, url: 'https://poliisi.fi' },
+      areaCodes: ['TAMPERE'] as string[],
+      location: { municipality: null, latitude: null, longitude: null },
+      validity: null,
     };
   }
   return {

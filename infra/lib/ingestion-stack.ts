@@ -197,6 +197,7 @@ export class IngestionStack extends cdk.Stack {
     const baseUrlBySource: Record<string, string> = {
       'fmi-cap': 'https://alerts.fmi.fi/cap/feed/rss_fi-FI.rss',
       'tampere-traffic': 'https://traffic-incidents.tampere.fi/api/v1',
+      'police': 'https://poliisi.fi/sisa-suomen-poliisilaitos/-/asset_publisher/ZtAEeHB39Lxr/rss',
     };
     const enabledParam = new ssm.StringParameter(this, `${name}EnabledParam`, {
       parameterName: `${paramPrefix}/enabled`,
