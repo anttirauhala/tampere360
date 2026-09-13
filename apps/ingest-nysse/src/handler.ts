@@ -16,15 +16,14 @@ const s3 = new S3Client({}); const sqs = new SQSClient({}); const ssm = new SSMC
 // ja Lambda laskee Base64 tarvittaessa.
 
 function decodeContentType(body: ArrayBuffer | Buffer): Buffer {
-  if (body instanceof Buffer) return body;
-  return Buffer.from(body);
+  return Buffer.from(body as unknown as ArrayBuffer);
 }
 
 async function fetchWithAuth(url: string, authBase64: string): Promise<Buffer | null> {
   try {
     const res = await fetch(url, {
       headers: {
-        Authorization: \`Basic \${authBase64}\`,
+        Authorization: `Basic ${authBase64}`,
         Accept: 'application/x-protobuf,application/json',
       },
       signal: AbortSignal.timeout(15_000),
@@ -50,7 +49,7 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
   // Hae Basic Auth -avain SSM:sta (/tampere360/{env}/sources/nysse/api-key)
   let apiKey = '';
   try {
-    const r = await ssm.send(new GetParameterCommand({ Name: \`/tampere360/\${env}/sources/nysse/api-key\`, WithDecryption: true }));
+    const r = await ssm.send(new GetParameterCommand({ Name: `/tampere360/${env}/sources/nysse/api-key`, WithDecryption: true }));
     apiKey = r.Parameter?.Value ?? '';
   } catch {}
 
@@ -109,11 +108,11 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
 
   const processed: string[] = [];
   for (const a of alerts) {
-    const sourceId = \`alert-\${ulid()}\`;
+    const sourceId = `alert-${ulid()}`;
     const c = sha256Hex(JSON.stringify(a));
-    const pk = \`NYSSE_ALERTS:\${sourceId}:\${c.slice(0, 16)}\`;
+    const pk = `NYSSE_ALERTS:${sourceId}:${c.slice(0, 16)}`;
     const bid = ulid();
-    const key = \`source=nysse/year=\${new Date().getUTCFullYear()}/\${bid}.json\`;
+    const key = `source=nysse/year=${new Date().getUTCFullYear()}/${bid}.json`;
     try { await s3.send(new PutObjectCommand({ Bucket: bucketName, Key: key, Body: JSON.stringify(a), ContentType: 'application/json' })); } catch { continue; }
     const se = { parsedId: ulid(), batchId: bid, source: 'NYSSE_ALERTS', sourceId, processingKey: pk, raw: a, extractedAt: new Date().toISOString() };
     const msg = { schemaVersion: '1.0', batch: { batchId: bid, source: 'NYSSE_ALERTS', fetchedAt: new Date().toISOString(), s3Key: key, contentType: 'application/json', byteSize: Buffer.byteLength(JSON.stringify(a), 'utf8'), contentHash: c, itemCount: 1 }, events: [se], correlationId: invocationId };
