@@ -1,10 +1,10 @@
 /**
- * ingest-tampere-traffic — Tampereen kaupungin liikennetiedote-/tietyö-
- * rajapinnan lähdeadapteri (ensisijainen liikennelähde, arkkitehtuuri §9).
+ * ingest-tampere-traffic — Digitraffic v2 liikennetiedotteiden lähdeadapteri
+ * (ensisijainen liikennelähde, arkkitehtuuri §9).
  *
- * Hakee traffic-incidents.tampere.fi/api/v1 (JSON/D2Light), jäsentää
- * tapahtumat tallentaa raakadatan S3:een ja lähettää tapahtumat
- * SQS-ingestion-jonoon normalisointia varten.
+ * Korvaa Tampereen oman rajapinnan (traffic-incidents.tampere.fi ei validoitu
+ * toimivaksi 6.9.2026). Suodattaa Pirkanmaan ilmoitukset (province = Pirkanmaa
+ * tai tunnettu kunta).
  */
 
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -21,32 +21,53 @@ const logger = createLogger({
 const s3 = new S3Client({});
 const sqs = new SQSClient({});
 
-const API_URL = 'https://traffic-incidents.tampere.fi/api/v1';
+const API_URL = 'https://tie.digitraffic.fi/api/traffic-message/v2/traffic-announcements';
 
-/** Yksittäisen liikennetapahtuman tyyppi. */
-interface TrafficIncident {
-  id?: string;
-  situationType?: string;
-  trafficAnnouncementType?: string;
-  title?: string;
-  description?: string;
-  severity?: string;
-  status?: string;
-  startTime?: string;
-  endTime?: string;
-  lastUpdated?: string;
-  location?: Record<string, unknown>;
-  locationDetails?: Record<string, unknown>;
-  /** Useat D2Light-mallistot käyttävät sisäkkäisiä annoucements-taulukkoa. */
-  announcements?: Record<string, unknown>[];
+/** Pirkanmaan kunnat — näiden ulkopuoliset suodatetaan pois. */
+const PIRKANMAA_MUNICIPALITIES = new Set([
+  'Tampere','Nokia','Pirkkala','Ylöjärvi','Lempäälä','Kangasala','Vesilahti',
+  'Akaa','Valkeakoski','Sastamala','Ikaalinen','Parkano','Ruovesi',
+  'Mänttä-Vilppula','Urjala','Hämeenkyrö','Juupajoki','Kihniö','Kuhmoinen',
+  'Orivesi','Punkalaidun','Virrat',
+]);
+
+interface DigitrafficFeature {
+  type: string;
+  geometry: { type: string; coordinates: number[][] | number[][][] };
+  properties: {
+    situationId: string;
+    situationType: string;
+    trafficAnnouncementType: string;
+    version: number;
+    releaseTime: string;
+    versionTime: string;
+    announcements: {
+      language: string;
+      title: string;
+      location: { description: string };
+      locationDetails: {
+        roadAddressLocation: {
+          municipality: string;
+          province: string;
+          country: string;
+        };
+      };
+      features: { name: string }[];
+      comment?: string;
+      timeAndDuration: { startTime: string; endTime?: string };
+      additionalInformation?: string;
+      sender?: string;
+    }[];
+  };
 }
 
-function extractIncidents(body: unknown): TrafficIncident[] {
-  if (Array.isArray(body)) return body as TrafficIncident[];
-  const root = body as Record<string, unknown> | undefined;
-  if (!root) return [];
-  // Yritä eri kenttiä joista liikennetapahtuma-taulukko voisi löytyä
-  return (root.situations ?? root.items ?? root.roadworks ?? root.trafficIncidents ?? root.features ?? []) as TrafficIncident[];
+function isPirkanmaa(feature: DigitrafficFeature): boolean {
+  for (const ann of feature.properties.announcements ?? []) {
+    const roadLoc = ann.locationDetails?.roadAddressLocation;
+    if (roadLoc?.province === 'Pirkanmaa') return true;
+    if (roadLoc?.municipality && PIRKANMAA_MUNICIPALITIES.has(roadLoc.municipality)) return true;
+  }
+  return false;
 }
 
 export async function handler(): Promise<{ status: string; itemsProcessed: number }> {
@@ -54,37 +75,44 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
   const queueUrl = process.env['INGESTION_QUEUE_URL'] ?? '';
   const invocationId = ulid();
 
-  logger.info('Haetaan Tampereen liikennetietoja', { url: API_URL });
+  logger.info('Haetaan Digitraffic liikennetiedotteita', { url: API_URL });
 
   let rawJson: string;
   try {
-    const res = await fetchWithRetry(API_URL, { timeoutMs: 15_000, maxAttempts: 3 });
+    const res = await fetchWithRetry(API_URL, { timeoutMs: 20_000, maxAttempts: 3 });
     rawJson = res.body;
   } catch (err) {
-    logger.error('API-haku epäonnistui', { error: String(err) });
+    logger.error('Haku epäonnistui', { error: String(err) });
     return { status: 'ERROR', itemsProcessed: 0 };
   }
 
-  let data: unknown;
+  let collection: { type: string; features: DigitrafficFeature[] };
   try {
-    data = JSON.parse(rawJson);
+    collection = JSON.parse(rawJson);
   } catch {
-    logger.error('JSON-jäsennys epäonnistui');
+    logger.error('GeoJSON-jäsennys epäonnistui');
     return { status: 'ERROR', itemsProcessed: 0 };
   }
 
-  const incidents = extractIncidents(data);
-  if (incidents.length === 0) {
-    logger.info('Ei liikennetapahtumia', { url: API_URL });
+  if (!collection.features || collection.features.length === 0) {
+    logger.info('Ei liikennetiedotteita', { url: API_URL });
     return { status: 'OK', itemsProcessed: 0 };
   }
 
+  const filtered = collection.features.filter(isPirkanmaa);
+  logger.info('Liikennetiedotteita', { total: collection.features.length, filtered: filtered.length });
+
   const processed: string[] = [];
-  for (const inc of incidents) {
-    const sourceId = inc.id ?? `incident-${ulid()}`;
-    const title = inc.title ?? (inc.announcements?.[0]?.title as string | undefined) ?? 'Tuntematon';
-    const contentHash = sha256Hex(JSON.stringify(inc));
-    const processingKey = `TAMPERE_TRAFFIC:${sourceId}:${contentHash.slice(0, 16)}`;
+  for (const feat of filtered) {
+    const ann = feat.properties.announcements?.[0];
+    if (!ann) continue;
+
+    const sourceId = feat.properties.situationId;
+    const title = ann.title;
+    const rawObj = { ...feat };
+    const contentHash = sha256Hex(JSON.stringify(rawObj));
+    const revision = String(feat.properties.version);
+    const processingKey = `TAMPERE_TRAFFIC:${sourceId}:${revision}`;
 
     // Tallenna raakadata S3:een
     const batchId = ulid();
@@ -100,37 +128,30 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
 
     try {
       await s3.send(new PutObjectCommand({
-        Bucket: bucketName,
-        Key: rawKey,
-        Body: JSON.stringify(inc),
-        ContentType: 'application/json',
+        Bucket: bucketName, Key: rawKey, Body: JSON.stringify(rawObj), ContentType: 'application/json',
       }));
     } catch (err) {
-      logger.error('S3-tallennus epäonnistui', { sourceId, error: String(err) });
+      logger.error('S3-virhe', { sourceId, error: String(err) });
       continue;
     }
 
-    // Muodosta jäsennelty tapahtuma ja lähetä SQS:ään
     const sourceEvent = {
-      parsedId: ulid(),
-      batchId,
+      parsedId: ulid(), batchId,
       source: 'TAMPERE_TRAFFIC' as const,
-      sourceId,
+      sourceId, revision,
       processingKey,
-      raw: inc,
+      raw: rawObj,
       extractedAt: new Date().toISOString(),
     };
 
     const ingestMessage = {
       schemaVersion: '1.0' as const,
       batch: {
-        batchId,
-        source: 'TAMPERE_TRAFFIC' as const,
+        batchId, source: 'TAMPERE_TRAFFIC' as const,
         fetchedAt: new Date().toISOString(),
-        s3Key: rawKey,
-        contentType: 'application/json',
-        byteSize: Buffer.byteLength(JSON.stringify(inc), 'utf8'),
-        contentHash: sha256Hex(JSON.stringify(inc)),
+        s3Key: rawKey, contentType: 'application/json',
+        byteSize: Buffer.byteLength(JSON.stringify(rawObj), 'utf8'),
+        contentHash,
         itemCount: 1,
       },
       events: [sourceEvent],
@@ -147,12 +168,12 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
         },
       }));
     } catch (err) {
-      logger.error('SQS-lähetys epäonnistui', { sourceId, error: String(err) });
+      logger.error('SQS-virhe', { sourceId, error: String(err) });
       continue;
     }
 
     processed.push(sourceId);
-    logger.info('Liikennetapahtuma käsitelty', { sourceId, title });
+    logger.info('Käsitelty', { sourceId, title, municipality: ann.locationDetails?.roadAddressLocation?.municipality });
   }
 
   return { status: 'OK', itemsProcessed: processed.length };
