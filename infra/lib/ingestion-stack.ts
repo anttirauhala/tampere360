@@ -182,6 +182,10 @@ export class IngestionStack extends cdk.Stack {
         LOG_LEVEL: 'INFO',
       },
     });
+    // Lähdekohtaiset ympäristömuuttujat
+    if (source.id === 'nysse') {
+      fn.addEnvironment('NYSSE_BASE_URL', 'https://data.waltti.fi/tampere/api/gtfsrealtime/v2/alerts');
+    }
 
     // Oikeudet: raakadata S3:een, viestit jonoon, checkpoint-taulu, SSM-konffit.
     rawBucket.grantPut(fn, `source=${source.id}/*`);

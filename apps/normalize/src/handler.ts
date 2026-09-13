@@ -1,6 +1,6 @@
 /**
  * normalize — normalisointi-Lambda (arkkitehtuuri §2–3).
- * Tukee FMI_CAP, TAMPERE_TRAFFIC, VISIT_TAMPERE.
+ * Tukee FMI_CAP, TAMPERE_TRAFFIC, VISIT_TAMPERE, NYSSE_ALERTS.
  */
 
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
@@ -23,7 +23,7 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       attribution: { name: 'Ilmatieteen laitos', required: true },
       areaCodes: ['PIRKANMAA'] as string[],
       validity: { startsAt: raw?.onset ? String(raw.onset) : null, endsAt: raw?.expires ? String(raw.expires) : null },
-      location: { municipality: null, latitude: null, longitude: null },
+      location: null,
     };
   }
   if (source === 'TAMPERE_TRAFFIC') {
@@ -31,11 +31,10 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
     const type = st.toLowerCase().includes('roadwork') ? 'ROADWORK' as const : 'TRAFFIC_INCIDENT' as const;
     const sev = String(raw?.severity ?? '').toUpperCase();
     const severity = ['INFO','MINOR','MAJOR','CRITICAL'].includes(sev) ? sev : 'MAJOR';
-    const loc = raw?.location as Record<string, unknown> | undefined;
     const anns = Array.isArray(raw?.announcements) ? raw.announcements as Record<string, unknown>[] : [];
     const title = anns[0]?.title ? String(anns[0].title) : String(raw?.title ?? 'Liikennetapahtuma');
     const roadLoc = (raw?.locationDetails as Record<string, unknown> | undefined)?.roadAddressLocation as Record<string, unknown> | undefined;
-    const municipality = (roadLoc?.municipality as string | undefined) ?? (loc?.municipality as string | undefined) ?? null;
+    const municipality = (roadLoc?.municipality as string | undefined) ?? null;
     const td = anns[0]?.timeAndDuration as Record<string, unknown> | undefined;
     return {
       type, category: 'TRAFFIC' as const, severity,
@@ -43,7 +42,7 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       description: anns[0]?.comment ? { fi: String(anns[0].comment) } : undefined,
       attribution: { name: 'Tampereen kaupunki / Digitraffic', required: true },
       areaCodes: municipality ? [municipality] : ['TAMPERE'],
-      location: { municipality, latitude: (loc?.latitude ?? null) as number | null, longitude: (loc?.longitude ?? null) as number | null },
+      location: { municipality, latitude: null, longitude: null },
       validity: { startsAt: td?.startTime as string | null ?? null, endsAt: td?.endTime as string | null ?? null },
     };
   }
@@ -59,6 +58,19 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       areaCodes: ['TAMPERE'],
       location: { municipality: 'Tampere', latitude: lat ?? null, longitude: lon ?? null },
       validity: { startsAt: raw?.startDate ? String(raw.startDate) : null, endsAt: raw?.endDate ? String(raw.endDate) : null },
+    };
+  }
+  if (source === 'NYSSE_ALERTS') {
+    const routeInfo = raw?.routeIds ? (raw.routeIds as string[]).join(', ') : '';
+    return {
+      type: 'TRANSIT_DISRUPTION' as const, category: 'PUBLIC_TRANSPORT' as const,
+      severity: 'MINOR',
+      title: { fi: String(raw?.header ?? 'Joukkoliikennehäiriö') + (routeInfo ? ` (${routeInfo})` : '') },
+      description: raw?.description ? { fi: String(raw.description) } : undefined,
+      attribution: { name: 'Nysse', required: true },
+      areaCodes: ['TAMPERE'] as string[],
+      location: { municipality: 'Tampere', latitude: null, longitude: null },
+      validity: { startsAt: raw?.effectiveStart ? String(raw.effectiveStart) : null, endsAt: raw?.effectiveEnd ? String(raw.effectiveEnd) : null },
     };
   }
   return {
