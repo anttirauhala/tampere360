@@ -18,6 +18,7 @@ import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as events from 'aws-cdk-lib/aws-events';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
@@ -188,12 +189,12 @@ export class IngestionStack extends cdk.Stack {
       // Aseta NYSSE_API_KEY joko SSM-parametrillä tai ympäristömuuttujalla
       // /tampere360/{env}/sources/nysse/api-key (String tai SecureString)
 if (source.id === 'nysse') {
-      const apiKeyParam = ssm.StringParameter.fromStringParameterName(
-        this,
-        `${pascal(source.id)}ApiKeyParam`,
-        `/tampere360/${env}/sources/${source.id}/api-key`,
-      );
-      apiKeyParam.grantRead(fn);
+      fn.addToRolePolicy(new iam.PolicyStatement({
+        actions: ['ssm:GetParameter'],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/tampere360/${env}/sources/nysse/api-key`,
+        ],
+      }));
       fn.addEnvironment('SSM_API_KEY_PATH', `/tampere360/${env}/sources/${source.id}/api-key`);
     }
     }
