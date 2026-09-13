@@ -1,9 +1,6 @@
 /**
  * normalize — normalisointi-Lambda (arkkitehtuuri §2–3).
- *
- * SQS-ingestion-jono -> IngestMessage -> Tampere247Event ->
- * SourceEventNormalized EventBridge custom busille.
- * Tukee useita lähteita: FMI_CAP, TAMPERE_TRAFFIC, ...
+ * Tukee FMI_CAP, TAMPERE_TRAFFIC, VISIT_TAMPERE.
  */
 
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
@@ -12,55 +9,61 @@ import { sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
 import type { IngestMessage, Tampere247Event } from '@tampere360/event-contracts';
 import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
 
-const logger = createLogger({
-  service: 'normalize',
-  environment: process.env['ENVIRONMENT'] ?? 'dev',
-});
-
+const logger = createLogger({ service: 'normalize', environment: process.env['ENVIRONMENT'] ?? 'dev' });
 const eventbridge = new EventBridgeClient({});
 
 function mapRawToFields(source: string, raw: Record<string, unknown> | undefined) {
   if (source === 'FMI_CAP') {
-    const capSev = String(raw?.severity ?? '').toLowerCase();
-    const severity = capSev === 'extreme' ? 'CRITICAL' : capSev === 'severe' ? 'MAJOR' : capSev === 'moderate' ? 'MINOR' : 'INFO';
+    const s = String(raw?.severity ?? '').toLowerCase();
+    const severity = s === 'extreme' ? 'CRITICAL' : s === 'severe' ? 'MAJOR' : s === 'moderate' ? 'MINOR' : 'INFO';
     return {
-      type: 'WEATHER_WARNING' as const,
-      category: 'WEATHER' as const,
-      severity,
+      type: 'WEATHER_WARNING' as const, category: 'WEATHER' as const, severity,
       title: { fi: String(raw?.event ?? 'Säävaroitus') },
       description: raw?.description ? { fi: String(raw.description) } : undefined,
       attribution: { name: 'Ilmatieteen laitos', required: true },
       areaCodes: ['PIRKANMAA'] as string[],
       validity: { startsAt: raw?.onset ? String(raw.onset) : null, endsAt: raw?.expires ? String(raw.expires) : null },
+      location: { municipality: null, latitude: null, longitude: null },
     };
   }
   if (source === 'TAMPERE_TRAFFIC') {
-    const stType = String(raw?.situationType ?? raw?.trafficAnnouncementType ?? '');
-    const type = stType.toLowerCase().includes('roadwork') ? 'ROADWORK' as const : 'TRAFFIC_INCIDENT' as const;
+    const st = String(raw?.situationType ?? raw?.trafficAnnouncementType ?? '');
+    const type = st.toLowerCase().includes('roadwork') ? 'ROADWORK' as const : 'TRAFFIC_INCIDENT' as const;
     const sev = String(raw?.severity ?? '').toUpperCase();
     const severity = ['INFO','MINOR','MAJOR','CRITICAL'].includes(sev) ? sev : 'MAJOR';
     const loc = raw?.location as Record<string, unknown> | undefined;
-    const announcements = Array.isArray(raw?.announcements) ? raw.announcements as Record<string, unknown>[] : [];
-    const title = announcements[0]?.title ? String(announcements[0].title) : String(raw?.title ?? 'Liikennetapahtuma');
-    const locDetails = raw?.locationDetails as Record<string, unknown> | undefined;
-    const roadLoc = locDetails?.roadAddressLocation as Record<string, unknown> | undefined;
+    const anns = Array.isArray(raw?.announcements) ? raw.announcements as Record<string, unknown>[] : [];
+    const title = anns[0]?.title ? String(anns[0].title) : String(raw?.title ?? 'Liikennetapahtuma');
+    const roadLoc = (raw?.locationDetails as Record<string, unknown> | undefined)?.roadAddressLocation as Record<string, unknown> | undefined;
     const municipality = (roadLoc?.municipality as string | undefined) ?? (loc?.municipality as string | undefined) ?? null;
-    const td = announcements[0]?.timeAndDuration as Record<string, unknown> | undefined;
+    const td = anns[0]?.timeAndDuration as Record<string, unknown> | undefined;
     return {
-      type,
-      category: 'TRAFFIC' as const,
-      severity,
+      type, category: 'TRAFFIC' as const, severity,
       title: { fi: title },
-      description: announcements[0]?.comment ? { fi: String(announcements[0].comment) } : undefined,
-      attribution: { name: 'Tampereen kaupunki', required: true },
+      description: anns[0]?.comment ? { fi: String(anns[0].comment) } : undefined,
+      attribution: { name: 'Tampereen kaupunki / Digitraffic', required: true },
+      areaCodes: municipality ? [municipality] : ['TAMPERE'],
       location: { municipality, latitude: (loc?.latitude ?? null) as number | null, longitude: (loc?.longitude ?? null) as number | null },
       validity: { startsAt: td?.startTime as string | null ?? null, endsAt: td?.endTime as string | null ?? null },
-      areaCodes: municipality ? [municipality] : [],
+    };
+  }
+  if (source === 'VISIT_TAMPERE') {
+    const loc = raw?.location as Record<string, unknown> | undefined;
+    const lat = (loc?.coordinates as Record<string, unknown> | undefined)?.lat as number | undefined;
+    const lon = (loc?.coordinates as Record<string, unknown> | undefined)?.lon as number | undefined;
+    return {
+      type: 'PUBLIC_EVENT' as const, category: 'EVENT' as const, severity: 'INFO',
+      title: { fi: String(raw?.name ?? 'Tapahtuma') },
+      description: raw?.description ? { fi: String(raw.description) } : undefined,
+      attribution: { name: 'Visit Tampere', required: true },
+      areaCodes: ['TAMPERE'],
+      location: { municipality: 'Tampere', latitude: lat ?? null, longitude: lon ?? null },
+      validity: { startsAt: raw?.startDate ? String(raw.startDate) : null, endsAt: raw?.endDate ? String(raw.endDate) : null },
     };
   }
   return {
-    type: 'OTHER' as const, category: 'TRAFFIC' as const,
-    severity: 'INFO', title: { fi: String(raw?.title ?? 'Tapahtuma') },
+    type: 'OTHER' as const, category: 'EVENT' as const, severity: 'INFO',
+    title: { fi: String(raw?.name ?? String(raw?.title ?? 'Tapahtuma')) },
     attribution: { name: source, required: false },
     location: null, validity: null, areaCodes: [],
   };
@@ -106,7 +109,7 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
             Detail: JSON.stringify({ event: normalized, batchId: ingestMessage.batch.batchId, occurredAt: now }),
           }],
         }));
-        logger.info('Normalisoitu', { source: parsedEvent.source, processingKey: parsedEvent.processingKey, type: m.type });
+        logger.info('Normalisoitu', { source: parsedEvent.source, type: m.type });
       } catch (e) { failIds.push(messageId); }
     }
   }
