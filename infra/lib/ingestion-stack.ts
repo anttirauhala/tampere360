@@ -201,8 +201,9 @@ export class IngestionStack extends cdk.Stack {
     });
     const baseUrlParam = new ssm.StringParameter(this, `${name}BaseUrlParam`, {
       parameterName: `${paramPrefix}/base-url`,
-      stringValue: baseUrlBySource[source.id] ?? '',
-      description: `Lähteen ${source.system} rajapinnan URL (tyhjä = selvitettävä, ks. §18)`,
+      // 'TBD' = URL ei vielä selvitetty (arkkitehtuuri §18). SSM ei hyväksy tyhjää arvoa.
+      stringValue: baseUrlBySource[source.id] ?? 'TBD',
+      description: `Lähteen ${source.system} rajapinnan URL (TBD = selvitettävä, ks. §18)`,
     });
     const pollParam = new ssm.StringParameter(this, `${name}PollIntervalParam`, {
       parameterName: `${paramPrefix}/poll-interval`,
