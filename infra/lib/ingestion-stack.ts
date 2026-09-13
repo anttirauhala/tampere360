@@ -187,18 +187,14 @@ export class IngestionStack extends cdk.Stack {
       fn.addEnvironment('NYSSE_BASE_URL', 'https://data.waltti.fi/tampere/api/gtfsrealtime/v1.0/feed/servicealerts');
       // Aseta NYSSE_API_KEY joko SSM-parametrillä tai ympäristömuuttujalla
       // /tampere360/{env}/sources/nysse/api-key (String tai SecureString)
-// API-avain SSM SecureString -parametriin (käyttäjä asettaa käsin)
-    if (source.id === 'nysse') {
-      const apiKeyParam = new ssm.StringParameter(this, `${pascal(source.id)}ApiKeyParam`, {
-        parameterName: `/tampere360/${env}/sources/${source.id}/api-key`,
-        stringValue: 'CHANGE_ME',
-        description: `Nysse Waltti-API-avain. Aseta todellinen arvo AWS Console/CLI:llä.`,
-        tier: ssm.ParameterTier.STANDARD,  // SecureString ei salli STANDARD-tasolla → String
-      });
+if (source.id === 'nysse') {
+      const apiKeyParam = ssm.StringParameter.fromStringParameterName(
+        this,
+        `${pascal(source.id)}ApiKeyParam`,
+        `/tampere360/${env}/sources/${source.id}/api-key`,
+      );
       apiKeyParam.grantRead(fn);
-      // Huom: Käytä SecureString-parametria ja WithDecryption=true koodissa.
-      // Parametri luodaan String-tyyppisenä aluksi; vaihda SecureStringiksi
-      // myöhemmässa vaiheessa.
+      fn.addEnvironment('SSM_API_KEY_PATH', `/tampere360/${env}/sources/${source.id}/api-key`);
     }
     }
 
