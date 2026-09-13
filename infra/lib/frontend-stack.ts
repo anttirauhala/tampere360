@@ -1,9 +1,8 @@
 /**
  * FrontendStack — React SPA:n jakelu (arkkitehtuuri §11).
  *
- * Yksityinen S3-bucket + CloudFront Origin Access Control (§14:
- * S3 Block Public Access + OAC). CSP- ja suojausotsakkeet lisätään
- * CloudFrontin response headers policylla.
+ * Yksityinen S3-bucket + CloudFront Origin Access Control + paikkamerkkisivu
+ * (BucketDeployment kunnes apps/web on toteutettu Vaiheessa 4).
  *
  * WAF-lippu (wafEnabled): MVP:ssä ei omaa domainia → CloudFrontin
  * oletusdomain eikä WAF:ia (~5 €/kk). Kun domain tulee, WAF + Route 53
@@ -17,10 +16,23 @@ import * as cdk from 'aws-cdk-lib';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
 
 import type { AppContext } from './config';
 import { resourceName } from './config';
+
+const PLACEHOLDER_HTML = `<!DOCTYPE html>
+<html lang="fi">
+<head><meta charset="UTF-8"><title>Tampere360</title>
+<style>body{font-family:sans-serif;margin:40px;text-align:center;background:#111;color:#eee}
+h1{color:#4af}footer{margin-top:40px;font-size:0.8em;color:#666}</style>
+</head>
+<body><h1>Tampere360</h1>
+<p>Tilannekuva tulossa pian.</p>
+<p>Vaihe 4 toteuttaa React-sovelluksen.</p>
+<footer>Tampere360 &copy; 2026</footer>
+</body></html>`;
 
 export interface FrontendStackProps extends cdk.StackProps {
   appContext: AppContext;
@@ -97,6 +109,14 @@ export class FrontendStack extends cdk.Stack {
       // minimumProtocolVersion asetetaan kun oma domain + ACM-sertifikaatti
       // kytketään (myöhempi vaihe, §14). Oletusdomainilla TLS-versio on
       // CloudFrontin hallinnassa.
+    });
+
+    // Paikkamerkkisivu kunnes apps/web on toteutettu Vaiheessa 4.
+    new s3deploy.BucketDeployment(this, 'PlaceholderDeployment', {
+      sources: [s3deploy.Source.data('index.html', PLACEHOLDER_HTML)],
+      destinationBucket: this.webBucket,
+      distribution: this.distribution,
+      distributionPaths: ['/*'],
     });
 
     new cdk.CfnOutput(this, 'WebBucketName', { value: this.webBucket.bucketName });
