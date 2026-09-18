@@ -34,7 +34,9 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
     const anns = Array.isArray(raw?.announcements) ? raw.announcements as Record<string, unknown>[] : [];
     const title = anns[0]?.title ? String(anns[0].title) : String(raw?.title ?? 'Liikennetapahtuma');
     const roadLoc = (raw?.locationDetails as Record<string, unknown> | undefined)?.roadAddressLocation as Record<string, unknown> | undefined;
-    const municipality = (roadLoc?.municipality as string | undefined) ?? null;
+    const primary = roadLoc?.primaryPoint as Record<string, unknown> | undefined;
+    const secondary = roadLoc?.secondaryPoint as Record<string, unknown> | undefined;
+    const municipality = (primary?.municipality as string | undefined) ?? (secondary?.municipality as string | undefined) ?? null;
     const td = anns[0]?.timeAndDuration as Record<string, unknown> | undefined;
     return {
       type, category: 'TRAFFIC' as const, severity,

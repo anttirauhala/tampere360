@@ -63,9 +63,11 @@ export const SOURCE_DEFINITIONS: SourceDefinition[] = [
   {
     id: 'events',
     system: 'VISIT_TAMPERE',
-    description: 'Visit Tampere / Eventz -tapahtumakalenteri',
+    description: 'Visit Tampere / Eventz -tapahtumakalenteri (API /api/v1/event palauttaa 404 — selvitys kesken)',
     scheduleRateMinutes: 30,
-    enabled: true,
+    // Disabloitu: visittampere.fi/api/v1/event palauttaa WordPress-404:n (18.9.2026).
+    // Selvitä korvaava rajapinta (Eventz.today / kaupungin kalenteri) ennen käyttöönottoa.
+    enabled: false,
   },
   {
     id: 'nysse',

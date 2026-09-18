@@ -31,6 +31,12 @@ const PIRKANMAA_MUNICIPALITIES = new Set([
   'Orivesi','Punkalaidun','Virrat',
 ]);
 
+interface RoadAddressPoint {
+  municipality?: string;
+  province?: string;
+  country?: string;
+}
+
 interface DigitrafficFeature {
   type: string;
   geometry: { type: string; coordinates: number[][] | number[][][] };
@@ -47,9 +53,9 @@ interface DigitrafficFeature {
       location: { description: string };
       locationDetails: {
         roadAddressLocation: {
-          municipality: string;
-          province: string;
-          country: string;
+          primaryPoint?: RoadAddressPoint;
+          secondaryPoint?: RoadAddressPoint;
+          direction?: string;
         };
       };
       features: { name: string }[];
@@ -61,13 +67,31 @@ interface DigitrafficFeature {
   };
 }
 
+/**
+ * Onko ilmoitus Pirkanmaalla? Digitraffic antaa kunnan ja maakunnan
+ * roadAddressLocation.primaryPoint / secondaryPoint -tasolla.
+ */
 function isPirkanmaa(feature: DigitrafficFeature): boolean {
   for (const ann of feature.properties.announcements ?? []) {
     const roadLoc = ann.locationDetails?.roadAddressLocation;
-    if (roadLoc?.province === 'Pirkanmaa') return true;
-    if (roadLoc?.municipality && PIRKANMAA_MUNICIPALITIES.has(roadLoc.municipality)) return true;
+    if (!roadLoc) continue;
+    for (const point of [roadLoc.primaryPoint, roadLoc.secondaryPoint]) {
+      if (!point) continue;
+      if (point.province === 'Pirkanmaa') return true;
+      if (point.municipality && PIRKANMAA_MUNICIPALITIES.has(point.municipality)) return true;
+    }
   }
   return false;
+}
+
+/** Poimii kunnan ilmoituksesta (primaryPoint ensisijainen). */
+function pickMunicipality(feature: DigitrafficFeature): string | null {
+  for (const ann of feature.properties.announcements ?? []) {
+    const roadLoc = ann.locationDetails?.roadAddressLocation;
+    const m = roadLoc?.primaryPoint?.municipality ?? roadLoc?.secondaryPoint?.municipality;
+    if (m) return m;
+  }
+  return null;
 }
 
 export async function handler(): Promise<{ status: string; itemsProcessed: number }> {
@@ -173,7 +197,7 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
     }
 
     processed.push(sourceId);
-    logger.info('Käsitelty', { sourceId, title, municipality: ann.locationDetails?.roadAddressLocation?.municipality });
+    logger.info('Käsitelty', { sourceId, title, municipality: pickMunicipality(feat) });
   }
 
   await saveIngestionCheckpoint({
