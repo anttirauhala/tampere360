@@ -2,7 +2,7 @@
  * situation-processor — EventBridge-käynnistetty prosessori (arkkitehtuuri §3–4).
  *
  * Kuluttaa SourceEventNormalized-domain-eventit ja tekee:
- * 1. validointi (isValidTampere247Event)
+ * 1. validointi (isTampere360Event)
  * 2. aluesuodatus (Tampere/Pirkanmaa, §5)
  * 3. tekninen idempotenssi (attribute_not_exists(processingKey), §4.1)
  * 4. kanonisen Situation-kirjoitus DynamoDB:hen (§4.2)
@@ -13,9 +13,9 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, PutCommandInput } from '@aws-sdk/lib-dynamodb';
 import { createLogger } from '@tampere360/observability';
 import { ulid } from '@tampere360/source-adapter-sdk';
-import { isValidTampere247Event } from '@tampere360/event-contracts';
+import { isTampere360Event } from '@tampere360/event-contracts';
 import type { EventBridgeEvent } from 'aws-lambda';
-import type { SourceEventNormalizedDetail, Tampere247Event } from '@tampere360/event-contracts';
+import type { SourceEventNormalizedDetail, Tampere360Event } from '@tampere360/event-contracts';
 
 const logger = createLogger({
   service: 'situation-processor',
@@ -29,9 +29,9 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
   const detail = event.detail as SourceEventNormalizedDetail | undefined;
   if (!detail?.event) return;
 
-  const e: Tampere247Event = detail.event;
+  const e: Tampere360Event = detail.event;
 
-  if (!isValidTampere247Event(e)) {
+  if (!isTampere360Event(e)) {
     logger.warn('Validaatio hylkäsi', { processingKey: e.processingKey });
     return;
   }

@@ -6,7 +6,7 @@
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { createLogger } from '@tampere360/observability';
 import { sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
-import type { IngestMessage, Tampere247Event } from '@tampere360/event-contracts';
+import type { IngestMessage, Tampere360Event } from '@tampere360/event-contracts';
 import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
 
 const logger = createLogger({ service: 'normalize', environment: process.env['ENVIRONMENT'] ?? 'dev' });
@@ -108,20 +108,20 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
         const now = new Date().toISOString();
         const eventId = ulid();
         const m = mapRawToFields(parsedEvent.source, raw);
-        const normalized: Tampere247Event = {
+        const normalized: Tampere360Event = {
           schemaVersion: '1.0', id: eventId,
           canonicalKey: `${parsedEvent.source}:${parsedEvent.sourceId}`,
           processingKey: parsedEvent.processingKey,
           source: { system: parsedEvent.source, sourceId: parsedEvent.sourceId, fetchedAt: ingestMessage.batch.fetchedAt },
-          type: m.type as Tampere247Event['type'],
-          category: m.category as Tampere247Event['category'],
-          severity: m.severity as Tampere247Event['severity'],
+          type: m.type as Tampere360Event['type'],
+          category: m.category as Tampere360Event['category'],
+          severity: m.severity as Tampere360Event['severity'],
           status: 'ACTIVE', lifecycle: 'ACTIVE',
           title: m.title, description: m.description,
           location: {
             municipality: m.location?.municipality ?? null, district: null, address: null,
             latitude: m.location?.latitude ?? null, longitude: m.location?.longitude ?? null,
-            geometry: null, areaCodes: (m.areaCodes ?? []) as Tampere247Event['location']['areaCodes'],
+            geometry: null, areaCodes: (m.areaCodes ?? []) as Tampere360Event['location']['areaCodes'],
           },
           validity: { startsAt: m.validity?.startsAt ?? null, endsAt: m.validity?.endsAt ?? null },
           publishedAt: now, updatedAt: now, tags: [],
