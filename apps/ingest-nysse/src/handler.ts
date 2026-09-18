@@ -6,7 +6,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { createLogger } from '@tampere360/observability';
-import { sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
+import { saveIngestionCheckpoint, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
 import { transit_realtime } from 'gtfs-realtime-bindings';
 
 const logger = createLogger({ service: 'ingest-nysse', source: 'NYSSE_ALERTS', environment: process.env['ENVIRONMENT'] ?? 'dev' });
@@ -120,6 +120,13 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
     processed.push(sourceId);
   }
   logger.info('Nysse valmis', { count: processed.length });
+  await saveIngestionCheckpoint({
+    tableName: process.env['INGESTION_STATE_TABLE_NAME'] ?? '',
+    source: 'NYSSE_ALERTS',
+    status: 'OK',
+    lastSuccessfulFetch: new Date().toISOString(),
+    itemsReceived: processed.length,
+  });
   return { status: 'OK', itemsProcessed: processed.length };
 }
 

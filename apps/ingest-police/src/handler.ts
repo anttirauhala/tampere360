@@ -8,7 +8,7 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { createLogger } from '@tampere360/observability';
-import { fetchWithRetry, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
+import { fetchWithRetry, saveIngestionCheckpoint, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
 import { XMLParser } from 'fast-xml-parser';
 
 const logger = createLogger({
@@ -165,5 +165,12 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
     logger.info('Poliisitiedote käsitelty', { sourceId, title: (item.title ?? '').slice(0, 80) });
   }
 
+  await saveIngestionCheckpoint({
+    tableName: process.env['INGESTION_STATE_TABLE_NAME'] ?? '',
+    source: 'POLICE_RSS',
+    status: 'OK',
+    lastSuccessfulFetch: new Date().toISOString(),
+    itemsReceived: processed.length,
+  });
   return { status: 'OK', itemsProcessed: processed.length };
 }

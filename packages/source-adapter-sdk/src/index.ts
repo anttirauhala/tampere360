@@ -6,6 +6,7 @@
  */
 
 export * from './adapter';
+export * from './checkpoint';
 export * from './hash';
 export * from './http';
 export * from './ids';

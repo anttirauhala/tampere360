@@ -10,7 +10,7 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { createLogger } from '@tampere360/observability';
-import { fetchWithRetry, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
+import { fetchWithRetry, saveIngestionCheckpoint, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
 
 import { parseCapXml, parseRssFeed } from './cap-parser';
 
@@ -39,6 +39,12 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
     rssXml = res.body;
   } catch (err) {
     logger.error('RSS-haku epäonnistui', { error: String(err) });
+    await saveIngestionCheckpoint({
+      tableName: process.env['INGESTION_STATE_TABLE_NAME'] ?? '',
+      source: 'FMI_CAP',
+      status: 'ERROR',
+      error: String(err),
+    });
     return { status: 'ERROR', itemsProcessed: 0 };
   }
 
@@ -138,5 +144,12 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
     });
   }
 
+  await saveIngestionCheckpoint({
+    tableName: process.env['INGESTION_STATE_TABLE_NAME'] ?? '',
+    source: 'FMI_CAP',
+    status: 'OK',
+    lastSuccessfulFetch: new Date().toISOString(),
+    itemsReceived: processed.length,
+  });
   return { status: 'OK', itemsProcessed: processed.length };
 }

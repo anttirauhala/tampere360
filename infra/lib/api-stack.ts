@@ -108,6 +108,6 @@ export class ApiStack extends cdk.Stack {
       });
     }
 
-    new cdk.CfnOutput(this, 'ApiUrl', { value: this.httpApi.url ?? '' });
+    new cdk.CfnOutput(this, 'ApiUrl', { value: this.httpApi.apiEndpoint });
   }
 }
