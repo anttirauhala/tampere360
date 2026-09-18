@@ -93,6 +93,8 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
         if (!e.alert) continue;
         const a = e.alert;
         alerts.push({
+          // GTFS-RT entity.id on pysyvä tunniste → idempotenssi toimii
+          entityId: e.id || undefined,
           header: t(a.headerText), description: t(a.descriptionText),
           start: a.activePeriod?.[0]?.start ? new Date(Number(a.activePeriod[0].start) * 1000).toISOString() : undefined,
           end: a.activePeriod?.[0]?.end ? new Date(Number(a.activePeriod[0].end) * 1000).toISOString() : undefined,
@@ -108,8 +110,11 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
 
   const processed: string[] = [];
   for (const a of alerts) {
-    const sourceId = `alert-${ulid()}`;
+    // GTFS-RT entity.id on pysyvä tunniste: sama häiriö ei synnytä uutta
+    // tilannetta joka ajolla (idempotenssi §4.1). Jos id puuttuu, käytetään
+    // sisällön tarkistetta vakaana tunnisteena.
     const c = sha256Hex(JSON.stringify(a));
+    const sourceId = a.entityId ?? `alert-${c.slice(0, 16)}`;
     const pk = `NYSSE_ALERTS:${sourceId}:${c.slice(0, 16)}`;
     const bid = ulid();
     const key = `source=nysse/year=${new Date().getUTCFullYear()}/${bid}.json`;
