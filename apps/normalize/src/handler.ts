@@ -12,6 +12,25 @@ import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
 const logger = createLogger({ service: 'normalize', environment: process.env['ENVIRONMENT'] ?? 'dev' });
 const eventbridge = new EventBridgeClient({});
 
+/** Pirkanmaan kunnat (kuntanimi → aluekoodit). */
+const PIRKANMAA_MUNICIPALITIES = new Set([
+  'Nokia', 'Pirkkala', 'Ylöjärvi', 'Lempäälä', 'Kangasala', 'Vesilahti',
+  'Akaa', 'Valkeakoski', 'Sastamala', 'Ikaalinen', 'Parkano', 'Ruovesi',
+  'Mänttä-Vilppula', 'Urjala', 'Hämeenkyrö', 'Juupajoki', 'Kihniö',
+  'Kuhmoinen', 'Orivesi', 'Punkalaidun', 'Virrat',
+]);
+
+/**
+ * Muuntaa kunnan nimen validiksi areaCodes-listaksi (AreaLevel-enum).
+ * Tampere → TAMPERE + seutu + maakunta; muu Pirkanmaa → seutu + maakunta.
+ */
+function areaCodesFor(municipality: string | null | undefined): string[] {
+  if (!municipality) return ['TAMPERE', 'PIRKANMAA'];
+  if (municipality === 'Tampere') return ['TAMPERE', 'TAMPERE_REGION', 'PIRKANMAA'];
+  if (PIRKANMAA_MUNICIPALITIES.has(municipality)) return ['TAMPERE_REGION', 'PIRKANMAA'];
+  return ['PIRKANMAA'];
+}
+
 function mapRawToFields(source: string, raw: Record<string, unknown> | undefined) {
   if (source === 'FMI_CAP') {
     const s = String(raw?.severity ?? '').toLowerCase();
@@ -27,25 +46,39 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
     };
   }
   if (source === 'TAMPERE_TRAFFIC') {
-    const st = String(raw?.situationType ?? raw?.trafficAnnouncementType ?? '');
+    // Digitraffic on GeoJSON: kentät ovat properties-kääreen sisällä.
+    // Tuetaan molempia muotoja (properties-wrapperi tai suora).
+    const props = ((raw?.properties ?? raw) ?? {}) as Record<string, unknown>;
+    const st = String(props.situationType ?? props.trafficAnnouncementType ?? '');
     const type = st.toLowerCase().includes('roadwork') ? 'ROADWORK' as const : 'TRAFFIC_INCIDENT' as const;
-    const sev = String(raw?.severity ?? '').toUpperCase();
-    const severity = ['INFO','MINOR','MAJOR','CRITICAL'].includes(sev) ? sev : 'MAJOR';
-    const anns = Array.isArray(raw?.announcements) ? raw.announcements as Record<string, unknown>[] : [];
-    const title = anns[0]?.title ? String(anns[0].title) : String(raw?.title ?? 'Liikennetapahtuma');
-    const roadLoc = (raw?.locationDetails as Record<string, unknown> | undefined)?.roadAddressLocation as Record<string, unknown> | undefined;
+    const anns = Array.isArray(props.announcements) ? (props.announcements as Record<string, unknown>[]) : [];
+    const ann = (anns[0] ?? {}) as Record<string, unknown>;
+    const title = ann.title ? String(ann.title).trim() : 'Liikennetapahtuma';
+    const locDetails = ann.locationDetails as Record<string, unknown> | undefined;
+    const roadLoc = locDetails?.roadAddressLocation as Record<string, unknown> | undefined;
     const primary = roadLoc?.primaryPoint as Record<string, unknown> | undefined;
     const secondary = roadLoc?.secondaryPoint as Record<string, unknown> | undefined;
     const municipality = (primary?.municipality as string | undefined) ?? (secondary?.municipality as string | undefined) ?? null;
-    const td = anns[0]?.timeAndDuration as Record<string, unknown> | undefined;
+    const td = ann.timeAndDuration as Record<string, unknown> | undefined;
+
+    // Vakavuus: suljettu tie / kiertotie / onnettomuus → MAJOR, muuten MINOR
+    const featureNames = Array.isArray(ann.features)
+      ? (ann.features as Record<string, unknown>[]).map((f) => String(f.name ?? '')).join(' ')
+      : '';
+    const text = `${title} ${featureNames}`.toLowerCase();
+    const severity = /suljettu|onnettomuus|kiertotie|vakava/.test(text) ? 'MAJOR' : 'MINOR';
+
     return {
       type, category: 'TRAFFIC' as const, severity,
       title: { fi: title },
-      description: anns[0]?.comment ? { fi: String(anns[0].comment) } : undefined,
-      attribution: { name: 'Tampereen kaupunki / Digitraffic', required: true },
-      areaCodes: municipality ? [municipality] : ['TAMPERE'],
+      description: ann.comment ? { fi: String(ann.comment) } : undefined,
+      attribution: { name: 'Fintraffic / Digitraffic', required: true, url: 'https://www.digitraffic.fi' },
+      areaCodes: areaCodesFor(municipality),
       location: { municipality, latitude: null, longitude: null },
-      validity: { startsAt: td?.startTime as string | null ?? null, endsAt: td?.endTime as string | null ?? null },
+      validity: {
+        startsAt: td?.startTime ? String(td.startTime) : null,
+        endsAt: td?.endTime ? String(td.endTime) : null,
+      },
     };
   }
   if (source === 'VISIT_TAMPERE') {
