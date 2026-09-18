@@ -29,12 +29,13 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
   const detail = event.detail as SourceEventNormalizedDetail | undefined;
   if (!detail?.event) return;
 
-  const e: Tampere360Event = detail.event;
-
-  if (!isTampere360Event(e)) {
-    logger.warn('Validaatio hylkäsi', { processingKey: e.processingKey });
+  const rawEvent = detail.event as Record<string, unknown>;
+  if (!isTampere360Event(rawEvent)) {
+    logger.warn('Validaatio hylkäsi', { processingKey: rawEvent.processingKey as string | undefined });
     return;
   }
+
+  const e: Tampere360Event = rawEvent;
 
   const areaCodes = e.location?.areaCodes ?? [];
   if (!areaCodes.includes('TAMPERE') && !areaCodes.includes('PIRKANMAA') && !areaCodes.includes('TAMPERE_REGION')) {
