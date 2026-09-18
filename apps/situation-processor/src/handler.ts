@@ -29,7 +29,7 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
   const detail = event.detail as SourceEventNormalizedDetail | undefined;
   if (!detail?.event) return;
 
-  const rawEvent = detail.event as Record<string, unknown>;
+  const rawEvent = detail.event as unknown as Record<string, unknown>;
   if (!isTampere360Event(rawEvent)) {
     logger.warn('Validaatio hylkäsi', { processingKey: rawEvent.processingKey as string | undefined });
     return;
@@ -78,26 +78,30 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
   const situationId = ulid();
   const startsAt = e.validity?.startsAt ?? e.publishedAt;
 
+  // DynamoDB ei hyväksy NULL-arvoa GSI-avaimelle (gsi3/municipality, gsi4/geohash).
+  // GSI:t ovat sparse-indeksejä: avain jätetään pois, jos arvoa ei ole.
+  const situationItem: Record<string, unknown> = {
+    situationId,
+    processingKey: e.processingKey,
+    canonicalKey: e.canonicalKey,
+    event: e,
+    status: e.status,
+    category: e.category,
+    severity: e.severity,
+    startsAt,
+    createdAt: now,
+    updatedAt: now,
+  };
+  if (e.location?.municipality) situationItem.municipality = e.location.municipality;
+  if (e.location?.geohash) situationItem.geohash = e.location.geohash;
+  if (e.status === 'ENDED' || e.status === 'CANCELLED') {
+    situationItem.expiresAt = Math.floor(Date.now() / 1000) + 30 * 86400;
+  }
+
   try {
     await doc.send(new PutCommand({
       TableName: tables.situations,
-      Item: {
-        situationId,
-        processingKey: e.processingKey,
-        canonicalKey: e.canonicalKey,
-        event: e,
-        status: e.status,
-        category: e.category,
-        severity: e.severity,
-        startsAt,
-        municipality: e.location?.municipality ?? null,
-        geohash: e.location?.geohash ?? null,
-        expiresAt: (e.status === 'ENDED' || e.status === 'CANCELLED')
-          ? Math.floor(Date.now() / 1000) + 30 * 86400
-          : undefined,
-        createdAt: now,
-        updatedAt: now,
-      },
+      Item: situationItem,
       ConditionExpression: 'attribute_not_exists(situationId)',
     }));
     logger.info('Situation luotu', {

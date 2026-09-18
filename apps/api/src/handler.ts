@@ -31,7 +31,11 @@ async function hSituations(path: string, event: APIGatewayProxyEventV2): Promise
     if (!r.Item) return { statusCode: 404, headers: { 'content-type': 'application/json' }, body: '{"error":"NOT_FOUND"}' };
     return { statusCode: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify(r.Item) };
   }
-  const qs = new URLSearchParams(event.queryStringParameters ?? {});
+  const qs = new URLSearchParams(
+    Object.entries(event.queryStringParameters ?? {}).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
   const limit = Math.min(Number(qs.get('limit')) || 50, 200);
   const cursor = qs.get('cursor');
   const category = qs.get('category');
@@ -83,12 +87,20 @@ async function hMap(): Promise<APIGatewayProxyResultV2> {
     ExpressionAttributeValues: { ':st': 'ACTIVE' },
   }));
   const features = (r.Items ?? [])
-    .filter((i: Record<string, unknown>) => (i.event as Record<string, unknown>)?.location && (i.event as Record<string, unknown>).location?.['latitude'])
-    .map((i: Record<string, unknown>) => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [(i.event as Record<string, unknown>).location['longitude'], (i.event as Record<string, unknown>).location['latitude']] },
-      properties: { situationId: i.situationId, title: (i.event as Record<string, unknown>).title?.['fi'], severity: i.severity },
-    }));
+    .filter((i: Record<string, unknown>) => {
+      const loc = (i.event as Record<string, unknown> | undefined)?.location as Record<string, unknown> | undefined;
+      return Boolean(loc?.['latitude'] && loc?.['longitude']);
+    })
+    .map((i: Record<string, unknown>) => {
+      const evt = i.event as Record<string, unknown>;
+      const loc = evt.location as Record<string, unknown>;
+      const title = evt.title as Record<string, unknown> | undefined;
+      return {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [loc['longitude'], loc['latitude']] },
+        properties: { situationId: i.situationId, title: title?.['fi'] ?? '', severity: i.severity },
+      };
+    });
   return { statusCode: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'FeatureCollection', features }) };
 }
 
