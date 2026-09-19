@@ -1,7 +1,6 @@
 # Tampere360 — Toteutussuunnitelma
 
-> Lähdeaineisto: `.clinerules/architechture.md` (773 riviä) + lähteiden validointi 6.9.2026
-> Projektin juuri: `/home/opti/projects/fibo2`
+> Lähdeaineisto: `.clinerules/architecture.md` (773 riviä) + lähteiden validointi 6.9.2026
 > Tilanne: Vaihe 0 ✅, Vaihe 1 ✅ (CDK-infra, 8 stackia), Vaiheet 2–3 ✅
 > (FMI CAP, Digitraffic, poliisi-RSS ja Nysse Waltti toimivat päästä päähän;
 > tapahtumalähde disabloitu, API 404 — ks. §18). Deploy: `tampere360-dev-*`
