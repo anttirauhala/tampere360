@@ -22,6 +22,7 @@ import { Construct } from 'constructs';
 
 import type { AppContext } from './config';
 import { resourceName } from './config';
+import { buildContentSecurityPolicy } from './csp';
 
 /** Polku apps/web:n Vite-buildiin (repo-juuresta). */
 const WEB_DIST = path.join(__dirname, '..', '..', 'apps', 'web', 'dist');
@@ -91,21 +92,10 @@ export class FrontendStack extends cdk.Stack {
         },
         xssProtection: { protection: true, modeBlock: true, override: true },
         contentSecurityPolicy: {
-          // MapLibre + OSM-rasteritiilet + oma API sallitaan (§11, §14).
-          // MapLibre luo Web Workerin blob-URL:sta → worker-src/child-src blob:.
-          contentSecurityPolicy: [
-            "default-src 'self'",
-            "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://tiles.openfreemap.org",
-            "style-src 'self' 'unsafe-inline'",
-            "script-src 'self'",
-            `connect-src 'self' ${apiOrigin} https://*.amazonaws.com`,
-            "worker-src 'self' blob:",
-            "child-src 'self' blob:",
-            "font-src 'self' data:",
-            "object-src 'none'",
-            "base-uri 'self'",
-            "frame-ancestors 'none'",
-          ].join('; '),
+          // CSP rakennetaan lib/csp.ts:ssä — ks. regressiosuoja
+          // infra/test/csp.test.ts (MapLibre hakee tiilet fetch:llä, joten
+          // tiilien origin tarvitaan myös connect-src:hen).
+          contentSecurityPolicy: buildContentSecurityPolicy({ apiOrigin }),
           override: true,
         },
       },

@@ -525,9 +525,20 @@ Toteutuksen aikana havaitut ja korjatut asiat:
 - `maplibre-gl` v6:lla ei ole default-exportia → nimetty import
 - CDK-tokenia ei saa ajaa `new URL()`:in läpi → CSP:ssä käytetään
   `httpApi.apiEndpoint`-arvoa sellaisenaan
+- **Karttatiilet eivät latautuneet**: MapLibre hakee rasteritiilet `fetch`:llä
+  (ei `<img>`:llä), joten tiilien origin tarvitaan `connect-src`-direktiiviin —
+  pelkkä `img-src` ei riitä. CSP rakennetaan nyt `infra/lib/csp.ts`:ssä ja
+  regressiosuoja on `infra/test/csp.test.ts` (vitest-include laajennettu
+  kattamaan `infra/test/**`)
 - Lint-virheet (9 kpl) siivottu: käyttämättömät importit ja tyhjät
   catch-lohkot (`apps/ingest-fmi`, `apps/ingest-nysse`,
   `apps/normalize`, `apps/situation-processor`)
+
+Selaintason verifiointi (headless Chrome, `--dump-dom` + NetLog):
+- `/` renderöi 66 aktiivista tilannetta kategorialaattoineen
+- `/kartta` luo MapLibre-canvasin, 5 markeria, **28 tiilipyyntöä → HTTP 200**,
+  0 CSP-rikkomusta
+- `/lahteet` näyttää 4 lähdettä `OK`-tilassa
 
 ### Vaihe 5 — Testit, valvonta, CI
 - Yksikkötestit fixture-pohjaisesti (test-fixtures-paketti)
