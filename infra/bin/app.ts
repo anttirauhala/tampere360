@@ -85,8 +85,13 @@ const api = new ApiStack(app, `${prefix}-api`, {
   ingestionStateTable: data.ingestionStateTable,
 });
 
-// FrontendStack: web-bucket + CloudFront (React SPA deployataan Vaiheessa 4).
-new FrontendStack(app, `${prefix}-frontend`, { appContext, env });
+// FrontendStack: web-bucket + CloudFront + Vite-buildi (apps/web) ja
+// ajonaikainen /config.json, jossa API-osoite.
+new FrontendStack(app, `${prefix}-frontend`, {
+  appContext,
+  env,
+  apiUrl: api.httpApiUrl,
+});
 
 new MonitoringStack(app, `${prefix}-monitoring`, {
   appContext,

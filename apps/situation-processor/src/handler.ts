@@ -10,7 +10,7 @@
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, PutCommandInput } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { createLogger } from '@tampere360/observability';
 import { ulid } from '@tampere360/source-adapter-sdk';
 import { isTampere360Event } from '@tampere360/event-contracts';

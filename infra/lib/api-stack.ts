@@ -45,6 +45,8 @@ const API_ROUTES = [
 export class ApiStack extends cdk.Stack {
   /** HTTP API (url-ominaisuus) frontendin ja testausta varten. */
   public readonly httpApi: apigwv2.HttpApi;
+  /** API:n juuri (esim. https://xxx.execute-api.eu-north-1.amazonaws.com). */
+  public readonly httpApiUrl: string;
   /** Query-Lambda valvontaa varten. */
   public readonly queryFunction: lambdaNodejs.NodejsFunction;
 
@@ -109,5 +111,6 @@ export class ApiStack extends cdk.Stack {
     }
 
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.httpApi.apiEndpoint });
+    this.httpApiUrl = this.httpApi.apiEndpoint;
   }
 }

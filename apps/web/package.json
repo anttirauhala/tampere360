@@ -1,0 +1,26 @@
+{
+  "name": "@tampere360/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tampere360 — React SPA (Vite + TanStack Query + MapLibre GL JS)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.103.0",
+    "maplibre-gl": "^6.10.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.0"
+  }
+}

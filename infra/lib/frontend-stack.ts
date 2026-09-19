@@ -1,16 +1,17 @@
 /**
  * FrontendStack — React SPA:n jakelu (arkkitehtuuri §11).
  *
- * Yksityinen S3-bucket + CloudFront Origin Access Control + paikkamerkkisivu
- * (BucketDeployment kunnes apps/web on toteutettu Vaiheessa 4).
+ * Yksityinen S3-bucket + CloudFront Origin Access Control + BucketDeployment,
+ * joka julkaisee apps/web:n Vite-buildin (dist/) ja kirjoittaa ajonaikaisen
+ * /config.json-tiedoston (API-osoite), jotta sama build toimii ympäristöittäin.
  *
  * WAF-lippu (wafEnabled): MVP:ssä ei omaa domainia → CloudFrontin
  * oletusdomain eikä WAF:ia (~5 €/kk). Kun domain tulee, WAF + Route 53
  * kytketään myöhemmässä vaiheessa.
- *
- * Varsinainen React-build deployataan BucketDeploymentilla Vaiheessa 4,
- * kun apps/web on toteutettu.
  */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import * as cdk from 'aws-cdk-lib';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
@@ -22,24 +23,17 @@ import { Construct } from 'constructs';
 import type { AppContext } from './config';
 import { resourceName } from './config';
 
-const PLACEHOLDER_HTML = `<!DOCTYPE html>
-<html lang="fi">
-<head><meta charset="UTF-8"><title>Tampere360</title>
-<style>body{font-family:sans-serif;margin:40px;text-align:center;background:#111;color:#eee}
-h1{color:#4af}footer{margin-top:40px;font-size:0.8em;color:#666}</style>
-</head>
-<body><h1>Tampere360</h1>
-<p>Tilannekuva tulossa pian.</p>
-<p>Vaihe 4 toteuttaa React-sovelluksen.</p>
-<footer>Tampere360 &copy; 2026</footer>
-</body></html>`;
+/** Polku apps/web:n Vite-buildiin (repo-juuresta). */
+const WEB_DIST = path.join(__dirname, '..', '..', 'apps', 'web', 'dist');
 
 export interface FrontendStackProps extends cdk.StackProps {
   appContext: AppContext;
+  /** API:n juuri (ApiStackin HttpApiUrl) — kirjoitetaan /config.json-tiedostoon. */
+  apiUrl: string;
 }
 
 export class FrontendStack extends cdk.Stack {
-  /** Web-bucket (myöhemmin BucketDeployment apps/web:stä). */
+  /** Web-bucket. */
   public readonly webBucket: s3.Bucket;
   /** CloudFront-jakelu. */
   public readonly distribution: cloudfront.Distribution;
@@ -47,7 +41,7 @@ export class FrontendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: FrontendStackProps) {
     super(scope, id, props);
 
-    const { appContext } = props;
+    const { appContext, apiUrl } = props;
 
     if (appContext.wafEnabled) {
       throw new Error(
@@ -55,6 +49,19 @@ export class FrontendStack extends cdk.Stack {
           'myöhemmässä vaiheessa (ks. .clinerules/implementation_plan.md §14).',
       );
     }
+
+    if (!fs.existsSync(path.join(WEB_DIST, 'index.html'))) {
+      throw new Error(
+        `Frontend-buildiä ei löytynyt: ${WEB_DIST}\n` +
+          'Aja ensin: npm run build:web (tai npm run build repo-juuresta).',
+      );
+    }
+
+    // Huom: apiUrl on CDK-token synteesivaiheessa, joten sitä EI saa ajaa
+    // new URL():in läpi. HttpApi.apiEndpoint on muotoa
+    // https://<id>.execute-api.<region>.amazonaws.com — ilman polkua ja
+    // ilman loppukauttaviivaa, joten se kelpaa sellaisenaan CSP:n originiksi.
+    const apiOrigin = apiUrl;
 
     this.webBucket = new s3.Bucket(this, 'WebBucket', {
       bucketName: resourceName(appContext.envName, 'web').concat(
@@ -84,9 +91,21 @@ export class FrontendStack extends cdk.Stack {
         },
         xssProtection: { protection: true, modeBlock: true, override: true },
         contentSecurityPolicy: {
-          // MapLibre/OSM-tiilet ja oma API sallitaan (§11, §14).
-          contentSecurityPolicy:
-            "default-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org https://tiles.openfreemap.org; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://*.amazonaws.com; worker-src 'self' blob:;",
+          // MapLibre + OSM-rasteritiilet + oma API sallitaan (§11, §14).
+          // MapLibre luo Web Workerin blob-URL:sta → worker-src/child-src blob:.
+          contentSecurityPolicy: [
+            "default-src 'self'",
+            "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://tiles.openfreemap.org",
+            "style-src 'self' 'unsafe-inline'",
+            "script-src 'self'",
+            `connect-src 'self' ${apiOrigin} https://*.amazonaws.com`,
+            "worker-src 'self' blob:",
+            "child-src 'self' blob:",
+            "font-src 'self' data:",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "frame-ancestors 'none'",
+          ].join('; '),
           override: true,
         },
       },
@@ -101,6 +120,16 @@ export class FrontendStack extends cdk.Stack {
         responseHeadersPolicy: securityHeaders,
       },
       defaultRootObject: 'index.html',
+      // config.json ei saa jäädä CloudFrontin välimuistiin (API-osoite voi
+      // vaihtua deployn yhteydessä).
+      additionalBehaviors: {
+        'config.json': {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(this.webBucket),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          responseHeadersPolicy: securityHeaders,
+        },
+      },
       // SPA-reititys: 403/404 -> index.html (React Router).
       errorResponses: [
         { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html' },
@@ -111,17 +140,24 @@ export class FrontendStack extends cdk.Stack {
       // CloudFrontin hallinnassa.
     });
 
-    // Paikkamerkkisivu kunnes apps/web on toteutettu Vaiheessa 4.
-    new s3deploy.BucketDeployment(this, 'PlaceholderDeployment', {
-      sources: [s3deploy.Source.data('index.html', PLACEHOLDER_HTML)],
+    // Vite-buildi + ajonaikainen konfiguraatio (API-osoite).
+    new s3deploy.BucketDeployment(this, 'WebDeployment', {
+      sources: [
+        s3deploy.Source.asset(WEB_DIST),
+        s3deploy.Source.data('config.json', `${JSON.stringify({ apiBaseUrl: apiUrl }, null, 2)}\n`),
+      ],
       destinationBucket: this.webBucket,
       distribution: this.distribution,
       distributionPaths: ['/*'],
+      prune: true,
     });
 
     new cdk.CfnOutput(this, 'WebBucketName', { value: this.webBucket.bucketName });
     new cdk.CfnOutput(this, 'DistributionDomainName', {
       value: this.distribution.distributionDomainName,
+    });
+    new cdk.CfnOutput(this, 'FrontendUrl', {
+      value: `https://${this.distribution.distributionDomainName}`,
     });
   }
 }

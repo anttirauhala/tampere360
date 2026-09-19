@@ -6,7 +6,12 @@
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { createLogger } from '@tampere360/observability';
 import { sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
-import type { IngestMessage, Tampere360Event } from '@tampere360/event-contracts';
+import type {
+  GeoJsonGeometry,
+  IngestMessage,
+  LocationMethod,
+  Tampere360Event,
+} from '@tampere360/event-contracts';
 import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
 
 const logger = createLogger({ service: 'normalize', environment: process.env['ENVIRONMENT'] ?? 'dev' });
@@ -31,6 +36,55 @@ function areaCodesFor(municipality: string | null | undefined): string[] {
   return ['PIRKANMAA'];
 }
 
+/** Sallitut GeoJSON-geometriatyypit (ks. GeoJsonGeometry). */
+const GEOMETRY_TYPES = ['Point', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon'];
+
+/** Kerää kaikki [lon, lat]-parit mistä tahansa GeoJSON-koordinaattirakenteesta. */
+function collectPositions(input: unknown, out: [number, number][] = []): [number, number][] {
+  if (!Array.isArray(input)) return out;
+  const [first, second] = input as unknown[];
+  if (typeof first === 'number' && typeof second === 'number') {
+    out.push([first, second]);
+    return out;
+  }
+  for (const item of input) collectPositions(item, out);
+  return out;
+}
+
+/**
+ * Poimii lähteen oman GeoJSON-geometrian ja laskee sitä vastaavan sijainnin.
+ *
+ * Digitraffic antaa osalle ilmoituksista Point- ja osalle LineString-geometrian
+ * (tiejakso). Viivalle ja alueelle käytetään pisteiden keskipistettä — se on
+ * lähdeaineiston keskikohta, ei tekstistä geokoodattu arvio (§5).
+ */
+function sourceGeometry(raw: Record<string, unknown> | undefined): {
+  geometry: GeoJsonGeometry | null;
+  latitude: number | null;
+  longitude: number | null;
+} {
+  const geom = raw?.['geometry'] as { type?: unknown; coordinates?: unknown } | undefined;
+  const type = typeof geom?.type === 'string' ? geom.type : null;
+  if (!type || !GEOMETRY_TYPES.includes(type) || !Array.isArray(geom?.coordinates)) {
+    return { geometry: null, latitude: null, longitude: null };
+  }
+  const positions = collectPositions(geom.coordinates);
+  if (positions.length === 0) return { geometry: null, latitude: null, longitude: null };
+
+  let sumLon = 0;
+  let sumLat = 0;
+  for (const p of positions) {
+    sumLon += p[0];
+    sumLat += p[1];
+  }
+  const round = (n: number) => Number(n.toFixed(6));
+  return {
+    geometry: { type, coordinates: geom.coordinates } as unknown as GeoJsonGeometry,
+    latitude: round(sumLat / positions.length),
+    longitude: round(sumLon / positions.length),
+  };
+}
+
 function mapRawToFields(source: string, raw: Record<string, unknown> | undefined) {
   if (source === 'FMI_CAP') {
     const s = String(raw?.severity ?? '').toLowerCase();
@@ -43,6 +97,8 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       areaCodes: ['PIRKANMAA'] as string[],
       validity: { startsAt: raw?.onset ? String(raw.onset) : null, endsAt: raw?.expires ? String(raw.expires) : null },
       location: null,
+      // CAP antaa alueen (PIRKANMAA), ei pistekoordinaattia.
+      locationMethod: 'SOURCE_AREA' as const,
     };
   }
   if (source === 'TAMPERE_TRAFFIC') {
@@ -61,6 +117,14 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
     const municipality = (primary?.municipality as string | undefined) ?? (secondary?.municipality as string | undefined) ?? null;
     const td = ann.timeAndDuration as Record<string, unknown> | undefined;
 
+    // Digitraffic v2 on GeoJSON: geometria on feature-tasolla (Point tai
+    // LineString). Lähdekoordinaatti → SOURCE_COORDINATE; ilman geometriaa
+    // jäädään alueeseen → SOURCE_AREA (§5).
+    const geomSource = (raw?.['geometry'] ? raw : props) as Record<string, unknown>;
+    const { geometry: point, latitude, longitude } = sourceGeometry(geomSource);
+    const locationMethod: LocationMethod =
+      latitude !== null ? 'SOURCE_COORDINATE' : 'SOURCE_AREA';
+
     // Vakavuus: suljettu tie / kiertotie / onnettomuus → MAJOR, muuten MINOR
     const featureNames = Array.isArray(ann.features)
       ? (ann.features as Record<string, unknown>[]).map((f) => String(f.name ?? '')).join(' ')
@@ -72,9 +136,16 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       type, category: 'TRAFFIC' as const, severity,
       title: { fi: title },
       description: ann.comment ? { fi: String(ann.comment) } : undefined,
-      attribution: { name: 'Fintraffic / Digitraffic', required: true, url: 'https://www.digitraffic.fi' },
+      attribution: {
+        // Ilmoituksen lähettäjä (esim. Tampereen kaupunki) on ensisijainen
+        // attribuution lähde; Digitraffic on jakelukanava.
+        name: ann.sender ? String(ann.sender) : 'Fintraffic / Digitraffic',
+        required: true,
+        url: 'https://www.digitraffic.fi',
+      },
       areaCodes: areaCodesFor(municipality),
-      location: { municipality, latitude: null, longitude: null },
+      location: { municipality, latitude, longitude, geometry: point },
+      locationMethod,
       validity: {
         startsAt: td?.startTime ? String(td.startTime) : null,
         endsAt: td?.endTime ? String(td.endTime) : null,
@@ -82,7 +153,6 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
     };
   }
   if (source === 'VISIT_TAMPERE') {
-    const loc = raw?.location as Record<string, unknown> | undefined;
     return {
       type: 'PUBLIC_EVENT' as const, category: 'EVENT' as const, severity: 'INFO',
       title: { fi: String(raw?.name ?? 'Tapahtuma') },
@@ -90,6 +160,7 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       attribution: { name: 'Visit Tampere', required: true },
       areaCodes: ['TAMPERE'],
       location: { municipality: 'Tampere', latitude: null, longitude: null },
+      locationMethod: 'SOURCE_AREA' as const,
       validity: { startsAt: raw?.startDate ? String(raw.startDate) : null, endsAt: raw?.endDate ? String(raw.endDate) : null },
     };
   }
@@ -103,6 +174,7 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       attribution: { name: 'Nysse', required: true },
       areaCodes: ['TAMPERE'] as string[],
       location: { municipality: 'Tampere', latitude: null, longitude: null },
+      locationMethod: 'SOURCE_AREA' as const,
       validity: { startsAt: raw?.effectiveStart ? String(raw.effectiveStart) : null, endsAt: raw?.effectiveEnd ? String(raw.effectiveEnd) : null },
     };
   }
@@ -118,6 +190,8 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       attribution: { name: 'Sisä-Suomen poliisilaitos', required: true, url: 'https://poliisi.fi' },
       areaCodes: ['TAMPERE'] as string[],
       location: { municipality: null, latitude: null, longitude: null },
+      // Poliisitiedotteessa ei ole koordinaattia — geokoodaus on myöhempi vaihe (§7).
+      locationMethod: 'SOURCE_AREA' as const,
       validity: null,
     };
   }
@@ -143,6 +217,7 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
         const now = new Date().toISOString();
         const eventId = ulid();
         const m = mapRawToFields(parsedEvent.source, raw);
+        const locationMethod = 'locationMethod' in m ? m.locationMethod : undefined;
         const normalized: Tampere360Event = {
           schemaVersion: '1.0', id: eventId,
           canonicalKey: `${parsedEvent.source}:${parsedEvent.sourceId}`,
@@ -156,11 +231,13 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
           location: {
             municipality: m.location?.municipality ?? null, district: null, address: null,
             latitude: m.location?.latitude ?? null, longitude: m.location?.longitude ?? null,
-            geometry: null, areaCodes: (m.areaCodes ?? []) as Tampere360Event['location']['areaCodes'],
+            geometry: m.location?.geometry ?? null,
+            areaCodes: (m.areaCodes ?? []) as Tampere360Event['location']['areaCodes'],
           },
           validity: { startsAt: m.validity?.startsAt ?? null, endsAt: m.validity?.endsAt ?? null },
           publishedAt: now, updatedAt: now, tags: [],
           attribution: m.attribution, contentHash,
+          ...(locationMethod ? { locationMethod } : {}),
         };
         await eventbridge.send(new PutEventsCommand({
           Entries: [{
@@ -170,7 +247,9 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
           }],
         }));
         logger.info('Normalisoitu', { source: parsedEvent.source, type: m.type });
-      } catch (e) { failIds.push(messageId); }
+      } catch {
+        failIds.push(messageId);
+      }
     }
   }
   return { batchItemFailures: [...new Set(failIds)].map((id) => ({ itemIdentifier: id })) };

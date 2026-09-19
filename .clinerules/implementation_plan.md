@@ -1,10 +1,13 @@
 # Tampere360 — Toteutussuunnitelma
 
 > Lähdeaineisto: `.clinerules/architecture.md` (773 riviä) + lähteiden validointi 6.9.2026
-> Tilanne: Vaihe 0 ✅, Vaihe 1 ✅ (CDK-infra, 8 stackia), Vaiheet 2–3 ✅
-> (FMI CAP, Digitraffic, poliisi-RSS ja Nysse Waltti toimivat päästä päähän;
-> tapahtumalähde disabloitu, API 404 — ks. §18). Deploy: `tampere360-dev-*`
-> eu-north-1. Seuraavaksi Vaihe 4 (React-käyttöliittymä).
+> Tilanne: Vaiheet 0–4 ✅ (CDK-infra 8 stackia; FMI CAP, Digitraffic,
+> poliisi-RSS ja Nysse Waltti toimivat päästä päähän; React-frontend
+> julkaistu CloudFrontiin; tapahtumalähde disabloitu, API 404 — ks. §18).
+> Deploy: `tampere360-dev-*` eu-north-1.
+> Frontend: https://d36ic5wsx4b9yl.cloudfront.net
+> API: https://vllod80b6i.execute-api.eu-north-1.amazonaws.com
+> Seuraavaksi Vaihe 5 (testit, valvonta, CI).
 
 ## 1. Yhteenveto
 
@@ -502,13 +505,29 @@ GitHub Actions -workflow lisätään kun repo on GitHubissa.
 - `apps/ingest-nysse` (GTFS-RT Alerts, 1 min)
 - `apps/ingest-rescue` (kokeellinen stub, disabled-oletus)
 
-### Vaihe 4 — Frontend
-- `apps/web`: Vite + React + TS
-- TanStack Query (30–60 s pollaus), React Router
-- MapLibre GL JS -kartta (OSM-tiilet, attribuutio), tilannemarkerit
-  kategorioittain, kategorianäkymät, Lähteiden tila
-- HTML-sanitisointi; attribution-näyttö lisenssien mukaan
-- `BucketDeployment` CDK:ssa
+### Vaihe 4 — Frontend ✅
+- `apps/web`: Vite + React 19 + TS, TanStack Query (30 s pollaus), React Router
+- MapLibre GL JS -kartta (OSM-rasteritiilet, attribuutio), tilannemarkerit
+  vakavuuden mukaan värjättynä, kategorianäkymät, Lähteiden tila
+- HTML-sanitisointi (`sanitizeText`), attribution-näyttö footerissa
+- `BucketDeployment` CDK:ssa: `apps/web/dist` + ajonaikainen `/config.json`
+  (API-osoite), `config.json`-behavior `CACHING_DISABLED`
+- CSP päivitetty: API-origin, OSM-tiilet, MapLibren blob-workerit
+- MapPage lazy-latauksella (MapLibre ~1,0 MB omaan chunkkiinsa)
+- Sivut: `/` (Nyt), `/kartta`, `/liikenne`, `/saa`, `/poliisi`,
+  `/joukkoliikenne`, `/lahteet`
+- Lisäksi korjattu lähdekoordinaattien käsittely normalisoijassa (§7):
+  Digitrafficin Point/LineString-geometria → `latitude`/`longitude` +
+  `location.geometry` + `locationMethod`. Kartalla 5/5 liikennettä.
+- Yksikkötestit `apps/web/src/lib/format.test.ts` (sanitointi, aikamuotoilu)
+
+Toteutuksen aikana havaitut ja korjatut asiat:
+- `maplibre-gl` v6:lla ei ole default-exportia → nimetty import
+- CDK-tokenia ei saa ajaa `new URL()`:in läpi → CSP:ssä käytetään
+  `httpApi.apiEndpoint`-arvoa sellaisenaan
+- Lint-virheet (9 kpl) siivottu: käyttämättömät importit ja tyhjät
+  catch-lohkot (`apps/ingest-fmi`, `apps/ingest-nysse`,
+  `apps/normalize`, `apps/situation-processor`)
 
 ### Vaihe 5 — Testit, valvonta, CI
 - Yksikkötestit fixture-pohjaisesti (test-fixtures-paketti)
@@ -516,6 +535,11 @@ GitHub Actions -workflow lisätään kun repo on GitHubissa.
 - CloudWatch-dashboard + hälytykset käyttöön
 - GitHub Actions -workflow (PR-tarkistukset + OIDC-deploy)
 - ADR-dokumentit keskeisistä päätöksistä
+- **Prettier-kertakorjaus**: `npm run format:check` ei ole koskaan ollut
+  vihreä — 35 tiedostoa (paketit ja apps) on kirjoitettu tiiviimmällä
+  tyylillä kuin Prettier tuottaa. Aja `npm run format` omassa commitissaan
+  ennen kuin format-tarkistus lisätään CI-putkeen. `apps/web` on jo
+  Prettier-muodossa.
 
 ### MVP:n ulkopuolelle (dokumentaation §16)
 OpenSearch, AI-luokittelu, WebSocketit, Fintraffic MQTT, liikennevalojen

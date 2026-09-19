@@ -1,7 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-import type {
-  EventCategory, EventType, Severity, SourceSystem
-} from '@tampere360/event-contracts';
+import type { Severity } from '@tampere360/event-contracts';
 
 /** Jäsennetty tieto yhdestä CAP-varoituksesta. */
 export interface ParsedCapAlert {

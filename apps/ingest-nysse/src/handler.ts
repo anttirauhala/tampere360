@@ -15,10 +15,6 @@ const s3 = new S3Client({}); const sqs = new SQSClient({}); const ssm = new SSMC
 // Tallennetaan SSM-parametriin joko base64-merkkijono tai raaka ClientID:Secret
 // ja Lambda laskee Base64 tarvittaessa.
 
-function decodeContentType(body: ArrayBuffer | Buffer): Buffer {
-  return Buffer.from(body as unknown as ArrayBuffer);
-}
-
 async function fetchWithAuth(url: string, authBase64: string): Promise<Buffer | null> {
   try {
     const res = await fetch(url, {
@@ -51,7 +47,9 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
   try {
     const r = await ssm.send(new GetParameterCommand({ Name: `/tampere360/${env}/sources/nysse/api-key`, WithDecryption: true }));
     apiKey = r.Parameter?.Value ?? '';
-  } catch {}
+  } catch {
+    // SSM-haku epäonnistui — käsitellään alla puuttuvana avaimena.
+  }
 
   if (!apiKey) {
     logger.warn('Nysse API-avain puuttuu SSM:sta');
@@ -101,7 +99,9 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
         });
       }
     }
-  } catch {}
+  } catch {
+    // Protobuf-jäsennys epäonnistui — käsitellään alla tyhjänä tuloksena.
+  }
 
   if (alerts.length === 0) {
     logger.info('Ei hairioita tai protobuf-tyhja');

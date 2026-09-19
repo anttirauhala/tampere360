@@ -13,8 +13,10 @@
     "infra"
   ],
   "scripts": {
-    "build": "npm run build -w @tampere360/event-contracts && npm run build -w @tampere360/source-adapter-sdk && npm run build -w @tampere360/observability && npm run build -w @tampere360/infra && npm run typecheck:apps",
+    "build": "npm run build -w @tampere360/event-contracts && npm run build -w @tampere360/source-adapter-sdk && npm run build -w @tampere360/observability && npm run build -w @tampere360/infra && npm run typecheck:apps && npm run build:web",
     "typecheck:apps": "for app in ingest-fmi ingest-tampere-traffic ingest-police ingest-events ingest-nysse ingest-rescue normalize situation-processor api; do echo \"--- $app\"; (cd apps/$app && tsc --noEmit) || exit 1; done",
+    "build:web": "npm run build -w @tampere360/web",
+    "dev:web": "npm run dev -w @tampere360/web",
     "pretest": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
