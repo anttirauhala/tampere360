@@ -627,8 +627,10 @@ merkkijonopohjainen GSI-lajittelu on oikea myös eri formaateilla
 - `GET /v1/situations` palauttaa `startsAt` (nullable), `publishedAt`,
   `firstSeenAt`. `startsAt` luetaan tapahtumasta (`event.validity.startsAt`),
   **ei** rivin lajitteluavaimesta.
-- UI (`describeSituationTime`): alkuaika tiedossa → `alkoi 20.9.2026 klo 08.53`,
-  muuten → `alkuaika ei tiedossa` + `julkaistu … · havaittu …`.
+- UI (`describeSituationTime`): alkuaika tiedossa → `alkoi 20.9.2026 klo 08.53`;
+  kun alkuaika ei ole tiedossa, alkuaikakohtaan **ei näytetä mitään** — vain
+  lisätieto `julkaistu … · havaittu …`. Selitystekstiä ("alkuaika ei tiedossa")
+  ei näytetä, koska oleellinen tieto on jo lisätietorivillä.
 
 ### Toteutuksen aikana korjatut viat (20.9.2026)
 

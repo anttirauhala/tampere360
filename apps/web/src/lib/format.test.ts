@@ -91,15 +91,16 @@ describe('describeSituationTime', () => {
     expect(result.detail).toMatch(/^(juuri nyt|.+ sitten)$/);
   });
 
-  it('ilmoittaa "alkuaika ei tiedossa" kun lähteellä ei ole alkuaikaa', () => {
+  it('ei näytä päätekstiä lainkaan, kun alkuaika ei ole tiedossa', () => {
     const result = describeSituationTime({ startsAt: null, publishedAt, firstSeenAt });
     expect(result.isStartKnown).toBe(false);
-    expect(result.primary).toBe('alkuaika ei tiedossa');
+    expect(result.primary).toBe('');
   });
 
   it('ei korvaa puuttuvaa alkuaikaa julkaisuajalla (regressiosuoja)', () => {
     // Julkaisuaika näytetään erikseen lisätietona, EI alkuaikana.
     const result = describeSituationTime({ startsAt: null, publishedAt, firstSeenAt });
+    expect(result.primary).toBe('');
     expect(result.primary).not.toContain('17.9.2026');
     expect(result.detail).toContain('julkaistu 17.9.2026 klo 07.56');
   });
@@ -117,7 +118,7 @@ describe('describeSituationTime', () => {
 
   it('kestää täysin puuttuvat ajat', () => {
     const result = describeSituationTime({});
-    expect(result.primary).toBe('alkuaika ei tiedossa');
+    expect(result.primary).toBe('');
     expect(result.detail).toBe('');
     expect(result.isStartKnown).toBe(false);
   });

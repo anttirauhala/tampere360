@@ -76,7 +76,11 @@ export interface SituationTimes {
 }
 
 export interface TimeDescription {
-  /** Pääteksti: "alkoi 20.9.2026 klo 08.53" tai "alkuaika ei tiedossa". */
+  /**
+   * Pääteksti, esim. "alkoi 20.9.2026 klo 08.53".
+   * **Tyhjä merkkijono, jos tapahtuman alkuaika ei ole tiedossa** — silloin
+   * alkuaikakohtaan ei näytetä mitään (ei arvausta eikä selitystekstiä).
+   */
   primary: string;
   /** Lisätieto: suhteellinen ikä ja/tai julkaisu-/havaintoaika. */
   detail: string;
@@ -87,9 +91,9 @@ export interface TimeDescription {
 /**
  * Kuvaa tilanteen ajankohdan käyttäjälle rehellisesti (§5).
  *
- * Jos lähde ei kerro tapahtuman alkuaikaa, sitä EI näytetä arvattuna:
- * päätekstinä on "alkuaika ei tiedossa" ja lisätietona lähteen julkaisuaika
- * ja/tai tekninen havaintoaika.
+ * Jos lähde ei kerro tapahtuman alkuaikaa, sitä EI näytetä arvattuna eikä
+ * korvata selitystekstillä: `primary` on tällöin tyhjä ja `detail` kertoo
+ * lähteen julkaisuajan ja/tai teknisen havaintoajan.
  */
 export function describeSituationTime(times: SituationTimes): TimeDescription {
   const startsAt = times.startsAt ?? null;
@@ -109,5 +113,5 @@ export function describeSituationTime(times: SituationTimes): TimeDescription {
     ? [`julkaistu ${formatTime(publishedAt)}`, seenPart].filter(Boolean).join(' · ')
     : seenPart;
 
-  return { primary: 'alkuaika ei tiedossa', detail, isStartKnown: false };
+  return { primary: '', detail, isStartKnown: false };
 }

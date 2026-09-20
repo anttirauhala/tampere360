@@ -22,12 +22,12 @@ export function SituationCard({ item }: Props) {
 
       <div className="card__meta">
         {item.municipality && <span>{item.municipality}</span>}
-        <span
-          className={time.isStartKnown ? 'card__time' : 'card__time card__time--unknown'}
-          title={time.isStartKnown ? 'Tapahtuman alkuaika lähteen mukaan' : undefined}
-        >
-          {time.primary}
-        </span>
+        {/* Alkuaika näytetään vain jos lähde kertoi sen — muuten ei mitään. */}
+        {time.primary && (
+          <span className="card__time" title="Tapahtuman alkuaika lähteen mukaan">
+            {time.primary}
+          </span>
+        )}
         {time.detail && <span className="card__time-detail">{time.detail}</span>}
       </div>
     </article>
