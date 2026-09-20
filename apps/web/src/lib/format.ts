@@ -38,7 +38,10 @@ export function sanitizeText(input: string | undefined | null): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/** Muotoilee ISO-aikaleiman suomenkieliseksi lyhyeksi ajaksi. */
+/**
+ * Muotoilee ISO-aikaleiman suomenkieliseksi ajankohdaksi.
+ * Mukana päivä, kuukausi JA vuosi (esim. "6.9.2026 klo 7.32").
+ */
 export function formatTime(iso: string | undefined | null): string {
   if (!iso) return '';
   const date = new Date(iso);
@@ -46,6 +49,7 @@ export function formatTime(iso: string | undefined | null): string {
   return date.toLocaleString('fi-FI', {
     day: 'numeric',
     month: 'numeric',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });

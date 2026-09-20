@@ -37,11 +37,25 @@ describe('sanitizeText', () => {
 describe('formatTime', () => {
   it('palauttaa tyhjän virheelliselle aikaleimalle', () => {
     expect(formatTime(undefined)).toBe('');
+    expect(formatTime(null)).toBe('');
     expect(formatTime('ei-aikaleima')).toBe('');
   });
 
-  it('muotoilee kelvollisen ISO-aikaleiman', () => {
-    expect(formatTime('2026-09-06T07:32:00Z')).not.toBe('');
+  it('näyttää päivän, kuukauden ja vuoden', () => {
+    // Paikallinen aika 6.9.2026 klo 7.32 → "6.9.2026 klo 7.32"
+    const local = new Date(2026, 8, 6, 7, 32).toISOString();
+    expect(formatTime(local)).toContain('6.9.2026');
+  });
+
+  it('näyttää vuoden myös muilla vuosikymmenillä', () => {
+    expect(formatTime(new Date(2019, 5, 15, 12, 0).toISOString())).toContain('2019');
+    expect(formatTime(new Date(2031, 0, 2, 12, 0).toISOString())).toContain('2031');
+  });
+
+  it('ei jätä vuotta pois (regressiosuoja)', () => {
+    const formatted = formatTime(new Date(2026, 8, 6, 7, 32).toISOString());
+    expect(formatted).toMatch(/\d\.\d\.\d{4}\b/);
+    expect(formatted).toContain('klo');
   });
 });
 
