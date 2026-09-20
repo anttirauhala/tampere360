@@ -258,9 +258,11 @@ a {
   color: var(--text-muted);
 }
 
-/* Alkuaika ei tiedossa — ei esitetä arvattuna aikana (§5). */
+/* Alkuaika ei tiedossa — ei esitetä arvattuna aikana (§5).
+   Sama hillitty harmaa kuin lisätietorivillä; ei korostusväriä, koska
+   puuttuva tieto ei ole hälytys. */
 .card__time--unknown {
-  color: var(--minor);
+  color: var(--text-muted);
   font-style: italic;
 }
 
