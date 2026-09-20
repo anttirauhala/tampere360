@@ -17,6 +17,9 @@ export function NowPage() {
 
   return (
     <section className="page">
+      {/* Himmennetty taustakuva koko näkymän taakse (piilotetaan kapeilla näytöillä). */}
+      <div className="now-backdrop" aria-hidden="true" />
+
       <h1 className="page__title">Nyt</h1>
       <p className="page__lead">
         Aktiiviset häiriöt ja varoitukset Tampereen seudulla tyypeittäin. Tiedot päivittyvät
