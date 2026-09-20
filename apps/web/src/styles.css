@@ -441,12 +441,17 @@ a {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  color: var(--text-muted);
+  color: var(--accent);
 }
 
+/* Määrä korostusvärillä; hillitty taustasävy erottaa sen otsikosta. */
 .summary-card__count {
-  font-size: 12px;
-  color: var(--text-muted);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(77, 163, 255, 0.15);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .summary-card__list {
