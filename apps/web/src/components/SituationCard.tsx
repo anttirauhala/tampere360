@@ -5,6 +5,22 @@ interface Props {
   item: SituationSummary;
 }
 
+/**
+ * Näytetäänkö paikkakunta kortissa?
+ *
+ * Joukkoliikenteen (Nysse) häiriötiedotteet koskevat koko seudun liikennettä,
+ * eikä lähde kerro niille kuntaa — normalisoija asettaa kaikille 'Tampere'.
+ * Seurakseen paikkakunta olisi kortissa turhaa toistoa, joten sitä ei näytetä
+ * joukkoliikenteen korteilla. Muilla kategorioilla paikkakunta tulee lähteestä
+ * ja tuo lisätietoa (esim. liikennetiedotteen kunta).
+ */
+export function shouldShowMunicipality(
+  item: Pick<SituationSummary, 'category' | 'municipality'>,
+): boolean {
+  if (!item.municipality) return false;
+  return item.category !== 'PUBLIC_TRANSPORT';
+}
+
 /** Yhden tilanteen kortti listanäkymässä. */
 export function SituationCard({ item }: Props) {
   const title = sanitizeText(item.title);
@@ -21,7 +37,7 @@ export function SituationCard({ item }: Props) {
       <h3 className="card__title">{title || 'Tuntematon tapahtuma'}</h3>
 
       <div className="card__meta">
-        {item.municipality && <span>{item.municipality}</span>}
+        {shouldShowMunicipality(item) && <span>{item.municipality}</span>}
         {/* Alkuaika näytetään vain jos lähde kertoi sen — muuten ei mitään. */}
         {time.primary && (
           <span className="card__time" title="Tapahtuman alkuaika lähteen mukaan">
