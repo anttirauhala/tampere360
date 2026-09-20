@@ -222,7 +222,8 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
   if (source === 'POLICE_RSS') {
     const title = String(raw?.title ?? '');
     // Yksinkertainen päättely: onko otsikossa vakava = MAJOR, muuten INFO
-    const isMajor = /vakava|kuoli|kadonnut|etsitään|puukko|ase/i.test(title);
+const isMajor =
+  /vakava|kuoli|kuollut|kuolema|kadonnut|kadonnut henkilö|etsitään|puukko|puukotus|puukotettu|ase|ampuminen|ammuttu|uhka|uhkaus|väkivalta|ryöstö|sieppaus|kaappaus|onnettomuus|räjähdys|tulipalo|hätä|havaintoja|etsii|pyytää havaintoja/i.test(title);
     return {
       type: 'POLICE_ANNOUNCEMENT' as const, category: 'POLICE' as const,
       severity: isMajor ? 'MAJOR' : 'INFO',
