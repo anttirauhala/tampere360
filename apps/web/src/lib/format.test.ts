@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  describeSituationTime,
-  formatAge,
-  formatTime,
-  sanitizeText,
-} from './format';
+import { describeSituationTime, formatAge, formatTime, sanitizeText } from './format';
 
 describe('sanitizeText', () => {
   it('palauttaa tyhjän merkkijonolle, jonka arvo puuttuu', () => {
