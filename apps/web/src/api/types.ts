@@ -130,7 +130,7 @@ export interface CategoriesResponse {
 /** Kategorioiden suomenkieliset nimet ja värit. */
 export const CATEGORY_LABELS: Record<Category, string> = {
   TRAFFIC: 'Liikenne',
-  PUBLIC_TRANSPORT: 'Joukkoliikenne',
+  PUBLIC_TRANSPORT: 'Joukkoliikenne poikkeustilanteet',
   POLICE: 'Poliisi',
   RESCUE: 'Pelastustoimi',
   WEATHER: 'Säävaroitukset',

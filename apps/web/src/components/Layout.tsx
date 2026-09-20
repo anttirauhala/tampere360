@@ -6,7 +6,7 @@ const NAV = [
   { to: '/liikenne', label: 'Liikenne', end: false },
   { to: '/saa', label: 'Säävaroitukset', end: false },
   { to: '/poliisi', label: 'Poliisi', end: false },
-  { to: '/joukkoliikenne', label: 'Joukkoliikenne', end: false },
+  { to: '/joukkoliikenne', label: 'Joukkoliikenne poikkeustilanteet', end: false },
   { to: '/lahteet', label: 'Lähteiden tila', end: false },
 ];
 

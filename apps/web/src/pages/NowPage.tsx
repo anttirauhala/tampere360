@@ -21,9 +21,7 @@ export function NowPage() {
       <div className="now-backdrop" aria-hidden="true" />
 
       <h1 className="page__title">Nyt</h1>
-      <p className="page__lead">
-        Tiedot päivittyvät automaattisesti 30 sekunnin välein.
-      </p>
+      <p className="page__lead">Tiedot päivittyvät automaattisesti 30 sekunnin välein.</p>
 
       {isLoading && <p className="state state--loading">Ladataan tilannetietoja…</p>}
 
