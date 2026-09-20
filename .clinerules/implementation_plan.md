@@ -756,6 +756,10 @@ WAF otetaan haluttaessa käyttöön erikseen (`-c wafEnabled=true` +
 `cdk bootstrap aws://<tili>/us-east-1`) — silloin syntyy yhdeksäs stack
 `tampere360-prod-waf` us-east-1:een.
 
+> **Hätätilanne (kustannuspiikki):** ks.
+> [`docs/emergency.md`](../docs/emergency.md) — API:n tiukka rajoittaminen
+> (1 req/s, Lambda kiinni), keräysputken ja frontendin pysäytys sekä palautus.
+
 ### Vahvistettu 20.9.2026
 
 - `npx cdk synth -c env=prod -c wafEnabled=true` → 9 stackia, WAF mukana
