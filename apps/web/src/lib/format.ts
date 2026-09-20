@@ -115,3 +115,20 @@ export function describeSituationTime(times: SituationTimes): TimeDescription {
 
   return { primary: '', detail, isStartKnown: false };
 }
+
+/**
+ * Lyhyt aikateksti koostekortille.
+ *
+ * Palauttaa "alkoi 20.9.2026 klo 08.53", jos lähteen oma alkuaika on tiedossa,
+ * muuten "julkaistu 17.9.2026 klo 10.56". Sana kertoo aina, kumpi aika on
+ * kyseessä, jotta julkaisuaika ei näytä tapahtuman alkuajalta (§5).
+ */
+export function formatCompactTime(times: SituationTimes): string {
+  const startsAt = times.startsAt ?? null;
+  if (startsAt) return `alkoi ${formatTime(startsAt)}`;
+
+  const publishedAt = times.publishedAt ?? null;
+  if (publishedAt) return `julkaistu ${formatTime(publishedAt)}`;
+
+  return '';
+}

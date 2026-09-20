@@ -516,6 +516,11 @@ GitHub Actions -workflow lisätään kun repo on GitHubissa.
 - MapPage lazy-latauksella (MapLibre ~1,0 MB omaan chunkkiinsa)
 - Sivut: `/` (Nyt), `/kartta`, `/liikenne`, `/saa`, `/poliisi`,
   `/joukkoliikenne`, `/lahteet`
+- Nyt-sivu esittää aktiiviset tilanteet **tapahtumatyypeittäin koostekortteina**,
+  ei sekoitettuna listana: jokaisella tyypillä oma kortti (otsikko = tyyppi,
+  määrä, 5 viimeisintä otsikko + alku-/julkaisuaika, "Näytä lisää…" -linkki
+  tyyppikohtaiseen välilehteen). Kortit samassa dynaamisessa ruudukossa
+  kuin yksittäiset tilannekortit.
 - Lisäksi korjattu lähdekoordinaattien käsittely normalisoijassa (§7):
   Digitrafficin Point/LineString-geometria → `latitude`/`longitude` +
   `location.geometry` + `locationMethod`. Kartalla 5/5 liikennettä.

@@ -1,62 +1,54 @@
-import { Link } from 'react-router-dom';
-
 import { useSituations } from '../api/queries';
-import { CATEGORY_LABELS, type Category } from '../api/types';
-import { SituationList } from '../components/SituationList';
+import { SummaryCard } from '../components/SummaryCard';
+import { CATEGORY_ROUTES, groupByCategory } from '../lib/situations';
 
-const ORDER: Category[] = ['TRAFFIC', 'WEATHER', 'POLICE', 'PUBLIC_TRANSPORT', 'EVENT', 'RAIL'];
+/** Kuinka monta tapahtumaa koostekortilla näytetään. */
+const PREVIEW_COUNT = 5;
 
-const ROUTES: Partial<Record<Category, string>> = {
-  TRAFFIC: '/liikenne',
-  WEATHER: '/saa',
-  POLICE: '/poliisi',
-  PUBLIC_TRANSPORT: '/joukkoliikenne',
-};
-
-/** "Nyt"-näkymä: aktiiviset tilanteet kategorioittain (§11). */
+/**
+ * "Nyt"-näkymä: aktiiviset tilanteet tapahtumatyypeittäin koostekortteina.
+ *
+ * Kaikkia tapahtumia ei listata sekaisin — jokainen tyyppi saa oman korttinsa,
+ * jossa on viisi viimeisintä tapahtumaa ja linkki tyyppikohtaiselle sivulle.
+ */
 export function NowPage() {
   const { data, isLoading, error } = useSituations({ limit: 200 });
-  const items = data?.items ?? [];
-
-  const counts = new Map<Category, number>();
-  for (const item of items) {
-    counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
-  }
+  const grouped = groupByCategory(data?.items ?? []);
 
   return (
     <section className="page">
       <h1 className="page__title">Nyt</h1>
       <p className="page__lead">
-        Aktiiviset häiriöt ja varoitukset Tampereen seudulla. Tiedot päivittyvät automaattisesti 30
-        sekunnin välein.
+        Aktiiviset häiriöt ja varoitukset Tampereen seudulla tyypeittäin. Tiedot päivittyvät
+        automaattisesti 30 sekunnin välein.
       </p>
 
-      <div className="tiles">
-        <div className="tile tile--total">
-          <span className="tile__value">{isLoading ? '–' : items.length}</span>
-          <span className="tile__label">aktiivista tilannetta</span>
-        </div>
-        {ORDER.filter((category) => counts.has(category)).map((category) => {
-          const route = ROUTES[category];
-          const content = (
-            <>
-              <span className="tile__value">{counts.get(category)}</span>
-              <span className="tile__label">{CATEGORY_LABELS[category]}</span>
-            </>
-          );
-          return route ? (
-            <Link key={category} to={route} className="tile">
-              {content}
-            </Link>
-          ) : (
-            <div key={category} className="tile">
-              {content}
-            </div>
-          );
-        })}
-      </div>
+      {isLoading && <p className="state state--loading">Ladataan tilannetietoja…</p>}
 
-      <SituationList items={items} isLoading={isLoading} error={error} />
+      {error && (
+        <div className="state state--error">
+          <p>Tilannetietojen haku epäonnistui.</p>
+          <p className="state__detail">{error.message}</p>
+        </div>
+      )}
+
+      {!isLoading && !error && grouped.size === 0 && (
+        <p className="state">Ei aktiivisia tilanteita juuri nyt.</p>
+      )}
+
+      {grouped.size > 0 && (
+        <div className="cards">
+          {[...grouped].map(([category, items]) => (
+            <SummaryCard
+              key={category}
+              category={category}
+              items={items.slice(0, PREVIEW_COUNT)}
+              total={items.length}
+              to={CATEGORY_ROUTES[category]}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
