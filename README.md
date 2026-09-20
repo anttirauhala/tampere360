@@ -133,6 +133,12 @@ WAF on valmiina mutta **ei käytössä oletuksena** (opt-in
 Domain-, sertifikaatti- ja hosted zone -tiedot ovat versioituna
 `infra/lib/config.ts`-tiedostossa (`ENVIRONMENT_DOMAINS.prod`).
 
+API:n kustannussuojat: throttlaus **10 req/s** (purske 20), query-Lambdan
+varattu concurrency **5**, `limit`-oletus **20** ja hälytykset
+pyyntöpiikistä/429:stä/Lambda-throttlauksista — ks.
+[`docs/architecture/prod-deploy.md` §8](./docs/architecture/prod-deploy.md).
+Muista tilata hälytys-sähköposti SNS-topiciin `tampere360-prod-alarms`.
+
 ```bash
 curl https://tampere247.online/config.json
 curl "https://api.tampere247.online/v1/situations?limit=5"

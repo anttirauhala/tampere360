@@ -151,3 +151,34 @@ export const SOURCE_DEFINITIONS: SourceDefinition[] = [
 export function resourceName(envName: EnvName, suffix: string): string {
   return `tampere360-${envName}-${suffix}`;
 }
+
+/**
+ * API-kustannussuojat (arkkitehtuuri §14: API Gateway throttling).
+ *
+ * Palvelu on **julkinen GET-rajapinta ilman API-avainta**, joten stage-tason
+ * throttlaus ja varattu concurrency ovat ainoat aidat suojat väärinkäyttöä
+ * vastaan (CORS rajaa vain selaimia):
+ *
+ *  - `rateLimit 10 req/s` + `burstLimit 20` riittää ~75 samanaikaiselle
+ *    selaimelle (frontend pollaa 30 s välein) ja rajaa pahimman
+ *    kustannusskenaarion ~15–25 $/vrk. Ilman rajaa DynamoDB-lukemat
+ *    (`/v1/situations?limit=100` ≈ 50 RRU/pyyntö) voisivat maksaa
+ *    satoja euroja vuorokaudessa.
+ *  - Ylimenevä liikenne saa HTTP 429, eikä Lambda- tai DynamoDB-kutsuja synny.
+ */
+export const API_THROTTLE = { rateLimit: 10, burstLimit: 20 } as const;
+
+/**
+ * Query-Lambdan varattu concurrency: kova katto sekä Lambda-ajalle että
+ * DynamoDB:n polttonopeudelle. 10 req/s × ~100 ms = ~1 concurrency, joten 5
+ * on reilusti yli normaalin tarpeen.
+ */
+export const QUERY_RESERVED_CONCURRENCY = 5;
+
+/**
+ * Kustannusvalvonnan hälytysrajat (MonitoringStack).
+ * Normaali liikenne on murto-osa näistä — hälytys tarkoittaa väärinkäyttöä,
+ * ei ruuhkaa.
+ */
+export const API_REQUEST_SPIKE_PER_5MIN = 1000; // ≈3,3 req/s jatkuvaa
+export const API_CLIENT_ERRORS_PER_5MIN = 100; // 429-throttlaukset + virhepyynnöt

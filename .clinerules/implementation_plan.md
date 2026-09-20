@@ -711,6 +711,17 @@ Konfiguraatio on versioitu koodiin: `infra/lib/config.ts`
 - **Prod-kovennukset**: KMS-avain, S3-raw ja S3-web sekä kaikki DynamoDB-taulut
   `RETAIN` prodissa (dev:ssä edelleen `DESTROY` + auto-delete);
   DynamoDB PITR ja `deletionProtection` päällä vain prodissa.
+- **Kustannussuojat (20.9.2026)**: API on julkinen ilman avainta, joten
+  stage-throttlaus kiristettiin **10 req/s / purske 20** (`API_THROTTLE`) ja
+  query-Lambdalle asetettiin **varattu concurrency 5**
+  (`QUERY_RESERVED_CONCURRENCY`) — yhdessä nämä rajaavat pahimman
+  väärinkäyttöskenaarion ~20–30 $/vrk (ilman rajoja DynamoDB-lukemat yksin
+  voisivat maksaa satoja euroja vuorokaudessa). Lisäksi `apps/api/src/params.ts`:
+  `limit`-oletus 20, yläraja 200. MonitoringStackiin uudet hälytykset
+  `api-request-spike` (≥1000 / 5 min), `api-client-errors` (4xx/429 ≥100 /
+  5 min) ja `api-throttles` (Lambda ≥1) sekä SNS-topic policy, joka sallii
+  AWS Budgets -ilmoitukset samaan topiciin. Regressiosuoja:
+  `infra/test/config.test.ts` + `apps/api/src/params.test.ts`.
 
 ### Bugikorjaus: hiljainen `wafEnabled`-lippu
 
@@ -744,8 +755,11 @@ WAF otetaan haluttaessa käyttöön erikseen (`-c wafEnabled=true` +
   A/AAAA-tietueet.
 - Dev-synth ennallaan: ei Aliase, ei API-domainia, ei WAF:ia, CORS `*` →
   dev-ympäristöön ei kohdistu muutoksia.
-- Testit: `infra/test/config.test.ts` (6 testiä) valvoo domain-konfiguraation
+- Testit: `infra/test/config.test.ts` (9 testiä) valvoo domain-konfiguraation
   johdonmukaisuutta (domainit hosted zonen sisällä, sertifikaatti us-east-1,
-  API aliverkkotunnus, `frontendOrigins`). Koko sarja 69 testiä ✅, ESLint ✅.
+  API aliverkkotunnus, `frontendOrigins`) **sekä kustannussuojien rajoja**
+  (throttlaus ≤ 20 req/s, concurrency ≤ 10, hälytysrajat alle throttlen
+  maksimin). `apps/api/src/params.test.ts` (6 testiä) valvoo `limit`-parametria.
+  Koko sarja 78 testiä ✅, ESLint ✅.
 
   indeksi per deploy) tai luomalla taulu uudelleen.

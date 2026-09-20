@@ -19,6 +19,8 @@ import {
 import { createLogger } from '@tampere360/observability';
 import type { APIGatewayProxyResultV2, APIGatewayProxyEventV2 } from 'aws-lambda';
 
+import { parseLimit } from './params';
+
 const logger = createLogger({ service: 'api', environment: process.env['ENVIRONMENT'] ?? 'dev' });
 const client = new DynamoDBClient({});
 const doc = DynamoDBDocumentClient.from(client);
@@ -39,7 +41,8 @@ async function hSituations(path: string, event: APIGatewayProxyEventV2): Promise
       (entry): entry is [string, string] => typeof entry[1] === 'string',
     ),
   );
-  const limit = Math.min(Number(qs.get('limit')) || 50, 200);
+  // Kustannussuoja: oletus 20 ja yläraja 200 (ks. params.ts).
+  const limit = parseLimit(qs.get('limit'));
   const cursor = qs.get('cursor');
   const category = qs.get('category');
   const status = qs.get('status') || 'ACTIVE';

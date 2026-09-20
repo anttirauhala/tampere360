@@ -27,7 +27,7 @@ import * as route53targets from 'aws-cdk-lib/aws-route53-targets';
 import { Construct } from 'constructs';
 
 import type { AppContext, DomainConfig } from './config';
-import { frontendOrigins, resourceName } from './config';
+import { QUERY_RESERVED_CONCURRENCY, API_THROTTLE, frontendOrigins, resourceName } from './config';
 
 export interface ApiStackProps extends cdk.StackProps {
   appContext: AppContext;
@@ -68,6 +68,9 @@ export class ApiStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_22_X,
       memorySize: 256,
       timeout: cdk.Duration.seconds(30),
+      // Kustannuskatto: varattu concurrency rajaa sekä Lambda-aikaa että
+      // DynamoDB-lukujen polttonopeutta (ks. config.ts).
+      reservedConcurrentExecutions: QUERY_RESERVED_CONCURRENCY,
       environment: {
         ENVIRONMENT: appContext.envName,
         SITUATIONS_TABLE_NAME: situationsTable.tableName,
@@ -102,11 +105,12 @@ export class ApiStack extends cdk.Stack {
     });
 
     // $default-stage + throttling (§14: API Gateway throttling).
+    // Kustannussuoja: ks. config.ts API_THROTTLE — ylimenevä liikenne saa 429.
     const defaultStage = new apigwv2.HttpStage(this, 'DefaultStage', {
       httpApi: this.httpApi,
       stageName: '$default',
       autoDeploy: true,
-      throttle: { rateLimit: 100, burstLimit: 200 },
+      throttle: { rateLimit: API_THROTTLE.rateLimit, burstLimit: API_THROTTLE.burstLimit },
     });
 
     for (const route of API_ROUTES) {

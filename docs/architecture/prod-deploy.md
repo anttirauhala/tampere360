@@ -175,6 +175,7 @@ aws sns subscribe --region eu-north-1 \
 | Domain | CloudFront-oletusdomain | `tampere247.online` + `www` + `api.` |
 | TLS | CloudFrontin oletus | `TLSv1.2_2021` (CloudFront), `TLS_1_2` (API) |
 | WAF | ei | ei oletusarvoisesti (opt-in: `-c wafEnabled=true`, vaatii us-east-1-bootstrapin) |
+| API throttlaus / `limit` | 10 req/s (purske 20), oletus-limit 20, Lambda-concurrency 5 | sama (samat vakiot, ks. `infra/lib/config.ts`) |
 | CORS | `*` | `https://tampere247.online`, `https://www.tampere247.online` |
 | S3 / DynamoDB / KMS poisto | `DESTROY` (+ auto-delete) | `RETAIN`, ei auto-deletea |
 | DynamoDB PITR / deletionProtection | pois | päällä |
@@ -230,5 +231,66 @@ vahinkopoisto ei hävitä dataa.
    sisältää `SizeRestrictions_BODY`-säännön; palvelu on toistaiseksi pelkkä
    GET-rajapinta, joten sääntö ei haittaa. Jos myöhemmin lisätään
    POST-rajapintoja, säännöt on tarkistettava uudelleen.
+
+---
+
+## 8. Kustannussuojat ja valvonta
+
+API on **julkinen GET-rajapinta ilman API-avainta**, joten CORS ei estä
+komentoriviltä tehtävää tykitystä. Suojat on mitoitettu sen mukaan:
+
+| Suoja | Arvo | Missä |
+|---|---|---|
+| API Gateway -throttlaus | **10 req/s**, purske 20 → ylimenevä saa HTTP 429 (ei Lambda/DynamoDB-kutsua) | `infra/lib/config.ts` → `API_THROTTLE` |
+| Query-Lambdan varattu concurrency | **5** | `infra/lib/config.ts` → `QUERY_RESERVED_CONCURRENCY` |
+| `limit`-parametri | oletus **20**, yläraja 200 (jokainen item = DynamoDB-luku) | `apps/api/src/params.ts` |
+| Hälytykset | API-pyyntöpiikki ≥ 1000 / 5 min, API 4xx (sis. 429) ≥ 100 / 5 min, Lambda-throttlaukset ≥ 1 | `tampere360-<env>-api-request-spike`, `-api-client-errors`, `-api-throttles` |
+| AWS Budget | Kuukausibudjetti 10 $/kk (suositus: lisää 3 $ actual ja 5 $ forecast) | AWS Budgets |
+
+Pahin skenaario rajalla (10 req/s jatkuvasti vuorokauden, `limit=100`):
+**~20–30 $/vrk**. Ilman rajausta DynamoDB-lukemat yksin voisivat maksaa
+satoja euroja vuorokaudessa. Nämä testataan: `infra/test/config.test.ts`
+(hälytysrajat eivät saa ylittää throttlen sallimaa maksimia).
+
+### Hälytykset sähköpostiin (kerran)
+
+Hälytykset menevät SNS-topiciin, jonka **tilaajat on lisättävä käsin** —
+muuten kukaan ei näe niitä:
+
+```bash
+aws sns subscribe --region eu-north-1 \
+  --topic-arn "arn:aws:sns:eu-north-1:132339120388:tampere360-prod-alarms" \
+  --protocol email --notification-endpoint oma@esimerkki.fi
+# vahvista tilaus sähköpostiin tulleesta linkistä
+```
+
+Budjetti-ilmoitukset samaan topiciin (MonitoringStackin topic policy sallii
+`budgets.amazonaws.com`-julkaisun):
+
+```bash
+# 3 $ toteutunut kulu
+aws budgets create-notification --account-id 132339120388 \
+  --budget-name Kuukausibudjetti \
+  --notification NotificationType=ACTUAL,ComparisonOperator=GREATER_THAN,Threshold=3,ThresholdType=ABSOLUTE_VALUE \
+  --subscribers SubscriptionType=SNS,Address=arn:aws:sns:eu-north-1:132339120388:tampere360-prod-alarms
+
+# 5 $ ennustettu kulu
+aws budgets create-notification --account-id 132339120388 \
+  --budget-name Kuukausibudjetti \
+  --notification NotificationType=FORECASTED,ComparisonOperator=GREATER_THAN,Threshold=5,ThresholdType=ABSOLUTE_VALUE \
+  --subscribers SubscriptionType=SNS,Address=arn:aws:sns:eu-north-1:132339120388:tampere360-prod-alarms
+```
+
+> Huom: ilman SNS-tilaajaa myös nämä ovat äänettömiä. Tarkista nykytila:
+> `aws budgets describe-notifications-for-budget --account-id 132339120388 --budget-name Kuukausibudjetti`.
+
+### Jos haluat laskea kustannuskattoa edelleen
+
+1. **Frontendin `limit`** (`apps/web/src/api/queries.ts`) on 100 — API:n oletus
+   ei siis vaikuta siihen. Pienennys (esim. 50) puolittaa DynamoDB-lukukustannuksen,
+   mutta vähentää samalla Nyt-sivulla näkyvien tilanteiden määrää.
+2. **CloudFront API:n eteen** ja lyhyt cache (30–60 s): imee piikit ja laskee
+   sekä Lambda- että DynamoDB-kutsuja (vaatii `Cache-Control`-otsakkeen API:sta).
+3. **WAF rate-based rule** (ks. §3): ~5 $/kk + pyyntömaksut.
 
 
