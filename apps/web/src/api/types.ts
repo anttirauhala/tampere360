@@ -42,6 +42,8 @@ export interface SituationSummary {
   firstSeenAt?: string | null;
   municipality?: string | null;
   title: string;
+  /** Infoteksti (fi) listariviä varten; null jos lähde ei anna sitä. */
+  description?: string | null;
 }
 
 export interface SituationListResponse {
@@ -134,6 +136,17 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   WEATHER: 'Säävaroitukset',
   EVENT: 'Tapahtumat',
   RAIL: 'Junaliikenne',
+};
+
+/** Tapahtumatyypin emoji koostekortin otsikon eteen. */
+export const CATEGORY_EMOJI: Record<Category, string> = {
+  POLICE: '🚓', // poliisiauto
+  WEATHER: '☀️', // aurinko
+  TRAFFIC: '🚗', // auto
+  PUBLIC_TRANSPORT: '🚌', // bussi
+  EVENT: '🎉',
+  RESCUE: '🚒',
+  RAIL: '🚆',
 };
 
 export const SEVERITY_LABELS: Record<Severity, string> = {

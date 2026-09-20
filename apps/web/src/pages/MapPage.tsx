@@ -13,6 +13,8 @@ export function MapPage() {
         {isLoading
           ? 'Ladataan karttatietoja…'
           : `${features.length} tilannetta, joilla on koordinaatit.`}{' '}
+      </p>
+      <p>
         Värilliset pisteet kertovat vakavuuden (keltainen = vähäinen, oranssi = merkittävä, punainen
         = kriittinen).
       </p>

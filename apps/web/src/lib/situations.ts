@@ -4,9 +4,9 @@ import type { Category, SituationSummary } from '../api/types';
 
 /** Kategorioiden näyttöjärjestys Nyt-sivulla. */
 export const CATEGORY_ORDER: Category[] = [
-  'TRAFFIC',
-  'WEATHER',
   'POLICE',
+  'WEATHER',
+  'TRAFFIC',
   'PUBLIC_TRANSPORT',
   'EVENT',
   'RAIL',

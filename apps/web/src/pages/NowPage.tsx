@@ -22,8 +22,7 @@ export function NowPage() {
 
       <h1 className="page__title">Nyt</h1>
       <p className="page__lead">
-        Aktiiviset häiriöt ja varoitukset Tampereen seudulla tyypeittäin. Tiedot päivittyvät
-        automaattisesti 30 sekunnin välein.
+        Tiedot päivittyvät automaattisesti 30 sekunnin välein.
       </p>
 
       {isLoading && <p className="state state--loading">Ladataan tilannetietoja…</p>}

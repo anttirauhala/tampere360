@@ -62,7 +62,6 @@ a {
 }
 
 .header__inner {
-  max-width: 1180px;
   margin: 0 auto;
   padding: 12px 20px;
   display: flex;
@@ -134,7 +133,6 @@ a {
 .main {
   flex: 1;
   width: 100%;
-  max-width: 1180px;
   margin: 0 auto;
   padding: 24px 20px 48px;
 }
@@ -146,7 +144,8 @@ a {
 
 .page__lead {
   margin: 0 0 20px;
-  max-width: 70ch;
+  max-width: 80%;
+  font-weight: bold;
 }
 
 .page__note {
@@ -403,7 +402,6 @@ a {
   padding: 20px;
   color: var(--text-muted);
   font-size: 12px;
-  max-width: 1180px;
   margin: 0 auto;
 }
 
@@ -424,6 +422,22 @@ a {
   border-radius: var(--radius);
   background: var(--surface);
   padding: 14px 16px;
+}
+
+/* Taustaväri tapahtumatyypin mukaan. */
+.summary-card--police {
+  background: navy; /* #000080 */
+}
+
+.summary-card--traffic  {
+  background: #4d5438;
+}
+.summary-card--public-transport {
+  background: #701c1c;
+}
+
+.summary-card--weather {
+  background: #2f384c;
 }
 
 .summary-card__head {
@@ -472,6 +486,7 @@ a {
 .summary-card__item-title {
   font-size: 13px;
   line-height: 1.3;
+  font-weight: bold;
 }
 
 .summary-card__item-time {
@@ -482,6 +497,8 @@ a {
 .summary-card__more {
   font-size: 12px;
   text-decoration: none;
+  color: var(--accent);
+  font-weight: bold;
 }
 
 .summary-card__more:hover {
@@ -504,11 +521,37 @@ a {
   background-position: center;
   background-repeat: no-repeat;
   pointer-events: none;
+  opacity: 0.75;
 }
 
 /* Riittävän kapealla näytöllä taustakuva poistetaan, jotta sisältö erottuu. */
 @media (max-width: 760px) {
   .now-backdrop {
+    display: none;
+  }
+}
+
+/* --- Nyt-sivun koostelista --- */
+
+/* Rivit erotetaan viivalla -> esitys on enemmän lista kuin kortti. */
+.summary-card__item + .summary-card__item {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+/* Infoteksti ajankohdan alla: pienempi kuin otsikko, sama väri kuin
+   otsikolla, yksi rivi ja ylivuoto katkaistaan kolmella pisteellä. */
+.summary-card__item-desc {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mobiilissa infoteksti jää pois, jotta rivit pysyvät tiiviinä. */
+@media (max-width: 760px) {
+  .summary-card__item-desc {
     display: none;
   }
 }

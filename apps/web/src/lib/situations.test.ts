@@ -43,7 +43,7 @@ describe('groupByCategory', () => {
       item('TRAFFIC', 'uusi', { startsAt: '2026-09-20T08:00:00.000Z' }),
     ]);
 
-    expect([...grouped.keys()]).toEqual(['TRAFFIC', 'POLICE']);
+    expect([...grouped.keys()]).toEqual(['POLICE', 'TRAFFIC']);
     expect(grouped.get('TRAFFIC')?.map((i) => i.title)).toEqual(['uusi', 'vanha']);
     expect(grouped.get('POLICE')?.map((i) => i.title)).toEqual(['poliisi']);
   });
@@ -55,8 +55,8 @@ describe('groupByCategory', () => {
       item('WEATHER', 'saa'),
       item('TRAFFIC', 'liikenne'),
     ]);
-    expect([...grouped.keys()]).toEqual(['TRAFFIC', 'WEATHER', 'POLICE', 'PUBLIC_TRANSPORT']);
-    expect(CATEGORY_ORDER[0]).toBe('TRAFFIC');
+    expect([...grouped.keys()]).toEqual(['POLICE', 'WEATHER', 'TRAFFIC', 'PUBLIC_TRANSPORT']);
+    expect(CATEGORY_ORDER[0]).toBe('POLICE');
   });
 
   it('palauttaa tyhjän ryhmittelyn tyhjälle syötteelle', () => {

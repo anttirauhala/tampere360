@@ -75,6 +75,8 @@ async function hSituations(path: string, event: APIGatewayProxyEventV2): Promise
       publishedAt: i.publishedAt ?? null,
       firstSeenAt: i.firstSeenAt ?? null,
       title: i.event?.title?.fi ?? '',
+      // Infoteksti yhden rivin esitysta varten (Nyt-sivun listarivit).
+      description: i.event?.description?.fi ?? null,
     }));
     const nc = r.LastEvaluatedKey
       ? Buffer.from(JSON.stringify(r.LastEvaluatedKey)).toString('base64')
