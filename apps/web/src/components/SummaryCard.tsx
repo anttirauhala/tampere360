@@ -7,6 +7,7 @@ import {
   type SituationSummary,
 } from '../api/types';
 import { formatCompactTime, sanitizeText } from '../lib/format';
+import { SeverityDot } from './SeverityDot';
 
 interface Props {
   category: Category;
@@ -48,6 +49,7 @@ export function SummaryCard({ category, items, total, to }: Props) {
           return (
             <li key={item.situationId} className="summary-card__item">
               <span className="summary-card__item-title">
+                <SeverityDot severity={item.severity} />
                 {sanitizeText(item.title) || 'Tuntematon tapahtuma'}
               </span>
               {time && <span className="summary-card__item-time">{time}</span>}

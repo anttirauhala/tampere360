@@ -1,5 +1,5 @@
 import { useSituations } from '../api/queries';
-import { CATEGORY_LABELS, type Category } from '../api/types';
+import { CATEGORY_EMOJI, CATEGORY_LABELS, type Category } from '../api/types';
 import { SeverityDot } from '../components/SeverityDot';
 import { formatCompactTime, sanitizeText } from '../lib/format';
 
@@ -25,7 +25,9 @@ export function CategoryPage({ category }: Props) {
       {/* Sama himmennetty taustakuva kuin Nyt-sivulla (samat asetukset CSS:ssä). */}
       <div className="now-backdrop" aria-hidden="true" />
 
-      <h1 className="page__title">{label}</h1>
+      <h1 className="page__title">
+        <span aria-hidden="true">{CATEGORY_EMOJI[category]}</span> {label}
+      </h1>
 
       {isLoading && <p className="state state--loading">Ladataan tilannetietoja…</p>}
 

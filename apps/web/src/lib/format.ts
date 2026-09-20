@@ -75,60 +75,19 @@ export interface SituationTimes {
   firstSeenAt?: string | null;
 }
 
-export interface TimeDescription {
-  /**
-   * Pääteksti, esim. "alkoi 20.9.2026 klo 08.53".
-   * **Tyhjä merkkijono, jos tapahtuman alkuaika ei ole tiedossa** — silloin
-   * alkuaikakohtaan ei näytetä mitään (ei arvausta eikä selitystekstiä).
-   */
-  primary: string;
-  /** Lisätieto: suhteellinen ikä ja/tai julkaisu-/havaintoaika. */
-  detail: string;
-  /** Onko tapahtuman oma alkuaika tiedossa. */
-  isStartKnown: boolean;
-}
-
-/**
- * Kuvaa tilanteen ajankohdan käyttäjälle rehellisesti (§5).
- *
- * Jos lähde ei kerro tapahtuman alkuaikaa, sitä EI näytetä arvattuna eikä
- * korvata selitystekstillä: `primary` on tällöin tyhjä ja `detail` kertoo
- * lähteen julkaisuajan ja/tai teknisen havaintoajan.
- */
-export function describeSituationTime(times: SituationTimes): TimeDescription {
-  const startsAt = times.startsAt ?? null;
-  const publishedAt = times.publishedAt ?? null;
-  const firstSeenAt = times.firstSeenAt ?? null;
-
-  if (startsAt) {
-    return {
-      primary: `alkoi ${formatTime(startsAt)}`,
-      detail: formatAge(startsAt),
-      isStartKnown: true,
-    };
-  }
-
-  const seenPart = firstSeenAt ? `havaittu ${formatAge(firstSeenAt)}` : '';
-  const detail = publishedAt
-    ? [`julkaistu ${formatTime(publishedAt)}`, seenPart].filter(Boolean).join(' · ')
-    : seenPart;
-
-  return { primary: '', detail, isStartKnown: false };
-}
-
 /**
  * Lyhyt aikateksti koostekortille.
  *
- * Palauttaa "alkoi 20.9.2026 klo 08.53", jos lähteen oma alkuaika on tiedossa,
- * muuten "julkaistu 17.9.2026 klo 10.56". Sana kertoo aina, kumpi aika on
+ * Palauttaa "Alkoi 20.9.2026 klo 08.53", jos lähteen oma alkuaika on tiedossa,
+ * muuten "Julkaistu 17.9.2026 klo 10.56". Sana kertoo aina, kumpi aika on
  * kyseessä, jotta julkaisuaika ei näytä tapahtuman alkuajalta (§5).
  */
 export function formatCompactTime(times: SituationTimes): string {
   const startsAt = times.startsAt ?? null;
-  if (startsAt) return `alkoi ${formatTime(startsAt)}`;
+  if (startsAt) return `Alkoi ${formatTime(startsAt)}`;
 
   const publishedAt = times.publishedAt ?? null;
-  if (publishedAt) return `julkaistu ${formatTime(publishedAt)}`;
+  if (publishedAt) return `Julkaistu ${formatTime(publishedAt)}`;
 
   return '';
 }

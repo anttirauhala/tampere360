@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeSituationTime, formatAge, formatTime, sanitizeText } from './format';
+import { formatAge, formatTime, sanitizeText } from './format';
 
 describe('sanitizeText', () => {
   it('palauttaa tyhjän merkkijonolle, jonka arvo puuttuu', () => {
@@ -74,52 +74,5 @@ describe('formatAge', () => {
     expect(formatAge(new Date(Date.now() - 5 * 60_000).toISOString())).toBe('5 min sitten');
     expect(formatAge(new Date(Date.now() - 3 * 3_600_000).toISOString())).toBe('3 h sitten');
     expect(formatAge(new Date(Date.now() - 2 * 86_400_000).toISOString())).toBe('2 vrk sitten');
-  });
-});
-
-describe('describeSituationTime', () => {
-  // Paikalliset ajat → testit eivät riipu aikavyöhykkeestä.
-  const startsAt = new Date(2026, 8, 20, 8, 53).toISOString();
-  const publishedAt = new Date(2026, 8, 17, 7, 56).toISOString();
-  const firstSeenAt = new Date(2026, 8, 18, 22, 48).toISOString();
-
-  it('näyttää alkuaian, kun lähde antaa sen', () => {
-    const result = describeSituationTime({ startsAt, publishedAt, firstSeenAt });
-    expect(result.isStartKnown).toBe(true);
-    expect(result.primary).toBe('alkoi 20.9.2026 klo 08.53');
-    // Suhteellinen ikä riippuu kellonajasta → tarkistetaan muoto, ei arvoa.
-    expect(result.detail).toMatch(/^(juuri nyt|.+ sitten)$/);
-  });
-
-  it('ei näytä päätekstiä lainkaan, kun alkuaika ei ole tiedossa', () => {
-    const result = describeSituationTime({ startsAt: null, publishedAt, firstSeenAt });
-    expect(result.isStartKnown).toBe(false);
-    expect(result.primary).toBe('');
-  });
-
-  it('ei korvaa puuttuvaa alkuaikaa julkaisuajalla (regressiosuoja)', () => {
-    // Julkaisuaika näytetään erikseen lisätietona, EI alkuaikana.
-    const result = describeSituationTime({ startsAt: null, publishedAt, firstSeenAt });
-    expect(result.primary).toBe('');
-    expect(result.primary).not.toContain('17.9.2026');
-    expect(result.detail).toContain('julkaistu 17.9.2026 klo 07.56');
-  });
-
-  it('näyttää julkaisuajan ja havaintoajan lisätietona', () => {
-    const result = describeSituationTime({ startsAt: null, publishedAt, firstSeenAt });
-    expect(result.detail).toContain('julkaistu');
-    expect(result.detail).toContain('havaittu');
-  });
-
-  it('näyttää pelkän havaintoajan, jos julkaisuaikaa ei ole', () => {
-    const result = describeSituationTime({ startsAt: null, firstSeenAt });
-    expect(result.detail).toMatch(/^havaittu /);
-  });
-
-  it('kestää täysin puuttuvat ajat', () => {
-    const result = describeSituationTime({});
-    expect(result.primary).toBe('');
-    expect(result.detail).toBe('');
-    expect(result.isStartKnown).toBe(false);
   });
 });
