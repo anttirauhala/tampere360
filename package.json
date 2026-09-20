@@ -25,7 +25,10 @@
     "format:check": "prettier --check .",
     "synth": "npm run synth -w @tampere360/infra",
     "diff": "npm run diff -w @tampere360/infra",
-    "deploy": "npm run deploy -w @tampere360/infra"
+    "deploy": "npm run deploy -w @tampere360/infra",
+    "synth:prod": "npm run synth -w @tampere360/infra -- -c env=prod -c wafEnabled=false --region eu-north-1",
+    "diff:prod": "npm run diff -w @tampere360/infra -- -c env=prod -c wafEnabled=false --region eu-north-1",
+    "deploy:prod": "npm run deploy -w @tampere360/infra -- -c env=prod -c wafEnabled=false --region eu-north-1"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",

@@ -37,6 +37,22 @@ export class DataStack extends cdk.Stack {
 
     const { appContext, dataKey } = props;
 
+    // prod: poistonsuojaus ja PITR. HUOM: Situations-taulun
+    // pointInTimeRecoverySpecification pidetään aina renderöitynä (myös
+    // devissä arvolla false), koska näin se on jo dev-ympäristön
+    // tallennetussa mallipohjassa — muuten seuraava dev-deploy tekisi
+    // turhan UpdateTable-kutsun. SourceEvents/IngestionState saavat
+    // ominaisuudet vain prodissa.
+    const isProd = appContext.envName === 'prod';
+    const removalPolicy = isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY;
+    const deletionProtectionOnly = isProd ? { deletionProtection: true } : {};
+    const prodTableHardening = isProd
+      ? {
+          deletionProtection: true,
+          pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+        }
+      : {};
+
     this.rawBucket = new s3.Bucket(this, 'RawBucket', {
       bucketName: resourceName(appContext.envName, 'raw').concat(
         appContext.account ? `-${appContext.account}` : '',
@@ -46,7 +62,9 @@ export class DataStack extends cdk.Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
       versioned: false,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      // prod: raakadata-arkisto säilyy stackin poistamisen jälkeen.
+      removalPolicy:
+        appContext.envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: appContext.envName !== 'prod',
       lifecycleRules: [
         {
@@ -82,9 +100,10 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       encryption: dynamodb.TableEncryption.CUSTOMER_MANAGED,
       encryptionKey: dataKey,
-      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: appContext.envName === 'prod' },
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: isProd },
+      ...deletionProtectionOnly,
       timeToLiveAttribute: 'expiresAt',
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy,
     });
     this.situationsTable.addGlobalSecondaryIndex({
       indexName: 'gsi1-status-startsAt',
@@ -114,8 +133,9 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       encryption: dynamodb.TableEncryption.CUSTOMER_MANAGED,
       encryptionKey: dataKey,
+      ...prodTableHardening,
       timeToLiveAttribute: 'expiresAt',
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy,
     });
     // Situationille kuuluvien lähdetapahtumien hakua varten (§6.2 semanttinen yhdistäminen).
     this.sourceEventsTable.addGlobalSecondaryIndex({
@@ -131,7 +151,8 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       encryption: dynamodb.TableEncryption.CUSTOMER_MANAGED,
       encryptionKey: dataKey,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      ...prodTableHardening,
+      removalPolicy,
     });
 
     new cdk.CfnOutput(this, 'RawBucketName', { value: this.rawBucket.bucketName });

@@ -16,21 +16,26 @@
 import * as path from 'path';
 
 import * as cdk from 'aws-cdk-lib';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as route53targets from 'aws-cdk-lib/aws-route53-targets';
 import { Construct } from 'constructs';
 
-import type { AppContext } from './config';
-import { resourceName } from './config';
+import type { AppContext, DomainConfig } from './config';
+import { frontendOrigins, resourceName } from './config';
 
 export interface ApiStackProps extends cdk.StackProps {
   appContext: AppContext;
   situationsTable: dynamodb.ITable;
   sourceEventsTable: dynamodb.ITable;
   ingestionStateTable: dynamodb.ITable;
+  /** Oman domainin konfiguraatio (prod): API saa oman osoitteen `api.<domain>`. */
+  domain?: DomainConfig;
 }
 
 const API_ROUTES = [
@@ -45,7 +50,7 @@ const API_ROUTES = [
 export class ApiStack extends cdk.Stack {
   /** HTTP API (url-ominaisuus) frontendin ja testausta varten. */
   public readonly httpApi: apigwv2.HttpApi;
-  /** API:n juuri (esim. https://xxx.execute-api.eu-north-1.amazonaws.com). */
+  /** API:n juuri (esim. https://xxx.execute-api.eu-north-1.amazonaws.com tai oma domain). */
   public readonly httpApiUrl: string;
   /** Query-Lambda valvontaa varten. */
   public readonly queryFunction: lambdaNodejs.NodejsFunction;
@@ -53,7 +58,7 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const { appContext, situationsTable, sourceEventsTable, ingestionStateTable } = props;
+    const { appContext, situationsTable, sourceEventsTable, ingestionStateTable, domain } = props;
 
     this.queryFunction = new lambdaNodejs.NodejsFunction(this, 'QueryFunction', {
       entry: path.join(__dirname, '../../apps/api/src/handler.ts'),
@@ -86,8 +91,10 @@ export class ApiStack extends cdk.Stack {
       description: 'Tampere360 query-API',
       createDefaultStage: false,
       corsPreflight: {
-        // MVP: CloudFront-domain; oma domain myöhemmin (tarkennetaan §14).
-        allowOrigins: ['*'],
+        // Oma domain (prod) → sallitaan vain frontendin originit. Ilman
+        // domainia (dev/test) sallitaan kaikki, koska CloudFrontin
+        // oletusdomain voi vaihtua deployn yhteydessä.
+        allowOrigins: domain ? frontendOrigins(domain) : ['*'],
         allowMethods: [apigwv2.CorsHttpMethod.GET],
         allowHeaders: ['content-type', 'accept'],
         maxAge: cdk.Duration.minutes(10),
@@ -95,7 +102,7 @@ export class ApiStack extends cdk.Stack {
     });
 
     // $default-stage + throttling (§14: API Gateway throttling).
-    new apigwv2.HttpStage(this, 'DefaultStage', {
+    const defaultStage = new apigwv2.HttpStage(this, 'DefaultStage', {
       httpApi: this.httpApi,
       stageName: '$default',
       autoDeploy: true,
@@ -110,7 +117,63 @@ export class ApiStack extends cdk.Stack {
       });
     }
 
+    // Oma domain (prod): api.<domain>. Alueellinen ACM-sertifikaatti luodaan
+    // tässä stackissa (eu-north-1), koska API Gateway ei hyväksy
+    // CloudFront-sertifikaattia (us-east-1). DNS-validointi tehdään Route 53:een.
+    if (domain) {
+      const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
+        hostedZoneId: domain.hostedZoneId,
+        zoneName: domain.hostedZoneName,
+      });
+
+      const apiCertificate = new acm.Certificate(this, 'ApiCertificate', {
+        domainName: domain.apiDomainName,
+        validation: acm.CertificateValidation.fromDns(zone),
+      });
+
+      const apiDomainName = new apigwv2.DomainName(this, 'ApiDomainName', {
+        domainName: domain.apiDomainName,
+        certificate: apiCertificate,
+        securityPolicy: apigwv2.SecurityPolicy.TLS_1_2,
+      });
+
+      const mapping = new apigwv2.ApiMapping(this, 'ApiMapping', {
+        api: this.httpApi,
+        domainName: apiDomainName,
+        stage: defaultStage,
+      });
+      // API-mäppäys edellyttää, että $default-stage on deployattu.
+      mapping.node.addDependency(defaultStage.node.defaultChild as cdk.CfnResource);
+
+      const target = route53.RecordTarget.fromAlias(
+        new route53targets.ApiGatewayv2DomainProperties(
+          apiDomainName.regionalDomainName,
+          apiDomainName.regionalHostedZoneId,
+        ),
+      );
+      new route53.ARecord(this, 'ApiARecord', {
+        zone,
+        recordName: domain.apiDomainName,
+        target,
+      });
+      new route53.AaaaRecord(this, 'ApiAaaaRecord', {
+        zone,
+        recordName: domain.apiDomainName,
+        target,
+      });
+
+      this.httpApiUrl = `https://${domain.apiDomainName}`;
+      new cdk.CfnOutput(this, 'ApiCustomUrl', {
+        value: this.httpApiUrl,
+        description: 'API:n julkinen osoite (oma domain)',
+      });
+    } else {
+      this.httpApiUrl = this.httpApi.apiEndpoint;
+    }
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.httpApi.apiEndpoint });
-    this.httpApiUrl = this.httpApi.apiEndpoint;
+    if (domain) {
+      new cdk.CfnOutput(this, 'ApiDomain', { value: domain.apiDomainName });
+    }
   }
 }

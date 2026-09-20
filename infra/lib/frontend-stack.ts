@@ -14,14 +14,17 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import * as cdk from 'aws-cdk-lib';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as route53targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
 
-import type { AppContext } from './config';
-import { resourceName } from './config';
+import type { AppContext, DomainConfig } from './config';
+import { frontendDomainNames, resourceName } from './config';
 import { buildContentSecurityPolicy } from './csp';
 
 /** Polku apps/web:n Vite-buildiin (repo-juuresta). */
@@ -31,6 +34,10 @@ export interface FrontendStackProps extends cdk.StackProps {
   appContext: AppContext;
   /** API:n juuri (ApiStackin HttpApiUrl) — kirjoitetaan /config.json-tiedostoon. */
   apiUrl: string;
+  /** Oman domainin konfiguraatio (prod). Ilman tätä käytetään CloudFrontin oletusdomainia. */
+  domain?: DomainConfig;
+  /** WAF WebACL:in ARN (WafStack, us-east-1) — asetetaan kun wafEnabled=true. */
+  webAclArn?: string;
 }
 
 export class FrontendStack extends cdk.Stack {
@@ -42,14 +49,25 @@ export class FrontendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: FrontendStackProps) {
     super(scope, id, props);
 
-    const { appContext, apiUrl } = props;
+    const { appContext, apiUrl, domain, webAclArn } = props;
 
-    if (appContext.wafEnabled) {
+    if (appContext.wafEnabled && !webAclArn) {
       throw new Error(
-        'wafEnabled=true vaatii oman domainin ja Route 53:n — toteutetaan ' +
-          'myöhemmässä vaiheessa (ks. .clinerules/implementation_plan.md §14).',
+        'wafEnabled=true vaatii WafStackin (webAclArn). Aja `cdk deploy --all ' +
+          '-c env=<env> -c wafEnabled=true`, jolloin WafStack luodaan ja ARN ' +
+          'välitetään tähän stackiin.',
       );
     }
+
+    // ACM-sertifikaatti CloudFrontille on AINA us-east-1:ssä → tuodaan ARN:na,
+    // ei luoda tässä stackissa (ks. config.ts DomainConfig).
+    const certificate = domain
+      ? acm.Certificate.fromCertificateArn(
+          this,
+          'CloudFrontCertificate',
+          domain.cloudFrontCertificateArn,
+        )
+      : undefined;
 
     if (!fs.existsSync(path.join(WEB_DIST, 'index.html'))) {
       throw new Error(
@@ -71,7 +89,9 @@ export class FrontendStack extends cdk.Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      // prod: älä poista bucketia stackin mukana (staattinen sisältö säilyy).
+      removalPolicy:
+        appContext.envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: appContext.envName !== 'prod',
     });
 
@@ -125,10 +145,34 @@ export class FrontendStack extends cdk.Stack {
         { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html' },
         { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html' },
       ],
-      // minimumProtocolVersion asetetaan kun oma domain + ACM-sertifikaatti
-      // kytketään (myöhempi vaihe, §14). Oletusdomainilla TLS-versio on
-      // CloudFrontin hallinnassa.
+      // Oman domainin kytkentä: alias-nimet + ACM-sertifikaatti (us-east-1).
+      // Oletusdomainilla (dev/test) TLS-versio jää CloudFrontin hallintaan.
+      ...(domain
+        ? {
+            domainNames: frontendDomainNames(domain),
+            certificate: certificate!,
+            minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+          }
+        : {}),
+      // WAF: CloudFront-scope WebACL (WafStack, us-east-1) — opt-in.
+      ...(webAclArn ? { webAclId: webAclArn } : {}),
     });
+
+    // Route 53: alias-tietueet (A + AAAA) hosted zoneen.
+    if (domain) {
+      const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
+        hostedZoneId: domain.hostedZoneId,
+        zoneName: domain.hostedZoneName,
+      });
+      const target = route53.RecordTarget.fromAlias(
+        new route53targets.CloudFrontTarget(this.distribution),
+      );
+      for (const name of frontendDomainNames(domain)) {
+        const idPrefix = name.replace(/[^a-zA-Z0-9]/g, '');
+        new route53.ARecord(this, `${idPrefix}ARecord`, { zone, recordName: name, target });
+        new route53.AaaaRecord(this, `${idPrefix}AaaaRecord`, { zone, recordName: name, target });
+      }
+    }
 
     // Vite-buildi + ajonaikainen konfiguraatio (API-osoite).
     new s3deploy.BucketDeployment(this, 'WebDeployment', {
@@ -149,5 +193,11 @@ export class FrontendStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'FrontendUrl', {
       value: `https://${this.distribution.distributionDomainName}`,
     });
+    if (domain) {
+      new cdk.CfnOutput(this, 'FrontendCustomUrl', {
+        value: `https://${domain.frontendDomainName}`,
+        description: 'Frontendin julkinen osoite (oma domain)',
+      });
+    }
   }
 }

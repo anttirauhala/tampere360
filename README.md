@@ -92,6 +92,8 @@ cd infra && npx cdk bootstrap   # kerran per tili/region ennen deployta
 ```
 
 Ympäristö valitaan kontekstilla: `npx cdk deploy --all -c env=test`.
+Prodilla on omat npm-skriptit: `npm run synth:prod`, `npm run diff:prod`,
+`npm run deploy:prod` (ks. [`docs/architecture/prod-deploy.md`](./docs/architecture/prod-deploy.md)).
 
 ## Julkaistu ympäristö (dev, eu-north-1)
 
@@ -104,6 +106,37 @@ Ympäristö valitaan kontekstilla: `npx cdk deploy --all -c env=test`.
 curl https://d36ic5wsx4b9yl.cloudfront.net/config.json
 curl "https://vllod80b6i.execute-api.eu-north-1.amazonaws.com/v1/situations?limit=5"
 curl https://vllod80b6i.execute-api.eu-north-1.amazonaws.com/v1/health/sources
+```
+
+## Tuotanto (prod, eu-north-1)
+
+Prod ajetaan samassa AWS-tilissä omalla nimiavaruudella
+(`tampere360-prod-*`) ja omalla domainilla:
+
+| Resurssi | Osoite |
+|---|---|
+| Frontend (CloudFront) | https://tampere247.online (myös www.) |
+| API (HTTP API custom domain) | https://api.tampere247.online |
+
+Prod-deploy lyhyesti (tarkka runbook: [`docs/architecture/prod-deploy.md`](./docs/architecture/prod-deploy.md)):
+
+```bash
+npm ci && npm run build     # web-buildi tarvitaan FrontendStackiin
+npm run diff:prod           # esitarkistus
+npm run deploy:prod         # cdk deploy --all -c env=prod -c wafEnabled=false --region eu-north-1
+```
+
+Prod eroaa dev:stä: oma domain + TLS 1.2, rajattu CORS sekä
+`RETAIN`-poistopolitiikat ja DynamoDB-PITR (data ei häviä vahinkopoistossa).
+WAF on valmiina mutta **ei käytössä oletuksena** (opt-in
+`-c wafEnabled=true` + `cdk bootstrap` us-east-1:een).
+Domain-, sertifikaatti- ja hosted zone -tiedot ovat versioituna
+`infra/lib/config.ts`-tiedostossa (`ENVIRONMENT_DOMAINS.prod`).
+
+```bash
+curl https://tampere247.online/config.json
+curl "https://api.tampere247.online/v1/situations?limit=5"
+curl https://api.tampere247.online/v1/health/sources
 ```
 
 ## Lisenssit ja attribuutio

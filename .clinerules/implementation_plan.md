@@ -8,6 +8,10 @@
 > Frontend: https://d36ic5wsx4b9yl.cloudfront.net
 > API: https://vllod80b6i.execute-api.eu-north-1.amazonaws.com
 > Seuraavaksi Vaihe 5 (testit, valvonta, CI).
+> **Prod-valmius ✅ (§21):** `tampere360-prod-*` + domain `tampere247.online`
+> (+ www), API `api.tampere247.online`, WAF (us-east-1, opt-in), TLS 1.2,
+> RETAIN/PITR-kovennukset. Deploy: `npm run deploy:prod`;
+> runbook: `docs/architecture/prod-deploy.md`.
 
 ## 1. Yhteenveto
 
@@ -664,4 +668,84 @@ merkkijonopohjainen GSI-lajittelu on oikea myös eri formaateilla
 - Tästä syystä lajitteluavain pidettiin nimellä `startsAt` (arvo on
   järjestysaika) sen sijaan, että olisi nimetty uudelleen `timeKey`iksi.
   Jos nimeäminen halutaan myöhemmin, se tehdään **vaiheittain** (yksi
+
+## 21. Prod-käyttöönotto (tampere247.online) — toteutettu 20.9.2026
+
+Tavoite: prod-ympäristö samaan AWS-tiliin omalla nimiavaruudella
+(`tampere360-prod-*`) mutta **omalla domainilla ja TLS:llä**. Tarkka runbook:
+[`docs/architecture/prod-deploy.md`](../docs/architecture/prod-deploy.md).
+
+### Domain- ja TLS-malli
+
+| Asia | Ratkaisu |
+|---|---|
+| Domain | `tampere247.online` (apex) + `www.tampere247.online` (sama CloudFront-jakelu) |
+| API | `api.tampere247.online` (API Gateway HTTP API custom domain) |
+| Hosted zone | `Z04105072OQTLR436VXG7` (Route 53, tili 132339120388) |
+| CloudFront-sertifikaatti | ACM **us-east-1** (valmis, apex + `*.tampere247.online`) tuodaan ARN:na — CloudFront ei hyväksy muun alueen sertifikaattia |
+| API-sertifikaatti | Luodaan CDK:lla **eu-north-1**:een DNS-validoituna (API Gateway vaatii oman alueen sertifikaatin) |
+| TLS | CloudFront `TLSv1.2_2021`, API `TLS_1_2` |
+| DNS-tietueet | Route 53 A + AAAA (alias) ovat **CDK:n hallinnassa** — ei käsin luotuja tietueita |
+
+Konfiguraatio on versioitu koodiin: `infra/lib/config.ts`
+(`DomainConfig`, `ENVIRONMENT_DOMAINS.prod`, `frontendDomainNames`,
+`frontendOrigins`). Dev/test eivät käytä omaa domainia.
+
+### Stackimuutokset
+
+- **FrontendStack**: CloudFront `domainNames` + `certificate` +
+  `minimumProtocolVersion`, Route 53 A/AAAA-alias-tietueet, WAF-kytkentä
+  (`webAclId`), prod-RETAIN web-bucketille, uusi output `FrontendCustomUrl`.
+- **ApiStack**: `api.<domain>` (ACM + `DomainName` + `ApiMapping`), Route 53
+  A/AAAA, CORS rajattu frontendin origineihin (`frontendOrigins`), API-URL
+  (`httpApiUrl`) palauttaa oman domainin → myös `config.json` ja CSP:n
+  `connect-src` käyttävät sitä.
+- **WafStack (uusi, us-east-1, opt-in)**: CloudFront-scope WebACL
+  (`AWSManagedRulesCommonRuleSet`, `KnownBadInputsRuleSet`,
+  `AmazonIpReputationList`). ARN välittyy FrontendStackille
+  **cross-region-viittauksena** (`crossRegionReferences`) → edellyttää
+  `npx cdk bootstrap aws://<tili>/us-east-1`.
+  **Tässä vaiheessa WAF on pois päältä**: prod-npm-skriptit ajavat
+  kontekstilla `-c wafEnabled=false` (ei bootstrapia eikä ~5 $/kk kulua);
+  WAF kytketään haluttaessa `-c wafEnabled=true`:lla.
+- **Prod-kovennukset**: KMS-avain, S3-raw ja S3-web sekä kaikki DynamoDB-taulut
+  `RETAIN` prodissa (dev:ssä edelleen `DESTROY` + auto-delete);
+  DynamoDB PITR ja `deletionProtection` päällä vain prodissa.
+
+### Bugikorjaus: hiljainen `wafEnabled`-lippu
+
+`-c wafEnabled=true` tulee CDK-kontekstiin **merkkijonona** `"true"`, joten
+aiempi `app.node.tryGetContext('wafEnabled') === true` oli aina `false` —
+WAF:ia ei olisi koskaan syntynyt. Korjattu `contextFlag()`-apurilla
+(`infra/bin/app.ts`), joka hyväksyy sekä `true`-että `"true"`-arvon. Sama
+koskee `-c domainEnabled=false`, jolla prodin voi deployata ilman domainia
+(savutesti).
+
+### Komennot
+
+```bash
+npm run synth:prod      # cdk synth  -c env=prod -c wafEnabled=false --region eu-north-1
+npm run diff:prod       # cdk diff  -c env=prod -c wafEnabled=false --region eu-north-1
+npm run deploy:prod     # cdk deploy --all (sama konteksti), kysyy hyväksynnät
+```
+
+WAF otetaan haluttaessa käyttöön erikseen (`-c wafEnabled=true` +
+`cdk bootstrap aws://<tili>/us-east-1`) — silloin syntyy yhdeksäs stack
+`tampere360-prod-waf` us-east-1:een.
+
+### Vahvistettu 20.9.2026
+
+- `npx cdk synth -c env=prod -c wafEnabled=true` → 9 stackia, WAF mukana
+  us-east-1:ssä; Frontendin `WebACLId` tulee cross-region-exporttina.
+- Frontend-template: aliases `tampere247.online` + `www.tampere247.online`,
+  `AcmCertificateArn` (us-east-1), `TLSv1.2_2021`, 4 Route 53 -tietuetta.
+- API-template: `AWS::CertificateManager::Certificate` +
+  `AWS::ApiGatewayV2::DomainName` + `ApiMapping` (DependsOn `DefaultStage`) +
+  A/AAAA-tietueet.
+- Dev-synth ennallaan: ei Aliase, ei API-domainia, ei WAF:ia, CORS `*` →
+  dev-ympäristöön ei kohdistu muutoksia.
+- Testit: `infra/test/config.test.ts` (6 testiä) valvoo domain-konfiguraation
+  johdonmukaisuutta (domainit hosted zonen sisällä, sertifikaatti us-east-1,
+  API aliverkkotunnus, `frontendOrigins`). Koko sarja 69 testiä ✅, ESLint ✅.
+
   indeksi per deploy) tai luomalla taulu uudelleen.

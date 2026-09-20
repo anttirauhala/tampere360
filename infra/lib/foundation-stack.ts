@@ -27,7 +27,10 @@ export class FoundationStack extends cdk.Stack {
       alias: resourceName(appContext.envName, 'data-key'),
       description: 'Tampere360 — tapahtuma- ja käyttäjädatan salausavain',
       enableKeyRotation: true,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      // prod: avainta EI saa poistaa stackin mukana — muuten myös dataan
+      // (DynamoDB/S3/SQS) käsiksi pääsy menetetään pysyvästi.
+      removalPolicy:
+        appContext.envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
   }
 }
