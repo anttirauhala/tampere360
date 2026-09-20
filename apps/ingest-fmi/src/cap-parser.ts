@@ -27,6 +27,25 @@ export interface ParsedCapAlert {
   areas: { description: string; polygon?: string }[];
   /** Onko varoitus relevantti Tampere/Pirkanmaa-seudulla */
   relevantForTampereRegion: boolean;
+  /**
+   * CAP-viestin tyyppi: Alert | Update | Cancel | Error.
+   * **Elinkaaren kannalta ratkaiseva kenttä:** FMI lähettää peruutuksen
+   * muodossa `<status>Actual</status>` + `<msgType>Cancel</msgType>`, joten
+   * pelkkä `alert.status` ei kerro peruutuksesta.
+   */
+  msgType?: string;
+  /**
+   * Tapahtuman elinkaaritila sisäisessä muodossa
+   * (`ACTIVE` | `ENDED` | `CANCELLED`) — johdettu msgType/status-kentistä.
+   */
+  status: string;
+  /**
+   * CAP-referenssit: varoituksen, jota tämä viesti koskee, identifierit.
+   * FMI lähettää peruutuksen **uudella** identifierillä ja viittaa
+   * alkuperäiseen tässä — siksi peruutus on kohdistettava viitattuun
+   * tunnisteeseen, jotta se osuu samaan tilanteeseen (canonicalKey).
+   */
+  referencedIdentifiers: string[];
 }
 
 const parser = new XMLParser({
@@ -34,6 +53,11 @@ const parser = new XMLParser({
   attributeNamePrefix: '@_',
   textNodeName: '#text',
 });
+
+/** Palauttaa merkkijonon vain jos se on epätyhjä (muuten undefined). */
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
 
 interface RssItem {
   title?: string;
@@ -91,6 +115,12 @@ export function parseCapXml(xml: string): ParsedCapAlert | null {
       /Pirkanmaa|Tampere|Tamperee/i.test(a.description),
     );
 
+    // HUOM: CAP 1.2:ssa `msgType` ja `references` ovat **alert-tasolla**
+    // (status-kentän sisaruksia), eivät `info`-elementin sisällä. Luetaan
+    // molemmat tasot, jotta eri tuottajien variaatiot toimivat.
+    const msgType = readString(alert.msgType) ?? readString(info.msgType);
+    const references = readString(alert.references) ?? readString(info.references);
+
     return {
       identifier: alert.identifier as string,
       sent: alert.sent as string,
@@ -105,6 +135,9 @@ export function parseCapXml(xml: string): ParsedCapAlert | null {
       instruction: info.instruction as string | undefined,
       areas,
       relevantForTampereRegion,
+      msgType,
+      status: capLifecycleStatus(msgType, readString(alert.status)),
+      referencedIdentifiers: parseReferences(references),
     };
   } catch {
     return null;
@@ -154,4 +187,35 @@ export function capStatusToInternal(capStatus?: string): string {
     default:
       return 'ACTIVE';
   }
+}
+
+/**
+ * CAP-viestin tyyppi (info/msgType) → elinkaaritila.
+ * Cancel = varoitus on peruttu/päättynyt (FMI käyttää tätä myös
+ * "POISTETTU"-syötteilleen).
+ */
+export function capMsgTypeToInternal(msgType?: string): string {
+  return (msgType ?? '').toUpperCase() === 'CANCEL' ? 'CANCELLED' : 'ACTIVE';
+}
+
+/**
+ * Elinkaaritila CAP-varoituksesta: msgType voittaa alert.statusin.
+ *
+ * FMI:n todellinen muoto peruutukselle on `<status>Actual</status>` +
+ * `<msgType>Cancel</msgType>` — pelkkä status-kenttä ei siis riitä.
+ */
+export function capLifecycleStatus(msgType?: string, alertStatus?: string): string {
+  const byMsgType = capMsgTypeToInternal(msgType);
+  return byMsgType !== 'ACTIVE' ? byMsgType : capStatusToInternal(alertStatus);
+}
+
+/**
+ * Jäsentää CAP-referenssit ("sender,identifier,sent,sender,identifier,…").
+ * Palauttaa viitatut identifierit ilman lähettäjän OID:ia ja aikaleimoja.
+ */
+export function parseReferences(references?: string): string[] {
+  if (!references) return [];
+  const tokens = references.split(',').map((token) => token.trim());
+  const sender = tokens[0];
+  return tokens.filter((token) => token.startsWith('urn:oid:') && token !== sender);
 }

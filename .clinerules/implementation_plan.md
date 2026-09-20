@@ -772,6 +772,91 @@ WAF otetaan haluttaessa käyttöön erikseen (`-c wafEnabled=true` +
   API aliverkkotunnus, `frontendOrigins`) **sekä kustannussuojien rajoja**
   (throttlaus ≤ 20 req/s, concurrency ≤ 10, hälytysrajat alle throttlen
   maksimin). `apps/api/src/params.test.ts` (6 testiä) valvoo `limit`-parametria.
-  Koko sarja 84 testiä ✅, ESLint ✅.
+  Koko sarja 111 testiä ✅, ESLint ✅.
 
   indeksi per deploy) tai luomalla taulu uudelleen.
+
+## 22. Tilanteiden elinkaari ja vanhentuminen (20.9.2026)
+
+**Havaittu ongelma:** dev-ympäristössä säävaroitus näkyi "aktiivisena" vielä
+7 tuntia päättymisensä jälkeen:
+
+| Kenttä | Arvo |
+|---|---|
+| `event.title.fi` | Tuulivaroitus maa-alueille |
+| `validity.startsAt` | 2026-09-20T05:53:15Z |
+| **`validity.endsAt`** | **2026-09-20T10:00:00Z** |
+| `status` klo 17:00 | **ACTIVE**, ei `expiresAt`-TTL:ää |
+
+**Kaksi juurisyytä:**
+
+1. Normalisoija kirjoitti elinkaaritilan kovakoodattuna
+   (`status: 'ACTIVE', lifecycle: 'ACTIVE'`) — lähteen oma tila ohitettiin.
+2. FMI:n CAP-varoituksen elinkaari on **`msgType`-kentässä alert-tasolla**
+   (ei `info`-sisällä, ei `alert.status`issa): peruutus lähetetään muodossa
+   `<status>Actual</status>` + `<msgType>Cancel</msgType>` ja **uudella
+   identifierillä**, joka viittaa alkuperäiseen `<references>`-kentässä.
+   Lisäksi FMI **poistaa** päättyneen varoituksen syötteestä ("POISTETTU"),
+   joten lopetustapahtumaa ei usein saavu lainkaan → pelkkä tilakentän
+   käyttö ei riitä.
+
+**Toteutettu korjaus (C = tilakenttä + aikapohjainen siivous):**
+
+| Osa | Muutos |
+|---|---|
+| `apps/ingest-fmi/src/cap-parser.ts` | `msgType` ja `references` luetaan **alert-tasolta** (CAP 1.2), `status` johdetaan (`Cancel → CANCELLED`) ja viitatut identifierit parsitaan |
+| `apps/ingest-fmi/src/handler.ts` | Peruutus kohdistetaan `<references>`-kentän viittaamaan identifieriin → **sama `canonicalKey`** kuin alkuperäisellä varoituksella |
+| `apps/normalize/src/event-status.ts` (uusi) | Lähteen elinkaaritila → `status`/`lifecycle`; vain `FMI_CAP` tulkitaan toistaiseksi (muiden `status`-kentillä voi olla eri merkitys) |
+| `apps/situation-expiry/` (uusi) | Scheduler **5 min**: skannaa Situations ja sulkee ACTIVE-rivit, kun (a) `validity.endsAt` on ohitettu tai (b) samalla `canonicalKey`llä on terminaalirivi; suljetulle riville `expiresAt`-TTL (30 pv) |
+| `apps/api/src/handler.ts` | Kategoria- ja aluehaut (`gsi2`, `gsi3`) suodatetaan nyt `FilterExpression`illä statuksen mukaan — aiemmin `status`-parametri jätettiin huomiotta, joten päättyneet tilanteet olisivat näkyneet kategorialistoilla |
+
+**Miksi siivous eikä pelkkä tilakenttä:** FMI poistaa varoituksen syötteestä
+kokonaan, joten järjestelmä ei koskaan saa lopetusviestiä. Aikapohjainen
+siivous kattaa myös lähteet, jotka eivät päivitä tapahtumaa päättymisen
+jälkeen.
+
+**Kustannus:** skannaus ~50–100 rivin taulusta 5 min välein ≈ 14 000 RRU/vrk
+≈ 0,004 $/vrk. Ei uutta GSI:tä (DynamoDB sallii vain yhden indeksimuutoksen
+per deploy, ks. §20).
+
+**Testit:** `cap-parser.test.ts` (10), `event-status.test.ts` (4),
+`expiry.test.ts` (10) ja `infra/test/config.test.ts` (+1 siivousvälille).
+Koko sarja 111 testiä ✅, ESLint ✅.
+
+**Tunnettu rajoitus:** peruutus luo *uuden* tilannerivin (uusi `situationId`)
+samalla `canonicalKey`lla; vanha ACTIVE-rivi suljetaan siivouksella ≤5 min
+kuluessa. Tilanteen päivittäminen paikallaan (`SituationUpdated` /
+`SituationEnded` samalle riville) vaatisi `canonicalKey`-indeksin — myöhempi
+vaihe, ja se on toteutettava vaiheittain GSI-rajoituksen vuoksi.
+
+## 23. Poliisin tiedotelinkki (20.9.2026)
+
+Poliisin RSS sisältää jokaiselle tiedotteelle `<link>`-kentän poliisi.fi:hin,
+mutta syötteen `<description>` on **aina vain otsikko uudelleen**
+(`<p>otsikko</p>`, 100/100 itemiä 20.9.2026). Linkki on siis ainoa oikea
+lisätieto — infotekstinä näkyi turha toisto.
+
+| Osa | Muutos |
+|---|---|
+| `apps/normalize/src/source-fields.ts` (uusi) | `stripHtml`, `isSafeHttpUrl`, `extractSourceUrl` (vain http/https), `descriptionIfDistinct` (jättää otsikkotoiston pois) |
+| `apps/normalize/src/handler.ts` | `event.source.url` = lähteen linkki; POLICE-infoteksti jää pois, kun se toistaisi otsikon |
+| `apps/api/src/links.ts` (uusi) | `situationSourceUrl`: `source.url` → `sourceId` (jos se on URL) → `null` |
+| `apps/api/src/handler.ts` | `url` mukaan `/v1/situations`-listavastaukseen |
+| `apps/web` | `sourceLink` (vain http(s) → klikattava linkki), `distinctDescription` (piilottaa otsikkotoiston myös vanhoilta riveiltä), linkki Nyt-sivun koostekortilla ja tyyppisivulla: *"Lue koko tiedote: poliisi.fi ↗"* |
+
+**Miksi `source.url` eikä infoteksti:** mallissa oli jo `SourceRef.url`
+("URL alkuperäiseen sisältöön"), ja linkki renderöidään UI:ssa klikattavana.
+Pelkkä URL-merkkijono infotekstissä olisi näkynyt pelkkänä tekstinä.
+
+**Ei backfilliä tarvita:** poliisin RSS:n `guid` on *sama URL* kuin `<link>`,
+ja adapteri käyttää `guid`:ia `sourceId`:nä → kaikilla 34 vanhalla poliisirivillä
+(dev, tarkistettu 20.9.2026) `sourceId` on `https://poliisi.fi/-/...`, joten API
+johtaa linkin siitä. Tämä on dokumentoitu `links.ts`:ssä ja testattu.
+
+**Testit:** `source-fields.test.ts` (8), `links.test.ts` (6), `format.test.ts`
+(+11 → 19). Koko sarja **130 testiä** ✅, ESLint ✅.
+
+**Tietoturva:** vain http(s)-osoitteet renderöidään linkkinä
+(`javascript:`/`data:`-URL:t hylätään sekä normalisoinnissa että UI:ssa), ja
+ulkoiset linkit avataan `target="_blank" rel="noopener noreferrer"`.
+

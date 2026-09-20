@@ -68,6 +68,42 @@ export function formatAge(iso: string | undefined | null): string {
   return `${Math.floor(hours / 24)} vrk sitten`;
 }
 
+/**
+ * Infoteksti vain jos se tuo lisätietoa.
+ *
+ * RSS-syötteissä `<description>` on usein sama teksti kuin otsikko —
+ * poliisin syötteessä aina (<p>otsikko</p>). Silloin teksti näkyisi
+ * käyttäjälle turhana toistona, joten se jätetään pois. Tämä koskee myös
+ * vanhoja rivejä, joissa toisto on jo tallennettu kantaan.
+ */
+export function distinctDescription(title: string, description: string | null | undefined): string {
+  const text = description ?? '';
+  if (!text) return '';
+  return text === title ? '' : text;
+}
+
+/**
+ * Lähteen lisätietolinkki (esim. poliisin tiedote poliisi.fi:ssä) turvallisesti
+ * renderoitavaksi.
+ *
+ * Palauttaa `null`, jos osoite puuttuu tai ei ole http(s) — esimerkiksi
+ * `javascript:`-osoitetta ei koskaan renderöidä linkkinä. Otsikko on
+ * verkkotunnus ilman `www.`-etuliitettä (esim. "poliisi.fi").
+ */
+export function sourceLink(
+  url: string | null | undefined,
+): { href: string; label: string } | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    const label = parsed.hostname.replace(/^www\./, '');
+    return label ? { href: parsed.toString(), label } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Tilanteen aikakentät sellaisina kuin API ne palauttaa. */
 export interface SituationTimes {
   startsAt?: string | null;

@@ -182,3 +182,14 @@ export const QUERY_RESERVED_CONCURRENCY = 5;
  */
 export const API_REQUEST_SPIKE_PER_5MIN = 1000; // ≈3,3 req/s jatkuvaa
 export const API_CLIENT_ERRORS_PER_5MIN = 100; // 429-throttlaukset + virhepyynnöt
+
+/**
+ * Tilanteiden vanhentumisen siivousväli minuutteina (arkkitehtuuri §5).
+ *
+ * Lähteet eivät aina ilmoita tapahtuman päättymistä (FMI poistaa päättyneen
+ * varoituksen syötteestä), joten ACTIVE-tilanteet, joiden `validity.endsAt` on
+ * ohitettu tai joiden `canonicalKey`llä on terminaalitilainen rivi, suljetaan
+ * ajastetusti. Pidetään selvästi alle 30 minuutin, jotta käyttöliittymän
+ * "aktiivinen"-tila ei ehdi vanhentua näkyvästi.
+ */
+export const EXPIRY_SWEEP_MINUTES = 5;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatAge, formatTime, sanitizeText } from './format';
+import { distinctDescription, formatAge, formatTime, sanitizeText, sourceLink } from './format';
 
 describe('sanitizeText', () => {
   it('palauttaa tyhjän merkkijonolle, jonka arvo puuttuu', () => {
@@ -74,5 +74,53 @@ describe('formatAge', () => {
     expect(formatAge(new Date(Date.now() - 5 * 60_000).toISOString())).toBe('5 min sitten');
     expect(formatAge(new Date(Date.now() - 3 * 3_600_000).toISOString())).toBe('3 h sitten');
     expect(formatAge(new Date(Date.now() - 2 * 86_400_000).toISOString())).toBe('2 vrk sitten');
+  });
+});
+
+describe('sourceLink', () => {
+  it('muodostaa linkin lähteen lisätieto-osoitteesta', () => {
+    // Poliisin RSS:n link-kenttä → klikattava linkki infotekstin yhteyteen.
+    expect(sourceLink('https://poliisi.fi/-/jalankulkija-kuoli-tampereella')).toEqual({
+      href: 'https://poliisi.fi/-/jalankulkija-kuoli-tampereella',
+      label: 'poliisi.fi',
+    });
+  });
+
+  it('näyttää otsikkona verkkotunnuksen ilman www-etuliitettä', () => {
+    expect(sourceLink('https://www.poliisi.fi/tiedote')?.label).toBe('poliisi.fi');
+  });
+
+  it('ei hyväksy muita protokollia kuin http(s)', () => {
+    // Regressiosuoja: lähteestä tullutta javascript:-osoitetta ei saa
+    // koskaan renderoitua linkkinä.
+    expect(sourceLink('javascript:alert(1)')).toBeNull();
+    expect(sourceLink('data:text/html,<script>1</script>')).toBeNull();
+    expect(sourceLink('ftp://poliisi.fi')).toBeNull();
+  });
+
+  it('palauttaa null puuttuvalle tai kelvottomalle osoitteelle', () => {
+    expect(sourceLink(undefined)).toBeNull();
+    expect(sourceLink(null)).toBeNull();
+    expect(sourceLink('')).toBeNull();
+    expect(sourceLink('ei-url')).toBeNull();
+  });
+});
+
+describe('distinctDescription', () => {
+  it('jättää pois kuvauksen, joka toistaa otsikon (vanhat poliisirivit)', () => {
+    const title = 'Jalankulkija kuoli liikenneonnettomuudessa Tampereella';
+    expect(distinctDescription(title, title)).toBe('');
+  });
+
+  it('säilyttää kuvauksen, joka tuo lisätietoa', () => {
+    expect(distinctDescription('Otsikko', 'Poliisi tutkii tapausta.')).toBe(
+      'Poliisi tutkii tapausta.',
+    );
+  });
+
+  it('palauttaa tyhjän, kun kuvausta ei ole', () => {
+    expect(distinctDescription('Otsikko', undefined)).toBe('');
+    expect(distinctDescription('Otsikko', null)).toBe('');
+    expect(distinctDescription('Otsikko', '')).toBe('');
   });
 });

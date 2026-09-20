@@ -1,7 +1,7 @@
 import { useSituations } from '../api/queries';
 import { CATEGORY_EMOJI, CATEGORY_LABELS, type Category } from '../api/types';
 import { SeverityDot } from '../components/SeverityDot';
-import { formatCompactTime, sanitizeText } from '../lib/format';
+import { distinctDescription, formatCompactTime, sanitizeText, sourceLink } from '../lib/format';
 
 interface Props {
   category: Category;
@@ -50,7 +50,9 @@ export function CategoryPage({ category }: Props) {
         <div className="situation-list">
           {items.map((item) => {
             const time = formatCompactTime(item);
-            const description = sanitizeText(item.description);
+            const title = sanitizeText(item.title) || 'Tuntematon tapahtuma';
+            const description = distinctDescription(title, sanitizeText(item.description));
+            const link = sourceLink(item.url);
             return (
               <article
                 key={item.situationId}
@@ -59,11 +61,22 @@ export function CategoryPage({ category }: Props) {
                 <div className="situation-row__head">
                   <h2 className="situation-row__title">
                     <SeverityDot severity={item.severity} />
-                    {sanitizeText(item.title) || 'Tuntematon tapahtuma'}
+                    {title}
                   </h2>
                   {time && <p className="situation-row__time">{time}</p>}
                 </div>
                 {description && <p className="situation-row__desc">{description}</p>}
+                {/* Lähteen oma lisätietolinkki (esim. poliisin tiedote). */}
+                {link && (
+                  <a
+                    className="situation-row__link"
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Lue koko tiedote: {link.label} ↗
+                  </a>
+                )}
               </article>
             );
           })}

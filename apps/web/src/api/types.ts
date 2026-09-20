@@ -44,6 +44,8 @@ export interface SituationSummary {
   title: string;
   /** Infoteksti (fi) listariviä varten; null jos lähde ei anna sitä. */
   description?: string | null;
+  /** Lähdejärjestelmän lisätietolinkki (esim. poliisin tiedote); null jos ei ole. */
+  url?: string | null;
 }
 
 export interface SituationListResponse {

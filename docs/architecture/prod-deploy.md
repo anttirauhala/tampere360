@@ -13,6 +13,10 @@ eivät jaa yhtään resurssia.
 
 Tämä dokumentti on **runbook**: komennot voi ajaa sellaisenaan.
 
+> **Kustannuspiikki / API pitää sulkea heti?** Katso erillinen hätäohje:
+> [`docs/emergency.md`](./emergency.md) — throttlen kiristys sekunneissa,
+> Lambda kiinni, keräysputken ja frontendin pysäytys sekä palautus.
+
 ---
 
 ## 1. Esiedellytykset (tarkistettu 20.9.2026)
@@ -49,7 +53,7 @@ npx cdk deploy --all -c env=prod -c wafEnabled=true --region eu-north-1
 | `tampere360-prod-data` | eu-north-1 | S3 raw (RETAIN), DynamoDB Situations / SourceEvents / IngestionState (RETAIN, PITR, deletionProtection) |
 | `tampere360-prod-eventing` | eu-north-1 | EventBridge custom bus + arkisto |
 | `tampere360-prod-ingestion` | eu-north-1 | 4 aktiivista adapteria (FMI, Tampere Traffic, Poliisi, Nysse) + Scheduler-ajastukset + DLQ:t, normalisointi-Lambda |
-| `tampere360-prod-event-processing` | eu-north-1 | situation-processor + domain event DLQ |
+| `tampere360-prod-event-processing` | eu-north-1 | situation-processor + domain event DLQ + **`situation-expiry`** (ajastettu vanhentuneiden tilanteiden sulkeminen, 5 min) |
 | `tampere360-prod-api` | eu-north-1 | HTTP API + query-Lambda + **ACM-sertifikaatti ja custom domain `api.tampere247.online`** |
 | `tampere360-prod-frontend` | eu-north-1 | S3 web-bucket (RETAIN) + CloudFront (**tampere247.online**, **www**, TLS 1.2_2021) + **Route 53 A/AAAA** |
 | `tampere360-prod-monitoring` | eu-north-1 | CloudWatch-dashboard + hälytykset + SNS |
@@ -259,6 +263,18 @@ vahinkopoisto ei hävitä dataa.
    terminaalissa:
    `VALUE=$(aws ssm get-parameter --name /tampere360/dev/sources/nysse/api-key --with-decryption --query Parameter.Value --output text)`
    → `aws ssm put-parameter --name /tampere360/prod/sources/nysse/api-key --value "$VALUE" --type SecureString --overwrite`
+9. **Vanhentuneen varoituksen pitäisi hävitä itsestään.** Lähteet eivät aina
+   ilmoita päättymistä (FMI *poistaa* päättyneen varoituksen syötteestä), joten
+   `situation-expiry`-Lambda sulkee ACTIVE-tilanteet 5 minuutin välein, kun
+   `validity.endsAt` on ohitettu tai samalla `canonicalKey`llä on
+   terminaalitilainen rivi. Jos vanha varoitus näkyy yhä:
+   ```bash
+   aws scheduler get-schedule --region eu-north-1 --group-name default \
+     --name tampere360-prod-situation-expiry --query '{State:State,Expr:ScheduleExpression}'
+   aws logs tail /aws/lambda/tampere360-prod-situation-expiry --since 30m --region eu-north-1
+   ```
+   Lambdan loki kertoo (`Siivous valmis`), montako riviä tarkistettiin ja
+   suljettiin. Ks. myös `.clinerules/implementation_plan.md` §22.
 
 ---
 

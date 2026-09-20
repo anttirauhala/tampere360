@@ -14,6 +14,9 @@ import type {
 } from '@tampere360/event-contracts';
 import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
 
+import { sourceStatus } from './event-status';
+import { descriptionIfDistinct, extractSourceUrl } from './source-fields';
+
 const logger = createLogger({ service: 'normalize', environment: process.env['ENVIRONMENT'] ?? 'dev' });
 const eventbridge = new EventBridgeClient({});
 
@@ -224,11 +227,15 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
     // Yksinkertainen päättely: onko otsikossa vakava = MAJOR, muuten INFO
 const isMajor =
   /vakava|kuoli|kuollut|kuolema|kadonnut|kadonnut henkilö|etsitään|puukko|puukotus|puukotettu|ase|ampuminen|ammuttu|uhka|uhkaus|väkivalta|ryöstö|sieppaus|kaappaus|onnettomuus|räjähdys|tulipalo|hätä|havaintoja|etsii|pyytää havaintoja/i.test(title);
+    // RSS:n <description> on poliisin syötteessä aina sama kuin otsikko
+    // (<p>otsikko</p>) → ei toisteta sitä infotekstinä. Lisätiedot ovat
+    // linkin takana (event.source.url), jonka UI näyttää klikattavana.
+    const description = descriptionIfDistinct(raw, title);
     return {
       type: 'POLICE_ANNOUNCEMENT' as const, category: 'POLICE' as const,
       severity: isMajor ? 'MAJOR' : 'INFO',
       title: { fi: title },
-      description: raw?.description ? { fi: String(raw.description).replace(/<[^>]*>/g, '') } : undefined,
+      description: description ? { fi: description } : undefined,
       attribution: { name: 'Sisä-Suomen poliisilaitos', required: true, url: 'https://poliisi.fi' },
       areaCodes: ['TAMPERE'] as string[],
       location: { municipality: null, latitude: null, longitude: null },
@@ -264,16 +271,30 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
         const now = new Date().toISOString();
         const eventId = ulid();
         const m = mapRawToFields(parsedEvent.source, raw);
+        // Lähteen oma elinkaaritila (esim. FMI CAP: peruttu varoitus) —
+        // aiemmin tämä oli kovakoodattu 'ACTIVE', joten mikään tilanne ei
+        // koskaan päättynyt.
+        const status = sourceStatus(parsedEvent.source, raw);
+        // Lähteen lisätietolinkki (esim. poliisin tiedote poliisi.fi:ssä).
+        // Viedään mallin source.url-kenttään, jotta UI voi näyttää sen
+        // klikattavana — ei infotekstinä.
+        const sourceUrl = extractSourceUrl(raw);
         const locationMethod = 'locationMethod' in m ? m.locationMethod : undefined;
         const normalized: Tampere360Event = {
           schemaVersion: '1.0', id: eventId,
           canonicalKey: `${parsedEvent.source}:${parsedEvent.sourceId}`,
           processingKey: parsedEvent.processingKey,
-          source: { system: parsedEvent.source, sourceId: parsedEvent.sourceId, fetchedAt: ingestMessage.batch.fetchedAt },
+          source: {
+            system: parsedEvent.source,
+            sourceId: parsedEvent.sourceId,
+            ...(sourceUrl ? { url: sourceUrl } : {}),
+            fetchedAt: ingestMessage.batch.fetchedAt,
+          },
           type: m.type as Tampere360Event['type'],
           category: m.category as Tampere360Event['category'],
           severity: m.severity as Tampere360Event['severity'],
-          status: 'ACTIVE', lifecycle: 'ACTIVE',
+          status,
+          lifecycle: status,
           title: m.title, description: m.description,
           location: {
             municipality: m.location?.municipality ?? null, district: null, address: null,

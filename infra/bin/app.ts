@@ -158,6 +158,7 @@ new MonitoringStack(app, `${prefix}-monitoring`, {
     ...ingestion.adapterFunctions,
     { name: 'normalize', fn: ingestion.normalizeFunction },
     { name: 'situation-processor', fn: processing.situationProcessorFunction },
+    { name: 'situation-expiry', fn: processing.expiryFunction },
     { name: 'api', fn: api.queryFunction },
   ],
   httpApi: api.httpApi,

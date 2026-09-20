@@ -1,0 +1,12 @@
+{
+  "name": "@tampere360/situation-expiry",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/handler.js",
+  "scripts": { "build": "tsc -p tsconfig.json", "clean": "rm -rf dist" },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "@tampere360/observability": "0.1.0"
+  }
+}

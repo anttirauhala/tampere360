@@ -20,6 +20,7 @@ import { createLogger } from '@tampere360/observability';
 import type { APIGatewayProxyResultV2, APIGatewayProxyEventV2 } from 'aws-lambda';
 
 import { parseLimit } from './params';
+import { situationSourceUrl } from './links';
 
 const logger = createLogger({ service: 'api', environment: process.env['ENVIRONMENT'] ?? 'dev' });
 const client = new DynamoDBClient({});
@@ -55,12 +56,26 @@ async function hSituations(path: string, event: APIGatewayProxyEventV2): Promise
   } else {
     idx = 'gsi1-status-startsAt'; pkName = 'status'; pkVal = status;
   }
+
+  const names: Record<string, string> = { '#pk': pkName };
+  const values: Record<string, unknown> = { ':pk': pkVal };
+  // gsi2 (category) ja gsi3 (municipality) eivät sisällä statusta avaimessa,
+  // joten ACTIVE-suodatus tehdään FilterExpressionillä. Ilman tätä myös
+  // päättyneet tilanteet näkyisivät kategorialistalla (ne jäävät tauluun TTL:n
+  // ajaksi — ks. situation-expiry, joka sulkee vanhentuneet).
+  const filterByStatus = pkName !== 'status';
+  if (filterByStatus) {
+    names['#status'] = 'status';
+    values[':status'] = status;
+  }
+
   const expr: Record<string, unknown> = {
     TableName: process.env['SITUATIONS_TABLE_NAME'],
     IndexName: idx,
     KeyConditionExpression: '#pk = :pk',
-    ExpressionAttributeNames: { '#pk': pkName },
-    ExpressionAttributeValues: { ':pk': pkVal },
+    ...(filterByStatus ? { FilterExpression: '#status = :status' } : {}),
+    ExpressionAttributeNames: names,
+    ExpressionAttributeValues: values,
     Limit: limit,
     ScanIndexForward: false,
   };
@@ -80,6 +95,9 @@ async function hSituations(path: string, event: APIGatewayProxyEventV2): Promise
       title: i.event?.title?.fi ?? '',
       // Infoteksti yhden rivin esitysta varten (Nyt-sivun listarivit).
       description: i.event?.description?.fi ?? null,
+      // Lähdejärjestelmän lisätietolinkki (esim. poliisin tiedote poliisi.fi:ssä):
+      // UI näyttää sen klikattavana infotekstin yhteydessä.
+      url: situationSourceUrl(i.event),
     }));
     const nc = r.LastEvaluatedKey
       ? Buffer.from(JSON.stringify(r.LastEvaluatedKey)).toString('base64')

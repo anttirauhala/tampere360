@@ -21,13 +21,15 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as eventsTargets from 'aws-cdk-lib/aws-events-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as scheduler from 'aws-cdk-lib/aws-scheduler';
+import * as schedulerTargets from 'aws-cdk-lib/aws-scheduler-targets';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { Construct } from 'constructs';
 
 import { EVENT_SOURCE } from '@tampere360/event-contracts';
 
 import type { AppContext } from './config';
-import { resourceName } from './config';
+import { EXPIRY_SWEEP_MINUTES, resourceName } from './config';
 
 export interface EventProcessingStackProps extends cdk.StackProps {
   appContext: AppContext;
@@ -41,6 +43,8 @@ export class EventProcessingStack extends cdk.Stack {
   public readonly situationProcessorFunction: lambdaNodejs.NodejsFunction;
   /** Domain Event Delivery DLQ (§12.4) valvontaa varten. */
   public readonly domainEventDeliveryDlq: sqs.Queue;
+  /** Vanhentuneiden tilanteiden siivous-Lambda (§5 elinkaari). */
+  public readonly expiryFunction: lambdaNodejs.NodejsFunction;
 
   constructor(scope: Construct, id: string, props: EventProcessingStackProps) {
     super(scope, id, props);
@@ -99,6 +103,43 @@ export class EventProcessingStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'SituationProcessorFunctionName', {
       value: this.situationProcessorFunction.functionName,
+    });
+
+    // --- Tilanteiden vanhentuminen (§5 elinkaari) ---------------------------
+    // Lähteet eivät aina ilmoita päättymistä: FMI poistaa päättyneen varoituksen
+    // syötteestä, joten lopetustapahtumaa ei koskaan saavu. Ilman tätä siivousta
+    // vanhentuneet tilanteet jäisivät ACTIVE-tilaan 90 päivän TTL:ään asti ja
+    // näkyisivät käyttöliittymässä "aktiivisina".
+    //
+    // Ei omaa DLQ:ta: siivous on idempotentti ja toistuu
+    // EXPIRY_SWEEP_MINUTES minuutin välein, joten yksittäinen virhe korjaantuu
+    // seuraavalla ajolla (virheet näkyvät Lambda-errors-hälytyksessä).
+    this.expiryFunction = new lambdaNodejs.NodejsFunction(this, 'SituationExpiryFunction', {
+      entry: path.join(__dirname, '../../apps/situation-expiry/src/handler.ts'),
+      handler: 'handler',
+      functionName: resourceName(appContext.envName, 'situation-expiry'),
+      description:
+        'Tampere360: sulkee vanhentuneet tilanteet (validity.endsAt ohitettu tai lähde perunut)',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: 256,
+      timeout: cdk.Duration.seconds(60),
+      environment: {
+        ENVIRONMENT: appContext.envName,
+        SITUATIONS_TABLE_NAME: situationsTable.tableName,
+        LOG_LEVEL: 'INFO',
+      },
+    });
+    situationsTable.grantReadWriteData(this.expiryFunction);
+
+    new scheduler.Schedule(this, 'SituationExpirySchedule', {
+      scheduleName: resourceName(appContext.envName, 'situation-expiry'),
+      schedule: scheduler.ScheduleExpression.rate(cdk.Duration.minutes(EXPIRY_SWEEP_MINUTES)),
+      description: `Sulje vanhentuneet tilanteet ${EXPIRY_SWEEP_MINUTES} min välein`,
+      target: new schedulerTargets.LambdaInvoke(this.expiryFunction, { retryAttempts: 2 }),
+    });
+
+    new cdk.CfnOutput(this, 'SituationExpiryFunctionName', {
+      value: this.expiryFunction.functionName,
     });
   }
 }

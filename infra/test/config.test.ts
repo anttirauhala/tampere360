@@ -5,6 +5,7 @@ import {
   API_REQUEST_SPIKE_PER_5MIN,
   API_THROTTLE,
   ENVIRONMENT_DOMAINS,
+  EXPIRY_SWEEP_MINUTES,
   QUERY_RESERVED_CONCURRENCY,
   frontendDomainNames,
   frontendOrigins,
@@ -73,5 +74,17 @@ describe('API-kustannussuojat', () => {
     // selvästi pienempi, jotta se ehtii kertoa väärinkäytöstä ajoissa.
     expect(API_REQUEST_SPIKE_PER_5MIN).toBeLessThan(API_THROTTLE.rateLimit * 300);
     expect(API_CLIENT_ERRORS_PER_5MIN).toBeLessThan(API_THROTTLE.rateLimit * 300);
+  });
+});
+
+/**
+ * Tilanteiden elinkaari: vanhentuneet tilanteet pitää sulkea ajastetusti,
+ * koska lähteet eivät aina ilmoita päättymistä (FMI poistaa varoituksen
+ * syötteestä). Ilman siivousta vanha varoitus näkyisi "aktiivisena" päiviä.
+ */
+describe('tilanteiden vanhentuminen', () => {
+  it('siivous ajetaan selvästi alle 30 minuutin välein', () => {
+    expect(EXPIRY_SWEEP_MINUTES).toBeGreaterThan(0);
+    expect(EXPIRY_SWEEP_MINUTES).toBeLessThanOrEqual(15);
   });
 });

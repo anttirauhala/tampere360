@@ -12,7 +12,7 @@ import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { createLogger } from '@tampere360/observability';
 import { fetchWithRetry, saveIngestionCheckpoint, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
 
-import { parseCapXml, parseRssFeed } from './cap-parser';
+import { type ParsedCapAlert, parseCapXml, parseRssFeed } from './cap-parser';
 
 const logger = createLogger({
   service: 'ingest-fmi',
@@ -24,6 +24,18 @@ const s3 = new S3Client({});
 const sqs = new SQSClient({});
 
 const RSS_URL = 'https://alerts.fmi.fi/cap/feed/rss_fi-FI.rss';
+
+/**
+ * Peruutusviesti (msgType=Cancel) tulee FMI:ltä **uudella** identifierillä ja
+ * viittaa alkuperäiseen varoitukseen `<references>`-kentässä. Kohdistetaan
+ * peruutus viitattuun tunnisteeseen, jotta se osuu samaan canonicalKeyhin
+ * (= samaan tilanteeseen) kuin alkuperäinen varoitus — muuten peruutuksesta
+ * syntyisi irrallinen tapahtuma eikä vanha varoitus koskaan päättyisi.
+ */
+function cancelTargetId(parsed: ParsedCapAlert): string {
+  const referenced = parsed.referencedIdentifiers[0];
+  return parsed.status === 'CANCELLED' && referenced ? referenced : parsed.identifier;
+}
 
 export async function handler(): Promise<{ status: string; itemsProcessed: number }> {
   const bucketName = process.env['RAW_BUCKET_NAME'] ?? '';
@@ -94,7 +106,7 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
       continue;
     }
 
-    const sourceId = parsed.identifier;
+    const sourceId = cancelTargetId(parsed);
     const contentHash = sha256Hex(capXml);
     const processingKey = `FMI_CAP:${sourceId}:${contentHash.slice(0, 16)}`;
 

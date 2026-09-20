@@ -473,6 +473,19 @@ a {
   text-overflow: ellipsis;
 }
 
+/* Lähdelinkki rivin alla (esim. poliisin tiedote). */
+.summary-card__item-link {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.summary-card__item-link:hover {
+  text-decoration: underline;
+}
+
 /* Mobiilissa infoteksti jää pois, jotta rivit pysyvät tiiviinä. */
 @media (max-width: 760px) {
   .summary-card__item-desc {
@@ -527,6 +540,21 @@ a {
   margin: 0;
   font-size: 12px;
   color: var(--text);
+}
+
+/* Lähdelinkki (esim. poliisin tiedote): korostevärinen, avautuu uuteen
+   välilehteen. Nämä ovat ainoat ulkoiset linkit tilanneriveillä. */
+.situation-row__link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.situation-row__link:hover {
+  text-decoration: underline;
 }
 
 /* --- Vakavuusmerkki --- */

@@ -16,7 +16,7 @@ Visit Tampere/Eventz, Nysse GTFS-RT, pelastustoimi)
   → SQS ingestion queue
   → normalisointi-Lambda (yhteinen Tampere360Event-malli)
   → EventBridge custom bus
-  → prosessointi (validointi, aluesuodatus, deduplikointi)
+  → prosessointi (validointi, aluesuodatus, deduplikointi, vanhentuminen)
   → DynamoDB
   → API Gateway HTTP API
   → React SPA (S3 + CloudFront)
@@ -138,6 +138,9 @@ varattu concurrency **5**, `limit`-oletus **20** ja hälytykset
 pyyntöpiikistä/429:stä/Lambda-throttlauksista — ks.
 [`docs/architecture/prod-deploy.md` §8](./docs/architecture/prod-deploy.md).
 Muista tilata hälytys-sähköposti SNS-topiciin `tampere360-prod-alarms`.
+
+**Kustannuspiikki?** Hätäohje API:n tiukkaan rajoittamiseen (throttle 1 req/s,
+Lambda kiinni, putki ja frontend seis, palautus): [`docs/emergency.md`](./docs/emergency.md).
 
 ```bash
 curl https://tampere247.online/config.json

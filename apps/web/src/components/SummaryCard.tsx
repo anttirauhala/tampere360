@@ -6,7 +6,7 @@ import {
   type Category,
   type SituationSummary,
 } from '../api/types';
-import { formatCompactTime, sanitizeText } from '../lib/format';
+import { distinctDescription, formatCompactTime, sanitizeText, sourceLink } from '../lib/format';
 import { SeverityDot } from './SeverityDot';
 
 interface Props {
@@ -45,15 +45,28 @@ export function SummaryCard({ category, items, total, to }: Props) {
       <ul className="summary-card__list">
         {items.map((item) => {
           const time = formatCompactTime(item);
-          const description = sanitizeText(item.description);
+          const title = sanitizeText(item.title) || 'Tuntematon tapahtuma';
+          const description = distinctDescription(title, sanitizeText(item.description));
+          const link = sourceLink(item.url);
           return (
             <li key={item.situationId} className="summary-card__item">
               <span className="summary-card__item-title">
                 <SeverityDot severity={item.severity} />
-                {sanitizeText(item.title) || 'Tuntematon tapahtuma'}
+                {title}
               </span>
               {time && <span className="summary-card__item-time">{time}</span>}
               {description && <span className="summary-card__item-desc">{description}</span>}
+              {/* Lähteen oma lisätietolinkki (esim. poliisin tiedote). */}
+              {link && (
+                <a
+                  className="summary-card__item-link"
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Lue lisää: {link.label} ↗
+                </a>
+              )}
             </li>
           );
         })}
