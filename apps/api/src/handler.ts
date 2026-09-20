@@ -131,7 +131,24 @@ async function hHealthSources(): Promise<APIGatewayProxyResultV2> {
   const now = Date.now();
   const sources = (r.Items ?? []).map((i: Record<string, unknown>) => {
     const last = i.lastSuccessfulFetch ? new Date(i.lastSuccessfulFetch as string).getTime() : 0;
-    return { source: i.source, status: (now - last > 30*60*1000) ? 'STALE' : (i.status ?? 'UNKNOWN'), lastSuccessfulFetch: i.lastSuccessfulFetch, itemsReceived: i.itemsReceived };
+    const reported = (i.status ?? 'UNKNOWN') as string;
+    // Adapterin oma virhetila (ERROR + syykoodi) on aina informatiivisempi kuin
+    // laskettu STALE: ilman tätä esimerkiksi puuttuva API-avain näkyisi
+    // "vanhentuneena", eikä syy näkyisi lainkaan (ks. ingest-nysse/checkpoint.ts).
+    const status =
+      reported === 'ERROR' || reported === 'DISABLED'
+        ? reported
+        : now - last > 30 * 60 * 1000
+          ? 'STALE'
+          : reported;
+    return {
+      source: i.source,
+      status,
+      lastSuccessfulFetch: i.lastSuccessfulFetch,
+      itemsReceived: i.itemsReceived,
+      // Lähteiden tila -näkymä (apps/web) näyttää tämän syykoodina.
+      error: i.error,
+    };
   });
   return { statusCode: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: 'OK', sources }) };
 }

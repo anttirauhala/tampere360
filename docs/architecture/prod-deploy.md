@@ -124,8 +124,15 @@ curl -s https://tampere247.online/config.json
 curl -sI https://tampere247.online | head -5          # 200, HSTS, CSP
 
 # API omalla domainilla
-curl -s "https://api.tampere247.online/v1/situations?limit=5" | head -c 400
+curl -s "https://api.tampere247.online/v1/situations?limit=5" | head -c 300
 curl -s https://api.tampere247.online/v1/health/sources
+
+# Kaikkien aktiivisten lähteiden pitäisi näkyä (4 kpl) — myös virhetilassa
+curl -s https://api.tampere247.online/v1/health/sources | python3 -c "import sys,json;[print(s['source'],s['status'],s.get('error','')) for s in json.load(sys.stdin)['sources']]"
+#   TAMPERE_TRAFFIC OK
+#   FMI_CAP OK
+#   POLICE_RSS OK
+#   NYSSE_ALERTS OK            ← jos puuttuu tai ERROR: ks. §7 kohta 7–8
 
 # Suojausotsakkeet
 curl -sI https://tampere247.online | grep -i 'strict-transport\|content-security'
@@ -231,6 +238,27 @@ vahinkopoisto ei hävitä dataa.
    sisältää `SizeRestrictions_BODY`-säännön; palvelu on toistaiseksi pelkkä
    GET-rajapinta, joten sääntö ei haittaa. Jos myöhemmin lisätään
    POST-rajapintoja, säännöt on tarkistettava uudelleen.
+7. **Lähde näkyy `Lähteiden tila` -listalla vain, jos sen tarkistuspiste on
+   kirjoitettu.** Adapterit kirjoittavat tilan IngestionState-tauluun ja
+   `/v1/health/sources` skannaa juuri sitä taulua — jos ajo päättyy ennen
+   kirjoitusta, lähde ei näy listalla lainkaan (näyttää siltä, ettei lähdettä
+   ole olemassa). Näin kävi prodissa Nyssellä 20.9.2026: scheduleri pyöri
+   minuutin välein, mutta Waltti-avain puuttui prodin SSM:stä → lokissa
+   `WARN "Nysse API-avain puuttuu SSM:sta"` (40 ms) eikä riviä syntynyt,
+   joten health näytti vain 3 lähdettä 4:n sijaan.
+   **Korjattu:** Nysse-adapteri kirjoittaa tilan *joka* ajopolulla
+   (`apps/ingest-nysse/src/checkpoint.ts` + `checkpoint.test.ts`) ja API
+   palauttaa `error`-kentän; eksplisiittinen `ERROR`/`DISABLED` ohittaa
+   lasketun `STALE`-tilan, joten syy näkyy UI:ssa asti.
+8. **Jokainen API-avain on vietävä erikseen per ympäristö.**
+   SSM-parametrit ovat ympäristökohtaisia
+   (`/tampere360/<env>/sources/<lähde>/api-key`) eikä niitä luoda CDK:lla
+   (salaisuudet eivät kuulu versionhallintaan). Uusi ympäristö ilman avainta
+   näkyy nyt tilana `ERROR / API_KEY_MISSING` Lähteiden tila -näkymässä.
+   Avaimen voi kopioida ympäristöstä toiseen ilman että arvo näkyy
+   terminaalissa:
+   `VALUE=$(aws ssm get-parameter --name /tampere360/dev/sources/nysse/api-key --with-decryption --query Parameter.Value --output text)`
+   → `aws ssm put-parameter --name /tampere360/prod/sources/nysse/api-key --value "$VALUE" --type SecureString --overwrite`
 
 ---
 

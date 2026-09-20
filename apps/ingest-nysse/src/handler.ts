@@ -9,8 +9,27 @@ import { createLogger } from '@tampere360/observability';
 import { saveIngestionCheckpoint, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
 import { transit_realtime } from 'gtfs-realtime-bindings';
 
+import { type NysseOutcome, buildNysseCheckpoint } from './checkpoint';
+
 const logger = createLogger({ service: 'ingest-nysse', source: 'NYSSE_ALERTS', environment: process.env['ENVIRONMENT'] ?? 'dev' });
 const s3 = new S3Client({}); const sqs = new SQSClient({}); const ssm = new SSMClient({});
+
+/**
+ * Kirjoittaa lähdekohtaisen tilan IngestionState-tauluun JOKAISELLA ajokerralla.
+ * Tämä on ainoa tapa, jolla `/v1/health/sources` näkee lähteen — myös silloin
+ * kun ajo ei tuottanut yhtään tietuetta (esim. puuttuva API-avain).
+ */
+async function saveCheckpoint(outcome: NysseOutcome, itemsReceived = 0): Promise<void> {
+  const checkpoint = buildNysseCheckpoint(outcome, itemsReceived);
+  await saveIngestionCheckpoint({
+    tableName: process.env['INGESTION_STATE_TABLE_NAME'] ?? '',
+    source: 'NYSSE_ALERTS',
+    status: checkpoint.status,
+    itemsReceived: checkpoint.itemsReceived,
+    ...(checkpoint.lastSuccessfulFetch ? { lastSuccessfulFetch: checkpoint.lastSuccessfulFetch } : {}),
+    ...(checkpoint.error ? { error: checkpoint.error } : {}),
+  });
+}
 
 // Tallennetaan SSM-parametriin joko base64-merkkijono tai raaka ClientID:Secret
 // ja Lambda laskee Base64 tarvittaessa.
@@ -53,7 +72,10 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
 
   if (!apiKey) {
     logger.warn('Nysse API-avain puuttuu SSM:sta');
-    return { status: 'OK', itemsProcessed: 0 };
+    // Kirjoitetaan virhetila, jotta puuttuva konfiguraatio näkyy
+    // /v1/health/sources-listalla (aiemmin lähde katosi listalta kokonaan).
+    await saveCheckpoint('API_KEY_MISSING');
+    return { status: 'ERROR', itemsProcessed: 0 };
   }
 
   // Kokeile eri URL-paatteita ja endpointteja
@@ -79,12 +101,14 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
 
   if (!body || body.length === 0) {
     logger.error('Kaikki URL-kokeilut epaonnistuivat');
+    await saveCheckpoint('FETCH_FAILED');
     return { status: 'ERROR', itemsProcessed: 0 };
   }
 
   // Jasenna protobuf
   const alerts: Record<string, string | undefined>[] = [];
   let feedTimestamp: string | undefined;
+  let parsedOk = true;
   try {
     const feed = transit_realtime.FeedMessage.decode(new Uint8Array(body));
     // Syötteen tuotantoaika (header.timestamp): tämä on Walttin julkaisuaika,
@@ -106,11 +130,19 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
       }
     }
   } catch {
-    // Protobuf-jäsennys epäonnistui — käsitellään alla tyhjänä tuloksena.
+    // Protobuf-jäsennys epäonnistui — tämä EI ole sama asia kuin "ei häiriöitä".
+    parsedOk = false;
+  }
+
+  if (!parsedOk) {
+    logger.error('Protobuf-jäsennys epäonnistui');
+    await saveCheckpoint('PARSE_FAILED');
+    return { status: 'ERROR', itemsProcessed: 0 };
   }
 
   if (alerts.length === 0) {
-    logger.info('Ei hairioita tai protobuf-tyhja');
+    logger.info('Ei hairioita');
+    await saveCheckpoint('NO_ALERTS');
     return { status: 'OK', itemsProcessed: 0 };
   }
 
@@ -136,13 +168,7 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
     processed.push(sourceId);
   }
   logger.info('Nysse valmis', { count: processed.length });
-  await saveIngestionCheckpoint({
-    tableName: process.env['INGESTION_STATE_TABLE_NAME'] ?? '',
-    source: 'NYSSE_ALERTS',
-    status: 'OK',
-    lastSuccessfulFetch: new Date().toISOString(),
-    itemsReceived: processed.length,
-  });
+  await saveCheckpoint('SUCCESS', processed.length);
   return { status: 'OK', itemsProcessed: processed.length };
 }
 

@@ -722,6 +722,18 @@ Konfiguraatio on versioitu koodiin: `infra/lib/config.ts`
   5 min) ja `api-throttles` (Lambda ≥1) sekä SNS-topic policy, joka sallii
   AWS Budgets -ilmoitukset samaan topiciin. Regressiosuoja:
   `infra/test/config.test.ts` + `apps/api/src/params.test.ts`.
+- **Lähteiden näkyvyys valvonnassa (20.9.2026)**: prodissa Nysse ei näkynyt
+  lainkaan `/v1/health/sources`-listalla, koska (a) Waltti-avain puuttui prodin
+  SSM:stä (`/tampere360/prod/sources/nysse/api-key`) ja (b) adapteri palasi
+  *ennen* tarkistuspisteen kirjoitusta → lähteelle ei syntynyt riviä
+  IngestionState-tauluun, jota health skannaa. Korjattu:
+  `apps/ingest-nysse/src/checkpoint.ts` kirjoittaa tilan joka ajopolulla
+  (`ERROR` + syykoodi `API_KEY_MISSING` / `FETCH_FAILED` / `PARSE_FAILED`;
+  `NO_ALERTS` = onnistunut 0-tulos aikaleimalla) ja `apps/api` palauttaa
+  `error`-kentän; eksplisiittinen `ERROR`/`DISABLED` ohittaa lasketun
+  `STALE`-tilan, joten syy näkyy UI:ssa asti. Testit:
+  `apps/ingest-nysse/src/checkpoint.test.ts` (6). **Muistisääntö: jokainen
+  API-avain viedään erikseen per ympäristö** — CDK ei luo salaisuuksia.
 
 ### Bugikorjaus: hiljainen `wafEnabled`-lippu
 
@@ -760,6 +772,6 @@ WAF otetaan haluttaessa käyttöön erikseen (`-c wafEnabled=true` +
   API aliverkkotunnus, `frontendOrigins`) **sekä kustannussuojien rajoja**
   (throttlaus ≤ 20 req/s, concurrency ≤ 10, hälytysrajat alle throttlen
   maksimin). `apps/api/src/params.test.ts` (6 testiä) valvoo `limit`-parametria.
-  Koko sarja 78 testiä ✅, ESLint ✅.
+  Koko sarja 84 testiä ✅, ESLint ✅.
 
   indeksi per deploy) tai luomalla taulu uudelleen.
