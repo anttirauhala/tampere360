@@ -64,6 +64,18 @@ export class DataStack extends cdk.Stack {
     });
 
     // Situations — kanoniset tilanteet. GSI1–GSI4 arkkitehtuuri §7.
+    //
+    // HUOM lajitteluavaimesta `startsAt`: DynamoDB vaatii GSI:n lajitteluavaimen
+    // aina asetetuksi, mutta tapahtuman alkuaika voi olla tuntematon (ks.
+    // event.validity.startsAt = null, kun lähde ei kerro sitä). Tästä syystä
+    // rivin `startsAt` on **järjestysaika** (alkuaika → julkaisuaika →
+    // havaintoaika), ei tapahtuman alkuaika. Tapahtuman oikea alkuaika luetaan
+    // API:ssa kentästä event.validity.startsAt ja näytetään UI:ssa muodossa
+    // "alkuaika ei tiedossa", kun se on null.
+    //
+    // Jos lajitteluavain halutaan joskus nimetä uudelleen (esim. `timeKey`),
+    // se on tehtävä vaiheittain: DynamoDB sallii vain yhden GSI-luonnin tai
+    // -poiston per UpdateTable-kutsu.
     this.situationsTable = new dynamodb.Table(this, 'SituationsTable', {
       tableName: resourceName(appContext.envName, 'situations'),
       partitionKey: { name: 'situationId', type: dynamodb.AttributeType.STRING },

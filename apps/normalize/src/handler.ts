@@ -85,6 +85,30 @@ function sourceGeometry(raw: Record<string, unknown> | undefined): {
   };
 }
 
+/**
+ * Muuntaa lähdekentän UTC-muotoiseksi ISO-aikaleimaksi.
+ *
+ * Palauttaa `null`, jos arvo puuttuu tai ei ole kelvollinen aikaleima — arvoa
+ * ei koskaan korvata hakuajalla (§5: ei arvauksia).
+ * Hyväksyy myös RFC 822 -muodon (RSS `pubDate`) ja aikavyöhykeoffsetit
+ * (CAP `onset` = `+03:00`), jotta kaikki ajat ovat vertailukelpoisessa
+ * muodossa ja GSI-lajittelu (merkkijonovertailu) toimii oikein.
+ */
+function isoOrNull(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+/** Ensimmäinen annetuista arvoista, joka on kelvollinen aikaleima. */
+function firstIso(...values: unknown[]): string | null {
+  for (const value of values) {
+    const iso = isoOrNull(value);
+    if (iso) return iso;
+  }
+  return null;
+}
+
 function mapRawToFields(source: string, raw: Record<string, unknown> | undefined) {
   if (source === 'FMI_CAP') {
     const s = String(raw?.severity ?? '').toLowerCase();
@@ -95,7 +119,15 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       description: raw?.description ? { fi: String(raw.description) } : undefined,
       attribution: { name: 'Ilmatieteen laitos', required: true },
       areaCodes: ['PIRKANMAA'] as string[],
-      validity: { startsAt: raw?.onset ? String(raw.onset) : null, endsAt: raw?.expires ? String(raw.expires) : null },
+      // CAP: onset = tapahtuman alku, effective = aikaisin voimassaolo.
+      // Jos kumpaakaan ei ole, alkuaika jää nulliksi (ei arvausta).
+      validity: {
+        startsAt: firstIso(raw?.onset, raw?.effective),
+        endsAt: isoOrNull(raw?.expires),
+      },
+      // CAP sent = varoituksen lähetysaika.
+      publishedAt: isoOrNull(raw?.sent),
+      updatedAt: isoOrNull(raw?.sent),
       location: null,
       // CAP antaa alueen (PIRKANMAA), ei pistekoordinaattia.
       locationMethod: 'SOURCE_AREA' as const,
@@ -147,9 +179,12 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       location: { municipality, latitude, longitude, geometry: point },
       locationMethod,
       validity: {
-        startsAt: td?.startTime ? String(td.startTime) : null,
-        endsAt: td?.endTime ? String(td.endTime) : null,
+        startsAt: isoOrNull(td?.startTime),
+        endsAt: isoOrNull(td?.endTime),
       },
+      // Digitraffic: releaseTime = julkaisu, versionTime = viimeisin päivitys.
+      publishedAt: isoOrNull(props.releaseTime),
+      updatedAt: firstIso(props.versionTime, props.releaseTime),
     };
   }
   if (source === 'VISIT_TAMPERE') {
@@ -161,7 +196,9 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       areaCodes: ['TAMPERE'],
       location: { municipality: 'Tampere', latitude: null, longitude: null },
       locationMethod: 'SOURCE_AREA' as const,
-      validity: { startsAt: raw?.startDate ? String(raw.startDate) : null, endsAt: raw?.endDate ? String(raw.endDate) : null },
+      validity: { startsAt: isoOrNull(raw?.startDate), endsAt: isoOrNull(raw?.endDate) },
+      publishedAt: null,
+      updatedAt: null,
     };
   }
   if (source === 'NYSSE_ALERTS') {
@@ -175,7 +212,11 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       areaCodes: ['TAMPERE'] as string[],
       location: { municipality: 'Tampere', latitude: null, longitude: null },
       locationMethod: 'SOURCE_AREA' as const,
-      validity: { startsAt: raw?.effectiveStart ? String(raw.effectiveStart) : null, endsAt: raw?.effectiveEnd ? String(raw.effectiveEnd) : null },
+      // Adapteri tallentaa GTFS-RT activePeriod-ajat nimillä start/end.
+      validity: { startsAt: isoOrNull(raw?.start), endsAt: isoOrNull(raw?.end) },
+      // Syötteen header.timestamp = milloin Waltti tuotti syötteen.
+      publishedAt: isoOrNull(raw?.feedTimestamp),
+      updatedAt: isoOrNull(raw?.feedTimestamp),
     };
   }
   if (source === 'POLICE_RSS') {
@@ -192,7 +233,11 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
       location: { municipality: null, latitude: null, longitude: null },
       // Poliisitiedotteessa ei ole koordinaattia — geokoodaus on myöhempi vaihe (§7).
       locationMethod: 'SOURCE_AREA' as const,
+      // RSS ei kerro tapahtuman alkuaikaa, joten startsAt jää nulliksi.
+      // pubDate/dc:date on tiedotteen julkaisuaika, ei tapahtuman alku.
       validity: null,
+      publishedAt: firstIso(raw?.['dc:date'], raw?.pubDate),
+      updatedAt: firstIso(raw?.['dc:date'], raw?.pubDate),
     };
   }
   return {
@@ -200,6 +245,7 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
     title: { fi: String(raw?.name ?? String(raw?.title ?? 'Tapahtuma')) },
     attribution: { name: source, required: false },
     location: null, validity: null, areaCodes: [],
+    publishedAt: null, updatedAt: null,
   };
 }
 
@@ -235,7 +281,11 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
             areaCodes: (m.areaCodes ?? []) as Tampere360Event['location']['areaCodes'],
           },
           validity: { startsAt: m.validity?.startsAt ?? null, endsAt: m.validity?.endsAt ?? null },
-          publishedAt: now, updatedAt: now, tags: [],
+          // Lähteen omat ajat; null jos lähde ei kerro niitä (ei arvausta).
+          publishedAt: m.publishedAt ?? null,
+          updatedAt: m.updatedAt ?? m.publishedAt ?? null,
+          firstSeenAt: now,
+          tags: [],
           attribution: m.attribution, contentHash,
           ...(locationMethod ? { locationMethod } : {}),
         };

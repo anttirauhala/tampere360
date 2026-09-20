@@ -2,11 +2,14 @@
  * api — Query-Lambda API Gateway HTTP API (arkkitehtuuri §10).
  *
  * Reitit:
- *   GET /v1/situations?category=&status=&area=&from=&to=&limit=&cursor=
+ *   GET /v1/situations?category=&status=&area=&limit=&cursor=
  *   GET /v1/situations/{id}
  *   GET /v1/map, /v1/categories, /v1/sources, /v1/health/sources
  *
  * Cursor-pohjainen sivutus (ei offset). Kyselyt DynamoDB GSI:n kautta.
+ * HUOM: GSI:n lajitteluavain `startsAt` on **järjestysaika**, ei tapahtuman
+ * alkuaika — tapahtuman oikea alkuaika luetaan kentästä event.validity.startsAt
+ * ja se on null, kun lähde ei kerro sitä.
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
@@ -65,7 +68,12 @@ async function hSituations(path: string, event: APIGatewayProxyEventV2): Promise
     const r = await doc.send(new QueryCommand(expr as never));
     const items = (r.Items ?? []).map((i) => ({
       situationId: i.situationId, category: i.category, severity: i.severity,
-      status: i.status, startsAt: i.startsAt, municipality: i.municipality,
+      status: i.status, municipality: i.municipality,
+      // Tapahtuman alkuaika tulee tapahtumasta, EI rivin lajitteluavaimesta:
+      // null = lähde ei kerro alkuaikaa (ei arvausta).
+      startsAt: i.event?.validity?.startsAt ?? null,
+      publishedAt: i.publishedAt ?? null,
+      firstSeenAt: i.firstSeenAt ?? null,
       title: i.event?.title?.fi ?? '',
     }));
     const nc = r.LastEvaluatedKey

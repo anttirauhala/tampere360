@@ -59,6 +59,7 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
         sourceId: e.source.sourceId,
         event: e,
         publishedAt: e.publishedAt,
+        firstSeenAt: e.firstSeenAt,
         receivedAt: now,
         expiresAt: Math.floor(Date.now() / 1000) + 90 * 86400,
       },
@@ -76,7 +77,11 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
 
   // Kanoninen Situation
   const situationId = ulid();
-  const startsAt = e.validity?.startsAt ?? e.publishedAt;
+  // Rivin `startsAt` on GSI1–GSI4:n lajitteluavain, ja DynamoDB vaatii sille
+  // aina arvon → siihen kirjoitetaan JÄRJESTYSAIKA (tapahtuman oma aika →
+  // lähdeaika → havaintoaika). Tämä EI ole tapahtuman alkuaika: oikea alkuaika
+  // on event.validity.startsAt, joka on null kun lähde ei kerro sitä (§5).
+  const sortTime = e.validity?.startsAt ?? e.publishedAt ?? e.firstSeenAt;
 
   // DynamoDB ei hyväksy NULL-arvoa GSI-avaimelle (gsi3/municipality, gsi4/geohash).
   // GSI:t ovat sparse-indeksejä: avain jätetään pois, jos arvoa ei ole.
@@ -88,7 +93,9 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
     status: e.status,
     category: e.category,
     severity: e.severity,
-    startsAt,
+    startsAt: sortTime,
+    publishedAt: e.publishedAt,
+    firstSeenAt: e.firstSeenAt,
     createdAt: now,
     updatedAt: now,
   };

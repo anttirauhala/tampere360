@@ -589,3 +589,72 @@ käyttäjäilmoitukset.
 
 
 
+## 20. Aikamalli: startsAt, endsAt, publishedAt, firstSeenAt
+
+**Periaate (päätetty 20.9.2026): aikaleimoja ei koskaan arvata.** Järjestelmän
+oma kellonaika ei saa valua tapahtuman ajaksi. Jos lähde ei kerro tapahtuman
+alkuaikaa, arvo on `null` ja käyttöliittymä sanoo "alkuaika ei tiedossa".
+
+### Kenttien merkitys
+
+| Kenttä | Merkitys | Lähde |
+|---|---|---|
+| `event.validity.startsAt` | tapahtuman alkuaika | vain lähteen oma tapahtuma-aika; `null` jos ei tiedossa |
+| `event.validity.endsAt` | tapahtuman päättymisaika | lähteen oma aika; `null` jos ei tiedossa |
+| `event.publishedAt` | lähteen julkaisuaika | lähteen oma julkaisuaika; `null` jos ei tiedossa |
+| `event.updatedAt` | lähteen päivitysaika | lähteen oma päivitysaika; `null` jos ei tiedossa |
+| `event.firstSeenAt` | milloin Tampere360 näki tapahtuman | tekninen, aina asetettu (normalisointi) |
+| `Situation.startsAt` | **GSI-lajitteluavain** = järjestysaika | `validity.startsAt` → `publishedAt` → `firstSeenAt` |
+| `Situation.publishedAt`, `firstSeenAt` | näytetään UI:ssa | kopiot tapahtumasta |
+
+### Lähdekohtainen päättely (normalisoija)
+
+| Lähde | `startsAt` | `endsAt` | `publishedAt` / `updatedAt` |
+|---|---|---|---|
+| FMI_CAP | `onset` → `effective` | `expires` | `sent` |
+| TAMPERE_TRAFFIC | `timeAndDuration.startTime` | `timeAndDuration.endTime` | `releaseTime` / `versionTime` |
+| NYSSE_ALERTS | `activePeriod[0].start` (adapteri: `start`) | `activePeriod[0].end` | syötteen `header.timestamp` |
+| POLICE_RSS | **ei ole** → `null` | ei ole → `null` | `dc:date` → `pubDate` |
+| VISIT_TAMPERE | `startDate` | `endDate` | ei ole → `null` |
+| RESCUE_MEDIA (stub) | ei ole → `null` | ei ole → `null` | ei ole → `null` |
+
+Kaikki ajat normalisoidaan UTC-muotoon (`new Date(x).toISOString()`), jotta
+merkkijonopohjainen GSI-lajittelu on oikea myös eri formaateilla
+(CAP `+03:00`, RSS RFC 822).
+
+### API ja UI
+
+- `GET /v1/situations` palauttaa `startsAt` (nullable), `publishedAt`,
+  `firstSeenAt`. `startsAt` luetaan tapahtumasta (`event.validity.startsAt`),
+  **ei** rivin lajitteluavaimesta.
+- UI (`describeSituationTime`): alkuaika tiedossa → `alkoi 20.9.2026 klo 08.53`,
+  muuten → `alkuaika ei tiedossa` + `julkaistu … · havaittu …`.
+
+### Toteutuksen aikana korjatut viat (20.9.2026)
+
+1. `publishedAt`/`updatedAt` olivat **normalisoinnin kellonaika**, eivät
+   lähteen julkaisuaika (rikkoi mallin oman sopimuksen) → korjattu.
+2. NYSSE: normalisoija luki `effectiveStart`/`effectiveEnd`, adapteri kirjoitti
+   `start`/`end` → **28/28 tilannetta putosi hakuaikaan**; nyt 14/14 käyttää
+   lähteen omaa aikaa.
+3. POLICE: `validity` oli aina `null` vaikka RSS antaa `pubDate`/`dc:date` →
+   julkaisuaika käyttöön; `startsAt` jää tarkoituksella `null`iksi.
+4. `releaseTime`/`versionTime` (Digitraffic) ja `sent` (CAP) oli parsittu mutta
+   jätettiin käyttämättä → nyt julkaisu- ja päivitysaikoina.
+5. Idempotenssi esti korjatun datan synnyn: kun `SourceEvents`-rivi oli jo
+   olemassa mutta `Situations`-kirjoitus oli epäonnistunut, sama tapahtuma ei
+   enää koskaan synnyttänyt tilannetta. **Operatiivinen ohje:** kun
+   prosessointilogiikkaa muutetaan, tyhjennä `SourceEvents` (tai käytä
+   raakadatan uudelleenkäsittelyä), jotta putki tuottaa tilanteet uudelleen.
+
+### Opit DynamoDB-GSI-migraatiosta
+
+- DynamoDB sallii **vain yhden GSI-luonnin tai -poiston per `UpdateTable`**.
+  Neljän indeksin uudelleennimeäminen yhdessä deployissa epäonnistuu:
+  `Cannot perform more than one GSI creation or deletion in a single update`.
+- CloudFormation laskee GSI-muutokset **tallennetusta mallipohjasta**, ei
+  live-taulusta — fyysisen taulun ennakkoon muokkaaminen ei auta.
+- Tästä syystä lajitteluavain pidettiin nimellä `startsAt` (arvo on
+  järjestysaika) sen sijaan, että olisi nimetty uudelleen `timeKey`iksi.
+  Jos nimeäminen halutaan myöhemmin, se tehdään **vaiheittain** (yksi
+  indeksi per deploy) tai luomalla taulu uudelleen.

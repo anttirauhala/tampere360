@@ -67,3 +67,47 @@ export function formatAge(iso: string | undefined | null): string {
   if (hours < 24) return `${hours} h sitten`;
   return `${Math.floor(hours / 24)} vrk sitten`;
 }
+
+/** Tilanteen aikakentät sellaisina kuin API ne palauttaa. */
+export interface SituationTimes {
+  startsAt?: string | null;
+  publishedAt?: string | null;
+  firstSeenAt?: string | null;
+}
+
+export interface TimeDescription {
+  /** Pääteksti: "alkoi 20.9.2026 klo 08.53" tai "alkuaika ei tiedossa". */
+  primary: string;
+  /** Lisätieto: suhteellinen ikä ja/tai julkaisu-/havaintoaika. */
+  detail: string;
+  /** Onko tapahtuman oma alkuaika tiedossa. */
+  isStartKnown: boolean;
+}
+
+/**
+ * Kuvaa tilanteen ajankohdan käyttäjälle rehellisesti (§5).
+ *
+ * Jos lähde ei kerro tapahtuman alkuaikaa, sitä EI näytetä arvattuna:
+ * päätekstinä on "alkuaika ei tiedossa" ja lisätietona lähteen julkaisuaika
+ * ja/tai tekninen havaintoaika.
+ */
+export function describeSituationTime(times: SituationTimes): TimeDescription {
+  const startsAt = times.startsAt ?? null;
+  const publishedAt = times.publishedAt ?? null;
+  const firstSeenAt = times.firstSeenAt ?? null;
+
+  if (startsAt) {
+    return {
+      primary: `alkoi ${formatTime(startsAt)}`,
+      detail: formatAge(startsAt),
+      isStartKnown: true,
+    };
+  }
+
+  const seenPart = firstSeenAt ? `havaittu ${formatAge(firstSeenAt)}` : '';
+  const detail = publishedAt
+    ? [`julkaistu ${formatTime(publishedAt)}`, seenPart].filter(Boolean).join(' · ')
+    : seenPart;
+
+  return { primary: 'alkuaika ei tiedossa', detail, isStartKnown: false };
+}

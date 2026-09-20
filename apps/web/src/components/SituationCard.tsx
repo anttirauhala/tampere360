@@ -1,5 +1,5 @@
 import { CATEGORY_LABELS, SEVERITY_LABELS, type SituationSummary } from '../api/types';
-import { formatAge, formatTime, sanitizeText } from '../lib/format';
+import { describeSituationTime, sanitizeText } from '../lib/format';
 
 interface Props {
   item: SituationSummary;
@@ -9,6 +9,7 @@ interface Props {
 export function SituationCard({ item }: Props) {
   const title = sanitizeText(item.title);
   const severityClass = `severity severity--${item.severity.toLowerCase()}`;
+  const time = describeSituationTime(item);
 
   return (
     <article className={`card ${severityClass}`}>
@@ -21,11 +22,13 @@ export function SituationCard({ item }: Props) {
 
       <div className="card__meta">
         {item.municipality && <span>{item.municipality}</span>}
-        {item.startsAt && (
-          <span title={formatTime(item.startsAt)}>
-            {formatTime(item.startsAt)} · {formatAge(item.startsAt)}
-          </span>
-        )}
+        <span
+          className={time.isStartKnown ? 'card__time' : 'card__time card__time--unknown'}
+          title={time.isStartKnown ? 'Tapahtuman alkuaika lähteen mukaan' : undefined}
+        >
+          {time.primary}
+        </span>
+        {time.detail && <span className="card__time-detail">{time.detail}</span>}
       </div>
     </article>
   );

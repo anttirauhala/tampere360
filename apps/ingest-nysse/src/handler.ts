@@ -84,8 +84,14 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
 
   // Jasenna protobuf
   const alerts: Record<string, string | undefined>[] = [];
+  let feedTimestamp: string | undefined;
   try {
     const feed = transit_realtime.FeedMessage.decode(new Uint8Array(body));
+    // Syötteen tuotantoaika (header.timestamp): tämä on Walttin julkaisuaika,
+    // EI häiriön alkuaika — alkuaika tulee alertin activePeriod-kentästä.
+    feedTimestamp = feed.header?.timestamp
+      ? new Date(Number(feed.header.timestamp) * 1000).toISOString()
+      : undefined;
     if (feed.entity) {
       for (const e of feed.entity) {
         if (!e.alert) continue;
@@ -110,17 +116,22 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
 
   const processed: string[] = [];
   for (const a of alerts) {
-    // GTFS-RT entity.id on pysyvä tunniste: sama häiriö ei synnytä uutta
-    // tilannetta joka ajolla (idempotenssi §4.1). Jos id puuttuu, käytetään
-    // sisällön tarkistetta vakaana tunnisteena.
-    const c = sha256Hex(JSON.stringify(a));
+    // Sisältötarkiste lasketaan VAIN häiriön omista, vakioista kentistä:
+    // feedTimestamp muuttuu jokaisella haulla eikä se saa muuttaa
+    // processingKeyta (muuten sama häiriö lois uuden tilanteen joka minuutti).
+    const core = {
+      entityId: a.entityId, header: a.header, description: a.description,
+      start: a.start, end: a.end,
+    };
+    const c = sha256Hex(JSON.stringify(core));
     const sourceId = a.entityId ?? `alert-${c.slice(0, 16)}`;
     const pk = `NYSSE_ALERTS:${sourceId}:${c.slice(0, 16)}`;
     const bid = ulid();
     const key = `source=nysse/year=${new Date().getUTCFullYear()}/${bid}.json`;
-    try { await s3.send(new PutObjectCommand({ Bucket: bucketName, Key: key, Body: JSON.stringify(a), ContentType: 'application/json' })); } catch { continue; }
-    const se = { parsedId: ulid(), batchId: bid, source: 'NYSSE_ALERTS', sourceId, processingKey: pk, raw: a, extractedAt: new Date().toISOString() };
-    const msg = { schemaVersion: '1.0', batch: { batchId: bid, source: 'NYSSE_ALERTS', fetchedAt: new Date().toISOString(), s3Key: key, contentType: 'application/json', byteSize: Buffer.byteLength(JSON.stringify(a), 'utf8'), contentHash: c, itemCount: 1 }, events: [se], correlationId: invocationId };
+    const raw = { ...core, feedTimestamp };
+    try { await s3.send(new PutObjectCommand({ Bucket: bucketName, Key: key, Body: JSON.stringify(raw), ContentType: 'application/json' })); } catch { continue; }
+    const se = { parsedId: ulid(), batchId: bid, source: 'NYSSE_ALERTS', sourceId, processingKey: pk, raw, extractedAt: new Date().toISOString() };
+    const msg = { schemaVersion: '1.0', batch: { batchId: bid, source: 'NYSSE_ALERTS', fetchedAt: new Date().toISOString(), s3Key: key, contentType: 'application/json', byteSize: Buffer.byteLength(JSON.stringify(raw), 'utf8'), contentHash: c, itemCount: 1 }, events: [se], correlationId: invocationId };
     try { await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(msg) })); } catch { continue; }
     processed.push(sourceId);
   }

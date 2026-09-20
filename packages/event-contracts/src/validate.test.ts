@@ -52,6 +52,27 @@ describe('validateTampere360Event', () => {
     expect(result.errors).toContain('publishedAt invalid timestamp');
   });
 
+  it('hyväksyy null-julkaisuajan (lähde ei antanut aikaa)', () => {
+    // Esim. poliisin RSS ei anna julkaisuaikaa → null on sallittu,
+    // hakuajasta ei tehdä arvausta.
+    const event = createSampleEvent({ publishedAt: null, updatedAt: null });
+    const result = validateTampere360Event(event);
+    expect(result.ok).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('hyväksyy null-alkuajan (tapahtuman alkuaika ei tiedossa)', () => {
+    const event = createSampleEvent({ validity: { startsAt: null, endsAt: null } });
+    expect(validateTampere360Event(event).ok).toBe(true);
+  });
+
+  it('vaatii firstSeenAt-aikaleiman', () => {
+    const event = createSampleEvent({ firstSeenAt: undefined as never });
+    const result = validateTampere360Event(event);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain('firstSeenAt invalid timestamp');
+  });
+
   it('hylkää ei-olio-arvon', () => {
     expect(validateTampere360Event('string').ok).toBe(false);
     expect(validateTampere360Event(null).ok).toBe(false);

@@ -67,9 +67,18 @@ export interface EventLocation {
   areaCodes: AreaCode[];
 }
 
-/** Voimassaoloaika. `endsAt === null` → päättymisaika ei tiedossa. */
+/** Voimassaoloaika. `startsAt === null` → tapahtuman alkuaika ei ole tiedossa. */
 export interface Validity {
+  /**
+   * Tapahtuman alkuaika lähteen mukaan (ISO 8601).
+   *
+   * Täytetään VAIN lähteen omasta tapahtuma-ajasta (esim. CAP `onset`,
+   * Digitraffic `startTime`, GTFS-RT `activePeriod.start`). Jos lähde ei
+   * kerro alkuaikaa, arvo on `null` — sitä ei päätellä julkaisu- tai
+   * hakuaikaеsta (arkkitehtuuri §5: epävarmaa tietoa ei esitetä varmana).
+   */
   startsAt?: string | null;
+  /** Tapahtuman päättymisaika lähteen mukaan (ISO 8601), jos tiedossa. */
   endsAt?: string | null;
 }
 
@@ -104,10 +113,28 @@ export interface Tampere360Event {
   description?: LocalizedText;
   location: EventLocation;
   validity: Validity;
-  /** Lähteen julkaisuaika (ISO 8601). */
-  publishedAt: string;
-  /** Lähteen päivitysaika (ISO 8601). */
-  updatedAt: string;
+  /**
+   * Lähteen oma julkaisuaika (ISO 8601).
+   *
+   * `null`, jos lähde ei anna julkaisuaikaa — arvoa EI koskaan päätellä
+   * hakuajasta, jotta tekninen kellonaika ei valu liiketoimintadataan.
+   * Tekninen "milloin havaitsimme" on aina `firstSeenAt`.
+   */
+  publishedAt: string | null;
+  /**
+   * Lähteen oma päivitysaika (ISO 8601), jos lähde antaa sen.
+   * `null`, jos lähde ei kerro päivitysaikaa.
+   */
+  updatedAt: string | null;
+  /**
+   * Milloin Tampere360 näki tapahtuman ensimmäisen kerran (ISO 8601).
+   *
+   * Tekninen aikaleima: asetetaan normalisoinnissa. Tämä EI ole tapahtuman
+   * alkuаika eikä lähteen julkaisuaika, vaan järjestelmän oma havaintoaika.
+   * Käytetään järjestyksen ja "havaittu"-merkinnän pohjana silloin, kun
+   * lähde ei anna tapahtuman omaa aikaa.
+   */
+  firstSeenAt: string;
   tags?: string[];
   attribution?: Attribution;
   /**

@@ -24,6 +24,9 @@ const isNonEmptyString = (value: unknown): value is string =>
 const isIsoDate = (value: unknown): boolean =>
   typeof value === 'string' && !Number.isNaN(Date.parse(value));
 
+/** Aikaleima, joka saa olla myös null (lähde ei antanut aikaa). */
+const isIsoDateOrNull = (value: unknown): boolean => value === null || isIsoDate(value);
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -80,9 +83,12 @@ export function validateTampere360Event(value: unknown): ValidationResult {
     errors.push('location.areaCodes must be an array');
   }
 
-  // Aikaleimat
-  if (!isIsoDate(value.publishedAt)) errors.push('publishedAt invalid timestamp');
-  if (!isIsoDate(value.updatedAt)) errors.push('updatedAt invalid timestamp');
+  // Aikaleimat.
+  // publishedAt/updatedAt saavat olla null: lähde ei aina anna omaa aikaa,
+  // eikä sitä päätellä hakuajasta. firstSeenAt on aina pakollinen (tekninen).
+  if (!isIsoDateOrNull(value.publishedAt)) errors.push('publishedAt invalid timestamp');
+  if (!isIsoDateOrNull(value.updatedAt)) errors.push('updatedAt invalid timestamp');
+  if (!isIsoDate(value.firstSeenAt)) errors.push('firstSeenAt invalid timestamp');
 
   return { ok: errors.length === 0, errors };
 }

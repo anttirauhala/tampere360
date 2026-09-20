@@ -24,13 +24,22 @@ export interface LocalizedText {
   en?: string;
 }
 
-/** Listanäkymän rivi (kevyt). `municipality` puuttuu, jos kuntaa ei ole tiedossa. */
+/**
+ * Listanäkymän rivi (kevyt).
+ *
+ * Aikakentät:
+ * - `startsAt`  tapahtuman alkuaika lähteen mukaan — **null, jos ei tiedossa**
+ * - `publishedAt` lähteen julkaisuaika — null, jos lähde ei kerro sitä
+ * - `firstSeenAt` tekninen havaintoaika (Tampere360 näki tapahtuman)
+ */
 export interface SituationSummary {
   situationId: string;
   category: Category;
   severity: Severity;
   status: SituationStatus;
-  startsAt: string;
+  startsAt: string | null;
+  publishedAt?: string | null;
+  firstSeenAt?: string | null;
   municipality?: string | null;
   title: string;
 }

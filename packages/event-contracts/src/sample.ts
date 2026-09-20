@@ -45,6 +45,7 @@ export function createSampleEvent(overrides: Partial<Tampere360Event> = {}): Tam
     },
     publishedAt: '2026-09-06T08:46:15.000Z',
     updatedAt: '2026-09-06T08:46:15.000Z',
+    firstSeenAt: '2026-09-06T08:50:00.000Z',
     tags: ['tuuli', 'varoitus'],
     attribution: {
       name: 'Ilmatieteen laitos',
