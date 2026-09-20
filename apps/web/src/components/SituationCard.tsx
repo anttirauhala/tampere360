@@ -36,8 +36,10 @@ export function SituationCard({ item }: Props) {
 
       <h3 className="card__title">{title || 'Tuntematon tapahtuma'}</h3>
 
+      {/* Paikkakunta omalla rivillään ajankohdan yläpuolella. */}
+      {shouldShowMunicipality(item) && <p className="card__place">{item.municipality}</p>}
+
       <div className="card__meta">
-        {shouldShowMunicipality(item) && <span>{item.municipality}</span>}
         {/* Alkuaika näytetään vain jos lähde kertoi sen — muuten ei mitään. */}
         {time.primary && (
           <span className="card__time" title="Tapahtuman alkuaika lähteen mukaan">

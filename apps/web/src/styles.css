@@ -250,6 +250,13 @@ a {
   line-height: 1.35;
 }
 
+/* Paikkakunta omalla rivillään ajankohdan yläpuolella. */
+.card__place {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .card__meta {
   display: flex;
   flex-wrap: wrap;
