@@ -864,3 +864,35 @@ johtaa linkin siitä. Tämä on dokumentoitu `links.ts`:ssä ja testattu.
 (`javascript:`/`data:`-URL:t hylätään sekä normalisoinnissa että UI:ssa), ja
 ulkoiset linkit avataan `target="_blank" rel="noopener noreferrer"`.
 
+
+## 24. Brändi "Tampere 247" ja vakavuusluokituksen huomautus (20.9.2026)
+
+Julkinen brändi on **Tampere 247** (domain `tampere247.online`). Brändimuutos
+koskee vain käyttäjälle näkyvää tekstiä: **tekniset tunnisteet säilyvät
+ennallaan** (`tampere360-*`-resurssinimet, npm-paketit `@tampere360/*`,
+`Tampere360Event`-malli, SSM-polut, EventBridge-tapahtumalähde).
+
+| Osa | Muutos |
+|---|---|
+| `apps/web/src/components/Layout.tsx` | Otsikon brändi `Tampere360` → `Tampere 247`; brändimerkki `T360` → `T247` |
+| `apps/web/index.html` | `<title>` ja meta-description |
+| `apps/web/package.json` | kuvaus (paketin nimi `@tampere360/web` pysyy teknisenä tunnisteena) |
+| `apps/web/src/api/types.ts` | kommentti: `firstSeenAt` = "Tampere 247 näki tapahtuman" |
+
+**Vakavuusluokittelun huomautus siirrettiin** Nyt-sivun alaosasta footeriin
+lähde- ja lisenssitietojen yhteyteen (`Layout.tsx`), joten se näkyy nyt
+kaikilla sivuilla. Sisältö säilyi muuten ennallaan (luokittelu on oma
+automaattinen arviomme, poikkeuksena FMI:n CAP-varoituksen lähdevakavuus);
+tyylinä sama `footer__note` kuin vastuuvapauslausekkeella.
+
+**Verifiointi:** `npm run build -w @tampere360/web` ✅ (tsc --noEmit + vite),
+web-yksikkötestit 25/25 ✅, Prettier ✅ (muokatut tiedostot),
+headless-Chrome `--dump-dom`: brändi `Tampere 247`, brändimerkki `T247`,
+footer-huomautus renderöityy, **0 osumaa** `Tampere360`/`T360` DOM:issa ja
+tuotantobundlessa. Huom: `apps/web/src/lib/format.ts` on ennestään
+Prettier-korjauslistalla (§16).
+
+Infra ja dokumentaatio käyttävät edelleen nimeä `Tampere360` (resurssien
+kuvaukset, `docs/`, README) — ne ovat teknisiä tunnisteita eivätkä
+käyttäjälle näkyvää brändiä.
+

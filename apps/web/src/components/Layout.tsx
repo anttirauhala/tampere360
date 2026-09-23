@@ -17,9 +17,9 @@ export function Layout() {
       <header className="header">
         <div className="header__inner">
           <NavLink to="/" className="brand" end>
-            <span className="brand__mark">T360</span>
+            <span className="brand__mark">T247</span>
             <span className="brand__text">
-              <strong>Tampere360</strong>
+              <strong>Tampere 247</strong>
               <small>Tampereen seudun tilannekuva</small>
             </span>
           </NavLink>
@@ -52,6 +52,19 @@ export function Layout() {
           </a>
           . Säävaroitukset: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet: Fintraffic /
           Digitraffic. Poliisitiedotteet: Sisä-Suomen poliisilaitos. Joukkoliikenne: Nysse / Waltti.
+        </p>
+        {/*
+          Vakavuusluokittelu on oma arviomme (otsikon ja lähdetietojen
+          perusteella), joten se kerrotaan käyttäjälle avoimesti — lähde- ja
+          lisenssitietojen yhteydessä. Poikkeus: FMI:n CAP-säävaroituksen
+          vakavuus tulee suoraan lähteen omasta severity-kentästä
+          (extreme/severe/moderate), ei meidän päätelmästämme.
+        */}
+        <p className="footer__note">
+          Vakavuusluokittelu (tiedote, vähäinen, merkittävä, kriittinen) on Tampere 247:n
+          automaattisesti tekemä arvio otsikon ja lähdetietojen perusteella — ei viranomaisen antama
+          luokitus. Poikkeus: säävaroitusten vakavuus tulee suoraan Ilmatieteen laitoksen
+          varoitusluokasta.
         </p>
         <p className="footer__note">
           Palvelu kokoaa julkiset tiedotteet yhteen näkymään. Tarkista virallinen tieto aina

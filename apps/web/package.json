@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Tampere360 — React SPA (Vite + TanStack Query + MapLibre GL JS)",
+  "description": "Tampere 247 — React SPA (Vite + TanStack Query + MapLibre GL JS)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

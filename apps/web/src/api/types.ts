@@ -30,7 +30,7 @@ export interface LocalizedText {
  * Aikakentät:
  * - `startsAt`  tapahtuman alkuaika lähteen mukaan — **null, jos ei tiedossa**
  * - `publishedAt` lähteen julkaisuaika — null, jos lähde ei kerro sitä
- * - `firstSeenAt` tekninen havaintoaika (Tampere360 näki tapahtuman)
+ * - `firstSeenAt` tekninen havaintoaika (Tampere 247 näki tapahtuman)
  */
 export interface SituationSummary {
   situationId: string;
