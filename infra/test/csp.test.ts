@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TILE_ORIGINS, buildContentSecurityPolicy } from '../lib/csp';
+import { CAMERA_ORIGINS, TILE_ORIGINS, buildContentSecurityPolicy } from '../lib/csp';
 
 const API_ORIGIN = 'https://abc123.execute-api.eu-north-1.amazonaws.com';
 const csp = buildContentSecurityPolicy({ apiOrigin: API_ORIGIN });
@@ -56,5 +56,25 @@ describe('buildContentSecurityPolicy', () => {
     });
     expect(custom).toContain('https://tiles.example.com');
     expect(custom).not.toContain('tile.openstreetmap.org');
+  });
+
+  it('sallii kelikameroiden kuvatiedostot img-src:ssä', () => {
+    // Regressiosuoja: ilman weathercam.digitraffic.fi:tä <img>-kuvat estyvät.
+    for (const origin of CAMERA_ORIGINS) {
+      expect(directive('img-src')).toContain(origin);
+    }
+  });
+
+  it('sallii kameraluettelon haun connect-src:ssä', () => {
+    // Regressiosuoja: asemaluettelo haetaan fetch:llä tie.digitraffic.fi:stä.
+    for (const origin of CAMERA_ORIGINS) {
+      expect(directive('connect-src')).toContain(origin);
+    }
+  });
+
+  it('kunnioittaa cameraOrigins-asetusta', () => {
+    const custom = buildContentSecurityPolicy({ apiOrigin: API_ORIGIN, cameraOrigins: [] });
+    expect(custom).not.toContain('weathercam.digitraffic.fi');
+    expect(custom).not.toContain('tie.digitraffic.fi');
   });
 });

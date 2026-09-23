@@ -6,6 +6,17 @@
  * HTML-entiteetit, jolloin teksti renderöidään turvallisesti Reactin kautta.
  */
 
+/**
+ * Palvelun aikavyöhyke: kaikki kellonajat näytetään Suomen ajassa.
+ *
+ * Kellonajan näyttäminen selaimen omalla aikavyöhykkeellä olisi tässä
+ * palvelussa virhe: data on suomalaista (liikenne, sää, kamerat), ja
+ * esimerkiksi UTC:llä ajettava selain tai ulkomailla oleva käyttäjä näkisi
+ * ajat väärin. Kiinnittämällä vyöhyke myös kesä- ja talviaika hoituvat
+ * automaattisesti.
+ */
+export const HELSINKI_TIME_ZONE = 'Europe/Helsinki';
+
 const ENTITIES: Record<string, string> = {
   '&amp;': '&',
   '&lt;': '<',
@@ -41,12 +52,19 @@ export function sanitizeText(input: string | undefined | null): string {
 /**
  * Muotoilee ISO-aikaleiman suomenkieliseksi ajankohdaksi.
  * Mukana päivä, kuukausi JA vuosi (esim. "6.9.2026 klo 7.32").
+ *
+ * Aikavyöhyke on aina Suomen aika (ks. `HELSINKI_TIME_ZONE`): tapahtumat,
+ * varoitukset ja kamerakuvat ovat suomalaisia, joten käyttäjän selaimen
+ * aikavyöhyke ei saa muuttaa näytettyä kellonaikaa. Ilman tätä asetusta
+ * esimerkiksi UTC:llä ajettava selain (tai ulkomailla oleva käyttäjä) näkisi
+ * kellonajan 3 tuntia pielessä.
  */
 export function formatTime(iso: string | undefined | null): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleString('fi-FI', {
+    timeZone: HELSINKI_TIME_ZONE,
     day: 'numeric',
     month: 'numeric',
     year: 'numeric',

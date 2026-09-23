@@ -435,6 +435,11 @@ a {
  * Himmennetty taustakuva koko näkymän taakse. Kuva skaalataan kattamaan
  * koko alue (cover). Kuva tulee Viten public-hakemistosta sellaisenaan
  * (apps/web/public/background.jpg -> /background.jpg).
+ *
+ * Käytössä VAIN Nyt-sivulla. Kategoriasivut (Liikenne, Säävaroitukset,
+ * Poliisi, Joukkoliikenne) sekä Lähteiden tila ja Liikennekamerat käyttävät
+ * tasaista `--bg`-taustaa (ks. `body`), joten tilannelistat pysyvät
+ * rauhallisina luettavina.
  */
 .now-backdrop {
   position: fixed;
@@ -581,4 +586,135 @@ a {
 }
 .severity-dot--critical {
   background: var(--critical);
+}
+
+/* --- Painike (esim. "Päivitä kuvat") --- */
+
+.button {
+  padding: 8px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: rgba(77, 163, 255, 0.15);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: rgba(77, 163, 255, 0.3);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* --- Liikennekamerat --- */
+
+/* Työkalurivi: päivityspainike ja tietojen hakuaika. */
+.camera-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.camera-toolbar__info {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/*
+ * Kameraruudukko. Tavoite: noin 6 kuvaa mahtuu ruudulle kerralla, joten
+ * ruudukko rajataan 1000 px leveäksi -> kolme saraketta (kaksi riviä = 6
+ * kuvaa) tavallisella näytöllä; kapeammalla näytöllä 2 tai 1 sarake.
+ */
+.camera-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  max-width: 1000px;
+}
+
+.camera-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* Kuvan paikka varataan ennen latausta (aspect-ratio) -> ruudukko ei hyppää. */
+.camera-card__link {
+  display: block;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-2);
+}
+
+.camera-card__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-card__error {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  margin: 0;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.camera-card__body {
+  padding: 10px 12px 12px;
+}
+
+.camera-card__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.camera-card__meta {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.camera-card__presets {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.camera-card__presets-label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.camera-chip {
+  min-width: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.camera-chip--active {
+  border-color: var(--accent);
+  background: rgba(77, 163, 255, 0.25);
+  font-weight: 700;
 }

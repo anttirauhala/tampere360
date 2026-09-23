@@ -4,6 +4,7 @@ const NAV = [
   { to: '/', label: 'Nyt', end: true },
   { to: '/kartta', label: 'Kartta', end: false },
   { to: '/liikenne', label: 'Liikenne', end: false },
+  { to: '/kamerat', label: 'Liikennekamerat', end: false },
   { to: '/saa', label: 'Säävaroitukset', end: false },
   { to: '/poliisi', label: 'Poliisi', end: false },
   { to: '/joukkoliikenne', label: 'Joukkoliikenne poikkeustilanteet', end: false },
@@ -50,8 +51,9 @@ export function Layout() {
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
             OpenStreetMap contributors
           </a>
-          . Säävaroitukset: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet: Fintraffic /
-          Digitraffic. Poliisitiedotteet: Sisä-Suomen poliisilaitos. Joukkoliikenne: Nysse / Waltti.
+          . Säävaroitukset: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet ja kelikamerat:
+          Fintraffic / Digitraffic. Poliisitiedotteet: Sisä-Suomen poliisilaitos. Joukkoliikenne:
+          Nysse / Waltti.
         </p>
         {/*
           Vakavuusluokittelu on oma arviomme (otsikon ja lähdetietojen

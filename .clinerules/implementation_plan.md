@@ -400,6 +400,7 @@ Näkymät:
 - Tänään (tapahtumat ja ennakoidut häiriöt)
 - Kartta
 - Liikenne / Säävaroitukset / Kulttuuri ja tapahtumat / Joukkoliikenne
+- Liikennekamerat (Digitraffic-kelikamerat, alle 10 km Tampereen keskustasta, §25)
 - Lähteiden tila
 
 ## 12. Virheenkäsittely ja uudelleenajo
@@ -519,7 +520,7 @@ GitHub Actions -workflow lisätään kun repo on GitHubissa.
 - CSP päivitetty: API-origin, OSM-tiilet, MapLibren blob-workerit
 - MapPage lazy-latauksella (MapLibre ~1,0 MB omaan chunkkiinsa)
 - Sivut: `/` (Nyt), `/kartta`, `/liikenne`, `/saa`, `/poliisi`,
-  `/joukkoliikenne`, `/lahteet`
+  `/joukkoliikenne`, `/lahteet` — uusi `/kamerat` lisätty 23.9.2026 (§25)
 - Nyt-sivu esittää aktiiviset tilanteet **tapahtumatyypeittäin koostekortteina**,
   ei sekoitettuna listana: jokaisella tyypillä oma kortti (otsikko = tyyppi,
   määrä, 5 viimeisintä otsikko + alku-/julkaisuaika, "Näytä lisää…" -linkki
@@ -895,4 +896,174 @@ Prettier-korjauslistalla (§16).
 Infra ja dokumentaatio käyttävät edelleen nimeä `Tampere360` (resurssien
 kuvaukset, `docs/`, README) — ne ovat teknisiä tunnisteita eivätkä
 käyttäjälle näkyvää brändiä.
+
+**Tarkistus 23.9.2026 (käyttäjän pyynnöstä):** käyttäjälle näkyvässä
+frontendissä ei ole yhtään `Tampere360`-viittausta:
+
+| Kohde | Tulos |
+|---|---|
+| `grep -rniE 'tampere ?360' apps/web` (ts/tsx/html/json/css/svg) | ainoa osuma paketin nimi `@tampere360/web` = tekninen tunniste |
+| Julkaistu bundle (dev + prod, `index-*.js`) | **0** osumaa `Tampere360`, 2 osumaa `Tampere 247` |
+| Renderöity DOM (headless Chrome, dev + prod) | **0** osumaa `Tampere360`, 4 osumaa `Tampere 247` |
+
+Vakavuusluokittelun huomautus on **vain footerissa** lähde- ja lisenssitietojen
+yhteydessä (DOM-tarkistus: 1 osuma, `footer__note`-lohkossa) — Nyt-sivun
+alaosassa sitä ei ole.
+
+
+## 25. Liikennekamerat-välilehti (23.9.2026)
+
+Uusi välilehti `/kamerat` näyttää Tampereen alueen kelikamerat. Kuvat tulevat
+**suoraan Digitrafficilta selaimesta** — ne eivät kulje oman API:n kautta, joten
+kameroiden katselu ei kuluta API:n throttlea, Lambda-concurrencya eikä
+DynamoDB-lukemia.
+
+### Rajapinta ja sen kaksi erityispiirrettä
+
+| Asia | Ratkaisu |
+|---|---|
+| Asemaluettelo | `GET https://tie.digitraffic.fi/api/weathercam/v1/stations` (GeoJSON, 810 asemaa, ~37 kt gzipattuna) |
+| Kuvatiedosto | `https://weathercam.digitraffic.fi/{presetId}.jpg` — sama `imageUrl`, jonka Digitrafficin oma metatietorajapinta palauttaa; HTTP 200, `image/jpeg`, ~150 kt |
+| **gzip-pakko** | Ilman `Accept-Encoding: gzip` Digitraffic vastaa **406** ("Use of gzip compression is required…"). Selain lähettää otsikon itse, joten selaimessa tämä on automaattista — mutta curlilla se on muistettava (`curl --compressed`) |
+| **`Digitraffic-User`-otsikko** | Digitraffic pyytää sovelluksen tunnistamista. Otsikko on sallittu CORS-preflightissa, joka vastaa 204 ja `access-control-max-age: 86400` → yksi OPTIONS-kutsu per selainistunto |
+| CORS | `access-control-allow-origin: *` → selain voi hakea suoraan, ei proxyä oman API:n kautta |
+| Aikaleimat | Listarajapinnassa ei ole kuvan aikaa; "kuva päivitetty" = aseman `dataUpdatedTime`. Suuntien nimiä (esim. "Vaasaan") ei ole listassa → kamerat numeroidaan (1…n) |
+
+### Suodatus ja esitys
+
+| Osa | Ratkaisu |
+|---|---|
+| `apps/web/src/api/cameras.ts` | Digitraffic-tyypit + `fetchCameraStations` (otsikot, `cache: 'no-cache'` → ETag-validointi, kevyt 304 jos data ei muutu) |
+| `apps/web/src/lib/cameras.ts` | Puhtaat funktiot `haversineKm`, `toTrafficCameras`, `cameraLabel`, `formatDistance`, `cameraImageUrl`. Oletukset: keskusta **61.4978, 23.761** (Keskustori), säde **10 km**, vain `inCollection !== false` -kamerat, järjestys lähimmästä kauimmaiseen |
+| `apps/web/src/pages/CamerasPage.tsx` | Sivu + **"Päivitä kuvat"** -painike; ei automaattista pollausta (`refetchOnWindowFocus: false`), koska kuvat ovat raskaita |
+| `apps/web/src/components/CameraCard.tsx` | Kuva 16:9 (`loading="lazy"`), klikkaus avaa täysikokoisen kuvan uuteen välilehteen; aseman nimi, etäisyys, kuvan aika; chipeillä vaihdetaan aseman kameraa (16/24 asemalla useampi) |
+| Kuvakoko | Ruudukko rajattu 1000 px → **3 saraketta, 2 riviä = 6 kuvaa ruudulla** (verifioitu kuvakaappauksella 1440×900) |
+| Cache-avain | Kuvan URL on `?v=<dataUpdatedAt>`: "Päivitä kuvat" uusii listan ja pakottaa selaimen hakemaan kuvat uudelleen (ohittaa myös CloudFront-välimuistin) |
+| Suorituskyky | 24 kuvaa × ~150 kt ≈ 3,6 Mt jos kaikki ladataan — siksi `loading="lazy"`, jolloin aluksi latautuu vain näkyvät ~6 |
+
+Mitattu dev-ympäristössä 23.9.2026: 810 asemaa → **24 kameraa** alle 10 km
+säteellä; 16 asemalla on useampi kamera (yhteensä 78 valittavaa kuvaa).
+
+
+### CSP (pakollinen muutos)
+
+Kuvat **eivät lataudu ilman CSP-muutosta**: `infra/lib/csp.ts` sai
+`CAMERA_ORIGINS`-listan (`https://tie.digitraffic.fi`,
+`https://weathercam.digitraffic.fi`), joka lisätään sekä `img-src`:hen (kuvat
+`<img>`-elementillä) että `connect-src`:hen (asemaluettelo `fetch`:llä).
+Regressiosuoja: `infra/test/csp.test.ts` (+3 testiä).
+
+Uusi vuorovaikutus, joka on hyvä muistaa: **sama origin tarvitaan molemmissa
+direktiiveissä**, jos kuvat vaihdetaan myöhemmin `fetch`-pohjaisiksi (esim.
+selaimen välimuisti kuville) — siksi lista on molemmissa.
+
+### Testit ja verifiointi
+
+| Kohde | Tulos |
+|---|---|
+| `apps/web/src/lib/cameras.test.ts` (uusi, 14 testiä) | etäisyyslaskenta, säteensuodatus (myös rajatapaus säde 0), `inCollection`-suodatus, nimen muotoilu, etäisyyden katkaisu (9,96 km → `9,9 km`, ei "10,0 km"), puutteellinen geometria, puuttuva vastaus |
+| `infra/test/csp.test.ts` (11) | kameraoriginit `img-src`:ssä ja `connect-src`:ssä, `cameraOrigins`-asetus |
+| Koko sarja | **150 testiä** ✅ |
+| `npm run build:web` | ✅ (tsc --noEmit + vite) |
+| ESLint | ✅ |
+| Headless Chrome (dev, deployn jälkeen) | 24 korttia, 24 kuvaa, **0 CSP-rikkomusta**, ei hakuvirhettä; kuvakaappaus 1440×900: 3 saraketta × 2 riviä = 6 kuvaa näkyvissä |
+| **Prod (tampere247.online) 23.9.2026** | 24 korttia, 24 kuvaa, **0 CSP-rikkomusta**; CSP-otsikossa `tie.digitraffic.fi` + `weathercam.digitraffic.fi` sekä `img-src`:ssä että `connect-src`:ssä |
+| Brändi (dev + prod DOM) | **0** osumaa `Tampere360`, 4 osumaa `Tampere 247` |
+| Prettier | Omat uudet/muokatut tiedostot ✅ (`styles.css`, `csp.ts`, `cameras.ts`, `CamerasPage.tsx`). `lib/format.ts` ja `README.md` ovat ennestään §16:n korjauslistalla — niitä ei muotoiltu tässä yhteydessä, jotta diff pysyy aiheessa |
+
+Deploy tehtiin molempiin ympäristöihin, koska muotoilu muutti asset-hashit:
+`tampere360-dev-frontend` ja `tampere360-prod-frontend` (135 s + 138 s).
+
+### Bugikorjaus 23.9.2026: kameran kellonaika näytti 3 tuntia väärältä
+
+**Oire:** kamerakortissa luki esim. `kuva 23.9.2026 klo 18.26`, kun kuvat oli
+otettu klo 21.47. Kaksi eri juurisyytä, jotka korjattiin molemmat:
+
+**(1) Aikavyöhyke ei ollut kiinnitetty.** `lib/format.ts`:n `formatTime` käytti
+`toLocaleString('fi-FI', …)` ilman `timeZone`-asetusta → aika muotoiltiin
+**selaimen** aikavyöhykkeellä. UTC-selain näytti 18.26, kun Suomessa oli 21.26
+(mittaus: headless-Chrome). Korjaus: `HELSINKI_TIME_ZONE = 'Europe/Helsinki'`
+vakiona ja `timeZone`-asetus käytössä → kellonajat ovat aina Suomen ajassa
+(sisältää kesä-/talviajan automaattisesti).
+
+**(2) Väärä kenttä: asemaluettelon `dataUpdatedTime` ei ole kuvan aika.**
+Mitattuna 23.9.2026 klo 21.50 (18:50Z):
+
+| Lähde | Aika |
+|---|---|
+| Asemaluettelon asemakohtainen `dataUpdatedTime` | 15:25–15:28Z (≈3,5 h vanha **metatietoa**) |
+| Asemaluettelon oma `dataUpdatedTime` (koko lista) | 16:33Z |
+| Kuvatiedoston `Last-Modified` (`weathercam…jpg`) | **18:47Z** ✅ |
+
+Eli asemaluettelo on metatietoa, ja sen aikakenttä voi olla tunteja vanha.
+Kuvan todellinen kuvausaika saadaan `presets[].measuredTime`-kentästä
+rajapinnasta `GET /stations/data` (kaikki asemat **yhdellä kutsulla**, ~19 kt
+gzipattuna; CORS `*`, `Digitraffic-User`-otsikko sallittu, preflight 204).
+
+| Osa | Muutos |
+|---|---|
+| `api/cameras.ts` | uusi `CAMERA_DATA_URL`, tyypit ja `fetchCameraData()`; dokumentoitu miksi asemaluettelon aika ei kelpaa |
+| `api/queries.ts` | `useCameraStations` → `useCameraData`: kaksi kutsua `Promise.all`:lla (`stations` + `data`) |
+| `lib/cameras.ts` | `TrafficCameraPreset.measuredTime`; `toTrafficCameras(stations, data, …)` yhdistää ajat asemakohtaisesti; uusi `cameraImageTime(camera, preset)` = `measuredTime` → aseman aika → `null`. Asemaluettelon `dataUpdatedTime`a **ei enää käytetä** kuvan aikana |
+| `components/CameraCard.tsx` | aika valitusta presetistä (`cameraImageTime`), ei aseman metatiedosta |
+| `pages/CamerasPage.tsx` | `toTrafficCameras(data?.stations, data?.data)`; selite: "aika on kuvan kuvausaika Suomen ajassa" |
+| `lib/format.ts` | `timeZone: HELSINKI_TIME_ZONE` |
+
+**Testit:** `cameras.test.ts` (19, +5: `measuredTime`-yhdistäminen,
+regressiosuoja ettei listan aikaa käytetä, puuttuva asema, `cameraImageTime`
+fallback) ja `format.test.ts` (22, +2: aikavyöhykeregressio, joka asettaa
+`process.env.TZ = 'UTC'` — ilman kiinnitystä testi epäonnistuu myös Suomessa
+ajettaessa). Koko sarja **157 testiä** ✅, ESLint ✅, `npm run build:web` ✅,
+Prettier ✅ (omat tiedostot).
+
+### Ei muutoksia putkeen eikä API:in
+
+Kamerat eivät tule tapahtumamallin kautta eivätkä näy `/v1/situations`- tai
+`/v1/map`-vastauksissa — ne ovat oma, suoraan lähteestä luettava näkymä.
+Tämä on tarkoituksellinen rajaus (aiemmin "liikennekamerat" oli vaiheessa 2,
+ks. §9); jos kamerat halutaan myöhemmin kartalle tilanteiden yhteyteen, se
+tehdään omana muutoksenaan.
+
+Footerin attribuutio päivitettiin: *"Liikennetiedotteet ja kelikamerat:
+Fintraffic / Digitraffic"*.
+
+
+## 26. Taustakuva vain Nyt-sivulle (23.9.2026)
+
+**Muutos:** Nyt-sivun himmennetty taustakuva (`background.jpg`) poistettiin
+neljältä kategoriasivulta — **Liikenne, Säävaroitukset, Poliisi,
+Joukkoliikenteen poikkeustilanteet**. Ne käyttävät nyt samaa tasaista tummaa
+taustaa kuin Lähteiden tila ja Liikennekamerat.
+
+**Mistä taustakuva tuli:** kategoriasivut renderöitiin samalla
+`CategoryPage`-komponentilla, joka sisälsi Nyt-sivun taustakuvan
+(`<div className="now-backdrop" />`). Taustakuva ei siis ollut CSS-luokan
+sivutuote vaan komponentin oma elementti — siksi korjaus on yhden rivin
+poisto.
+
+| Osa | Muutos |
+|---|---|
+| `pages/CategoryPage.tsx` | `now-backdrop`-elementti ja sen kommentti poistettu; JSDoc kertoo, että taustana on tasainen `--bg` |
+| `styles.css` | `.now-backdrop`-kommentti tarkentaa, että luokka on käytössä **vain** Nyt-sivulla |
+
+`now-backdrop` **jätettiin Nyt-sivulle** (`pages/NowPage.tsx`), koska se on
+siellä tarkoituksellinen — samoin `.page`-luokalla ei ole omaa taustaa, vaan
+se perii `body { background: var(--bg) }` eli `#0b1220`.
+
+**Verifiointi** (dev + prod, headless Chrome, 1440×900):
+
+| Sivu | `now-backdrop` DOM:issa | Taustan väri |
+|---|---|---|
+| `/` (Nyt) | 1 ✅ (säilyy) | valokuva |
+| `/liikenne` | 0 ✅ | rgb(11, 18, 32) |
+| `/saa` | 0 ✅ | rgb(11, 18, 32) |
+| `/poliisi` | 0 ✅ | rgb(11, 18, 32) |
+| `/joukkoliikenne` | 0 ✅ | rgb(11, 18, 32) |
+| `/lahteet` (vertailu) | 0 | rgb(11, 18, 32) |
+| `/kamerat` | 0 | rgb(11, 18, 32) |
+
+Eli kaikkien kategoriasivujen pikseliväri on **täsmälleen sama** kuin
+Lähteiden tila -sivulla. Testit 157 ✅, ESLint ✅, `npm run build:web` ✅.
+Deploy: `tampere360-dev-frontend` (118 s) ja `tampere360-prod-frontend`
+(140 s).
 

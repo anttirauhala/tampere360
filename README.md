@@ -153,4 +153,5 @@ curl https://api.tampere247.online/v1/health/sources
 Datalähteet ovat avoimia (CC BY 4.0 tai vastaava). Jokaisen tapahtuman
 `attribution`-kenttä kertoo lähteen, ja käyttöliittymä näyttää pakolliset
 attribuoinnit (esim. `© OpenStreetMap contributors` karttatiilille,
-Ilmatieteen laitos säävaroituksille).
+Ilmatieteen laitos säävaroituksille, Fintraffic / Digitraffic
+liikennetiedotteille ja kelikameroille).

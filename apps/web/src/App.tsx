@@ -3,6 +3,7 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
 
 import { Layout } from './components/Layout';
+import { CamerasPage } from './pages/CamerasPage';
 import { CategoryPage } from './pages/CategoryPage';
 import { NowPage } from './pages/NowPage';
 import { SourcesPage } from './pages/SourcesPage';
@@ -48,6 +49,7 @@ export function App() {
               }
             />
             <Route path="liikenne" element={<CategoryPage category="TRAFFIC" />} />
+            <Route path="kamerat" element={<CamerasPage />} />
             <Route path="saa" element={<CategoryPage category="WEATHER" />} />
             <Route path="poliisi" element={<CategoryPage category="POLICE" />} />
             <Route path="joukkoliikenne" element={<CategoryPage category="PUBLIC_TRANSPORT" />} />

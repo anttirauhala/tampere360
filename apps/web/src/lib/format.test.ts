@@ -57,6 +57,41 @@ describe('formatTime', () => {
     expect(formatted).toMatch(/\d\.\d\.\d{4}\b/);
     expect(formatted).toContain('klo');
   });
+
+  /**
+   * Regressiosuoja (23.9.2026): kamerasivulla aika näytti olevan 3 tuntia
+   * pielessä. Syynä oli se, että aika muotoiltiin selaimen aikavyöhykkeellä —
+   * UTC:llä ajettava selain näytti 18.26, vaikka Suomessa oli 21.26.
+   *
+   * Testi vaihtaa prosessin aikavyöhykkeeksi UTC:n, joten ilman kiinnitettyä
+   * `timeZone`-asetusta tulos olisi väärä myös Suomessa ajettaessa.
+   */
+  it('näyttää ajan Suomen ajassa riippumatta selaimen aikavyöhykkeestä', () => {
+    const original = process.env.TZ;
+    try {
+      process.env.TZ = 'UTC';
+      expect(formatTime('2026-09-23T15:26:00Z')).toBe('23.9.2026 klo 18.26');
+
+      process.env.TZ = 'America/New_York';
+      expect(formatTime('2026-09-23T15:26:00Z')).toBe('23.9.2026 klo 18.26');
+    } finally {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    }
+  });
+
+  it('huomioi talviajan (UTC+2) samalla kiinnityksellä', () => {
+    const original = process.env.TZ;
+    try {
+      process.env.TZ = 'UTC';
+      // Tammikuussa Suomi on UTC+2, kesäkuussa UTC+3.
+      expect(formatTime('2026-01-15T15:26:00Z')).toBe('15.1.2026 klo 17.26');
+      expect(formatTime('2026-06-15T15:26:00Z')).toBe('15.6.2026 klo 18.26');
+    } finally {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    }
+  });
 });
 
 describe('formatAge', () => {

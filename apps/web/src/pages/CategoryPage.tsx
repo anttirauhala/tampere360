@@ -13,6 +13,10 @@ interface Props {
  * Jokainen tilanne on oma, koko leveyden levyinen elementti — ei yhtä
  * koostekorttia. Taustaväri tulee tapahtumatyypistä (sama kuin Nyt-sivun
  * koostekortilla) ja infoteksti näytetään kokonaisuudessaan.
+ *
+ * Taustana on muiden sivujen tapaan tasainen `--bg` (Lähteiden tila,
+ * Liikennekamerat) — Nyt-sivun taustakuvaa (`now-backdrop`) ei käytetä täällä,
+ * jotta tilannelista pysyy rauhallisena luettavana.
  */
 export function CategoryPage({ category }: Props) {
   const { data, isLoading, error } = useSituations({ category, limit: 200 });
@@ -22,9 +26,6 @@ export function CategoryPage({ category }: Props) {
 
   return (
     <section className="page">
-      {/* Sama himmennetty taustakuva kuin Nyt-sivulla (samat asetukset CSS:ssä). */}
-      <div className="now-backdrop" aria-hidden="true" />
-
       <h1 className="page__title">
         <span aria-hidden="true">{CATEGORY_EMOJI[category]}</span> {label}
       </h1>
