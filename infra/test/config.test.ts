@@ -7,6 +7,11 @@ import {
   ENVIRONMENT_DOMAINS,
   EXPIRY_SWEEP_MINUTES,
   QUERY_RESERVED_CONCURRENCY,
+  VEHICLE_CACHE_MS,
+  VEHICLE_MAX_AGE_MINUTES,
+  VEHICLE_RESERVED_CONCURRENCY,
+  VEHICLE_STALE_MAX_MS,
+  VEHICLE_UPSTREAM_TIMEOUT_MS,
   frontendDomainNames,
   frontendOrigins,
 } from '../lib/config';
@@ -86,5 +91,38 @@ describe('tilanteiden vanhentuminen', () => {
   it('siivous ajetaan selvästi alle 30 minuutin välein', () => {
     expect(EXPIRY_SWEEP_MINUTES).toBeGreaterThan(0);
     expect(EXPIRY_SWEEP_MINUTES).toBeLessThanOrEqual(15);
+  });
+});
+
+/**
+ * Ajoneuvosijainnit (§27): karttasivu pollaa 5 sekunnin välein, joten reitti on
+ * API:n vilkkain. Nämä testit estävät sen, että välimuisti poistettaisiin
+ * vahingossa käytöstä tai kustannuskatto löysennettäisiin — ilman välimuistia
+ * jokainen avoin karttasivu aiheuttaisi oman 1,8 Mt:n Waltti-kutsunsa.
+ */
+describe('ajoneuvosijaintien kustannussuojat', () => {
+  it('upstream-kutsuja vaimennetaan välimuistilla', () => {
+    expect(VEHICLE_CACHE_MS).toBeGreaterThan(0);
+    expect(VEHICLE_CACHE_MS).toBeLessThanOrEqual(30_000);
+  });
+
+  it('vanhaa snapshotia ei tarjota loputtomiin virhetilanteessa', () => {
+    expect(VEHICLE_STALE_MAX_MS).toBeGreaterThan(VEHICLE_CACHE_MS);
+    expect(VEHICLE_STALE_MAX_MS).toBeLessThanOrEqual(300_000);
+  });
+
+  it('ikäraja pudottaa haamut pois mutta ei tuoreita havaintoja', () => {
+    expect(VEHICLE_MAX_AGE_MINUTES).toBeGreaterThan(0);
+    expect(VEHICLE_MAX_AGE_MINUTES).toBeLessThanOrEqual(15);
+  });
+
+  it('Lambdan varattu concurrency on pieni', () => {
+    expect(VEHICLE_RESERVED_CONCURRENCY).toBeGreaterThan(0);
+    expect(VEHICLE_RESERVED_CONCURRENCY).toBeLessThanOrEqual(3);
+  });
+
+  it('upstream-timeout on selvästi Lambdan timeoutia lyhyempi', () => {
+    expect(VEHICLE_UPSTREAM_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(VEHICLE_UPSTREAM_TIMEOUT_MS).toBeLessThan(10_000);
   });
 });

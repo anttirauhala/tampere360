@@ -12,6 +12,9 @@ import { SourcesPage } from './pages/SourcesPage';
 const MapPage = lazy(() =>
   import('./pages/MapPage').then((module) => ({ default: module.MapPage })),
 );
+const NysseMapPage = lazy(() =>
+  import('./pages/NysseMapPage').then((module) => ({ default: module.NysseMapPage })),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,6 +52,14 @@ export function App() {
               }
             />
             <Route path="liikenne" element={<CategoryPage category="TRAFFIC" />} />
+            <Route
+              path="nysse-kartta"
+              element={
+                <Suspense fallback={<p className="state state--loading">Ladataan karttaa…</p>}>
+                  <NysseMapPage />
+                </Suspense>
+              }
+            />
             <Route path="kamerat" element={<CamerasPage />} />
             <Route path="saa" element={<CategoryPage category="WEATHER" />} />
             <Route path="poliisi" element={<CategoryPage category="POLICE" />} />

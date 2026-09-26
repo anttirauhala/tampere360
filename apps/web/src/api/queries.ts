@@ -4,12 +4,14 @@ import { useQuery } from '@tanstack/react-query';
 
 import { fetchCameraData, fetchCameraStations } from './cameras';
 import { apiGet } from './client';
+import { VEHICLE_POLL_MS, fetchVehicles } from './vehicles';
 import type {
   Category,
   MapResponse,
   SituationDetail,
   SituationListResponse,
   SourceHealthResponse,
+  VehicleMode,
 } from './types';
 
 /** Pollausväli: aktiivinen tilannekuva päivittyy 30 sekunnin välein. */
@@ -87,5 +89,25 @@ export function useCameraData() {
     },
     staleTime: 30_000,
     refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Joukkoliikenteen ajoneuvot kartalle (§27).
+ *
+ * - Pollaus 5 s (ks. `VEHICLE_POLL_MS`); oma Lambda vaimmentaa Waltti-kutsut
+ *   välimuistilla, joten useampi avoin selain ei lisää upstream-kuormaa.
+ * - `refetchIntervalInBackground: false`: taustalla oleva välilehti ei pollaa.
+ * - Välimuistia ei jaeta muodon yli (`queryKey` sisältää muodon), joten
+ *   Ratikat/Bussit-vaihto ei näytä hetkeäkään väärää aineistoa — kartalla
+ *   säilyy sen ajan edellinen piirto.
+ */
+export function useVehicles(mode: VehicleMode) {
+  return useQuery({
+    queryKey: ['vehicles', mode],
+    queryFn: () => fetchVehicles(mode),
+    refetchInterval: VEHICLE_POLL_MS,
+    refetchIntervalInBackground: false,
+    staleTime: VEHICLE_POLL_MS,
   });
 }

@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 const NAV = [
   { to: '/', label: 'Nyt', end: true },
   { to: '/kartta', label: 'Kartta', end: false },
+  { to: '/nysse-kartta', label: 'Nysse kartalla', end: false },
   { to: '/liikenne', label: 'Liikenne', end: false },
   { to: '/kamerat', label: 'Liikennekamerat', end: false },
   { to: '/saa', label: 'Säävaroitukset', end: false },
@@ -52,8 +53,8 @@ export function Layout() {
             OpenStreetMap contributors
           </a>
           . Säävaroitukset: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet ja kelikamerat:
-          Fintraffic / Digitraffic. Poliisitiedotteet: Sisä-Suomen poliisilaitos. Joukkoliikenne:
-          Nysse / Waltti.
+          Fintraffic / Digitraffic. Poliisitiedotteet: Sisä-Suomen poliisilaitos.
+          Joukkoliikenteen häiriötiedotteet ja ajoneuvosijainnit: Nysse / Waltti (CC BY 4.0).
         </p>
         {/*
           Vakavuusluokittelu on oma arviomme (otsikon ja lähdetietojen

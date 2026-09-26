@@ -314,6 +314,47 @@ a {
   cursor: pointer;
 }
 
+/* --- Nysse kartalla (§27): muotovalitsin + tilarivi --- */
+
+.vehicle-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.vehicle-toolbar__modes {
+  display: flex;
+  gap: 6px;
+}
+
+.vehicle-toolbar__info {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.chip {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+}
+
+.chip--active {
+  border-color: var(--accent);
+  background: rgba(77, 163, 255, 0.25);
+  font-weight: 700;
+}
+
 /* --- Footer --- */
 
 .footer {

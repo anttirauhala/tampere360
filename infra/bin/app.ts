@@ -160,6 +160,7 @@ new MonitoringStack(app, `${prefix}-monitoring`, {
     { name: 'situation-processor', fn: processing.situationProcessorFunction },
     { name: 'situation-expiry', fn: processing.expiryFunction },
     { name: 'api', fn: api.queryFunction },
+    { name: 'vehicle-positions', fn: api.vehiclesFunction },
   ],
   httpApi: api.httpApi,
 });

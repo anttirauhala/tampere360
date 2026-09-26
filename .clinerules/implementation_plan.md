@@ -1067,3 +1067,225 @@ Lähteiden tila -sivulla. Testit 157 ✅, ESLint ✅, `npm run build:web` ✅.
 Deploy: `tampere360-dev-frontend` (118 s) ja `tampere360-prod-frontend`
 (140 s).
 
+
+## 27. Nysse kartalla — joukkoliikenteen ajoneuvot reaaliajassa (26.9.2026)
+
+Uusi välilehti `/nysse-kartta` näyttää Tampereen seudun joukkoliikenteen
+ajoneuvot kartalla 5 sekunnin välein päivittyvänä: ratikat ja bussit, ikoni
+kertoo linjanumeron ja kiertyy kulkusuuntaan. Uusi API-reitti
+`GET /v1/vehicles?mode=TRAM|BUS`. Tarkempi kuvaus:
+[`docs/architecture/vehicle-positions.md`](../docs/architecture/vehicle-positions.md).
+
+### Miksi Waltti SIRI eikä GTFS-RT
+
+| Vaihtoehto | Miksi ei / miksi |
+|---|---|
+| **Waltti SIRI VehicleMonitoring** (valittu) | antaa `LineRef` ("80"), `DestinationName` ("Keskustori") ja `Delay` suoraan → ei arvailua |
+| Nysse GTFS-RT VehiclePositions | antaa vain dokumentoimattoman `routeId`-numeron (esim. `806990`) eikä määränpäätä → linjanumero ja määränpää olisi pitänyt ratkaista erikseen |
+
+Päätepiste `https://data.waltti.fi/tampere/api/sirirealtime/v1.3/ws`
+(POST, Basic-auth). **Avain luetaan SSM:stä** `/tampere360/{env}/sources/nysse/api-key`
+— sama parametri kuin Nysse-adapteri lukee, **ei uutta salaisuutta**. Avain ei
+koskaan päädy selaimeen, vaikka Waltti sallisikin CORSin.
+
+### Arkkitehtuuri: oma Lambda, ei `apps/api`
+
+```
+Selain (5 s pollaus)
+   → GET /v1/vehicles?mode=TRAM|BUS
+   → apps/vehicle-positions (oma Lambda, varattu concurrency 2)
+   → muistivälimuisti (5 s TTL + in-flight de-dupe + 60 s stale)
+   → Waltti SIRI VM (1,83 Mt XML) → GeoJSON FeatureCollection
+```
+
+| Ratkaisu | Perustelu |
+|---|---|
+| Oma Lambda ja oma varattu concurrency (2) | karttasivu pollaa 5 s, tilanteet 30–60 s → karttaliikenne ei syö query-Lambdan kustannuskatkoa (`QUERY_RESERVED_CONCURRENCY = 5`) |
+| Ei DynamoDB-käyttöä | ajoneuvot ovat hetkellistä dataa; ei lukukapasiteettia eikä uusia tauluja |
+| 5 s TTL + in-flight de-dupe | N selainta aiheuttaa enintään yhden Waltti-kutsun per TTL per lämmin kontti |
+| 60 s "stale"-varafallback | Walttin hetkellinen virhe ei tyhjennä karttaa; vastaus merkitään `stale: true` |
+| `VEHICLE_MAX_AGE_MINUTES = 5` | liian vanhat havainnot pudotetaan, jotta kartalle ei jää "haamuja" |
+| `mode`-parametri | `TRAM`/`BUS` suodattaa; **virheellinen arvo → HTTP 400** (`INVALID_MODE`), jotta kirjoitusvirhe ei näy hiljaisena tyhjänä karttana; ilman parametria palautetaan kaikki |
+| Kevyt `<OnwardCalls>`-poisto | pysäkkikohtaiset tiedot leikataan ennen XML-jäsennystä: **415 ms → 36 ms** per pyyntö |
+| Ratikan tunnistus | `OperatorRef === '56920'` (verifioitu: 19 ajoneuvoa, linjat 1 ja 3); varalla `TRAM_LINES = ['1','3']` |
+
+Vastaus on GeoJSON (`type: FeatureCollection`) + metatiedot `counts`, `count`,
+`generatedAt` (lähteen aika), `fetchedAt` (hakuhetki), `stale`.
+
+### Frontend
+
+| Osa | Ratkaisu |
+|---|---|
+| Karttakerrokset | **yksi GeoJSON-lähde + kaksi symbolikerrosta**: runko (`vehicles-body`) ja linjanumerotunniste (`vehicles-tag`) |
+| Ikonit | piirretään ajonaikaisesti `canvas`ille 2× pikselitiheydellä → **linjanumero on poltettu ikoniin**, joten MapLibren glyph-lähdettä (fontteja) eikä CSP-muutosta tarvita |
+| Klikkaus | symbolikerroksen popup: linja, määränpää, viive (min myöhässä / etuajassa) ja havainnon ikä |
+| Pollaus | 5 s (`refetchIntervalInBackground: false`) — taustavälilehti ei pollaa |
+| Suodatin | chipit "Ratikat (n)" / "Bussit (n)" |
+| CSP | **ei uusia origineja**: OSM-tiilet olivat jo `img-src`/`connect-src`issä ja API on oma origin |
+
+### Testit
+
+`apps/vehicle-positions/src/*.test.ts` (36): `siri.ts` (jäsennys, puuttuvat
+kentät, `<OnwardCalls>`-poisto, viive), `geojson.ts` (GeoJSON-muunnos,
+koordinaattien validointi, ikäraja, `counts`), `cache.ts` (TTL, in-flight
+de-dupe, stale-fallback, virhetilanne), `params.ts` (`mode`-käsittely) ja
+`mode.ts` (ratikan tunnistus). Koko sarja **211 testiä** ✅, ESLint ✅,
+`npm run build:web` ✅.
+
+
+
+### 27.1 Sivuvaikutuksena löytynyt ja korjattu vika: MapLibren työntekijä ei tullut buildiin
+
+**Oire:** kartalla näkyivät OSM-tiilet mutta **ei yhtään ajoneuvoikonia**, ja
+konsolissa:
+
+```
+Loading Worker from "…/assets/maplibre-gl-worker.mjs" was blocked because of a
+disallowed MIME type ("text/html").
+Failed to load module script: The server responded with a non-JavaScript MIME
+type of "text/html".
+```
+
+**Miksi vika on hiljainen:** rasteritiilet latautuvat ja näkyvät ilman
+työntekijää, mutta **GeoJSON-lähde jää jumiin** eikä symbolikerroksia koskaan
+piirretä. Kartta näyttää siis "melkein oikealta" — vain ikonit puuttuvat.
+
+**Juurisyy:** MapLibre GL JS v6 laskee työntekijän URL:in **ajonaikaisesti**
+`import.meta.url`:sta:
+
+```js
+new URL(`./${t}`, import.meta.url)   // t = 'maplibre-gl-worker.mjs'
+```
+
+Vite ei tunnista tällaista dynaamisesti rakennettua polkua, joten
+`maplibre-gl-worker.mjs` (ja sen tuonti `maplibre-gl-shared.mjs`) **ei
+koskaan päätynyt `dist`-kansioon**. Selain pyysi `/assets/maplibre-gl-worker.mjs`,
+mutta CloudFrontin SPA-uudelleenohjaus palautti `index.html`:n (HTTP 200,
+`text/html`) → moduulin lataus hylättiin MIME-tyypin vuoksi.
+
+**Korjaus:** `apps/web/src/lib/maplibre-worker.ts` (uusi) bundlaa työntekijän
+Viten omalla `?worker&url`-kyselyllä ja asettaa URL:in MapLibrelle
+eksplisiittisesti:
+
+```ts
+import { setWorkerUrl } from 'maplibre-gl';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
+setWorkerUrl(workerUrl);
+```
+
+`MapView.tsx` importtaa moduulin sivutuontona, joten URL on asetettu ennen kuin
+yhtään karttaa luodaan. Buildi tuottaa nyt
+`dist/assets/maplibre-gl-worker-<hash>.js` (508 kB, sisältää jaetun moduulin).
+
+**Miksi `?worker&url` eikä `?url`:** pelkkä `?url` kopioi tiedoston sellaisenaan,
+jolloin sen `import './maplibre-gl-shared.mjs'` osoittaisi olemattomaan polkuun.
+`?worker&url` bundlaa työntekijän *ja sen riippuvuudet* yhdeksi tiedostoksi sekä
+devissä että buildissa.
+
+**Miksi tämä ei näkynyt aiemmin:** tilannekartalla (`/kartta`) käytetään
+DOM-pohjaisia `Marker`-olioita, jotka eivät tarvitse työntekijää. Vika tuli
+esiin vasta, kun kartalle lisättiin GeoJSON-lähde ja symbolikerrokset.
+
+**Diagnoosimenetelmä (toistettavissa):**
+
+1. Headless Chrome `--remote-debugging-port` + CDP-client: `Log.enable`,
+   `Network.enable`, `Page.reload` → konsolin virherivi paljastaa
+   **epäonnistuvan moduulin URL:in** (pelkkä `--dump-dom` ei sitä näytä).
+2. Väliaikainen `window.__map`-paljastus ja tarkistus:
+   `map.getSource('vehicles')._isUpdatingWorker === true` ja
+   `_pendingWorkerUpdate` sisältää datan → työntekijä ei kuittaa päivitystä;
+   `map.loaded() === false` mutta `areTilesLoaded() === true`.
+3. Korjauksen jälkeen: `map.loaded() === true`,
+   `querySourceFeatures('vehicles') = 37` (tiilikohtainen monistus) ja
+   `queryRenderedFeatures(['vehicles-body']) = 15` → ikonit piirretään.
+
+**Sivukorjaus:** MapLibre loi oletusattribuution *lisäksi* oman kompaktin
+attribuutiokontrollin → kartalla oli **kaksi attribuutiota päällekkäin**. Nyt
+`attributionControl: false` + oma kompaktin kontrolli.
+
+### 27.1.1 Sivuvaikutuksena löytynyt ja korjattu vika: ajoneuvon klikkaus ei avannut popupia
+
+**Oire:** ikonit näkyivät, mutta niiden päällä kursori ei vaihtunut ja
+klikkaus ei avannut popupia (`map.on('click', 'vehicles-body', …)` ei
+laukennut koskaan).
+
+**Juurisyy:** kuuntelijat rekisteröitiin omassa efektissään (`deps: []`),
+joka luovutti heti, jos kerrosta ei vielä ollut olemassa:
+
+```ts
+const register = () => {
+  if (!map.getLayer(VEHICLE_BODY_LAYER)) return;   // ← hiljainen luovutus
+  map.on('click', VEHICLE_BODY_LAYER, onClick);
+  …
+};
+```
+
+Kerros luodaan *toisessa* efektissä (`[vehicles]`) vasta `load`-tapahtuman
+jälkeen. Jos `register()` ajettiin hetkellä, jolloin `getLayer` palautti
+`undefined`, kuuntelijoita ei koskaan rekisteröity — efekti kun ei enää
+uudelleen ajanut. Virhe oli täysin hiljainen (ei konsolivirhettä).
+
+**Todennus:** `map._delegatedListeners` oli tyhjä (`mouseenter`-avainta ei
+ollut lainkaan), kun taas käsin rekisteröity testikuuntelija toimi samalla
+kartalla → vika oli nimenomaan rekisteröinnissä, ei hit-testissä.
+(`queryRenderedFeatures` palautti ikonin kohdalta 1 osuman ja
+`querySourceFeatures('vehicles')` 26–29 featurea ✅.)
+
+**Korjaus:** kuuntelijat rekisteröidään nyt **samassa efektissä, joka luo
+kerroksen** (`setup()` → `ensureLayers()`, `applyData()`,
+`registerListeners()`), ja `registerListeners()` on suojattu
+`listenersRegisteredRef`-lipulla. Koska `setup` ajetaan sekä `load`-hetkellä
+että jokaisella datapäivityksellä (5 s), rekisteröinti ei voi enää jäädä
+väliin. Kuuntelijoita ei poisteta datapäivityksissä; kartan `remove()`
+siivoaa ne komponentin purkautuessa.
+
+**Verifiointi (paikallinen tuotantobuildi + headless Chrome, data päällä):**
+
+| Tarkistus | Tulos |
+|---|---|
+| `_delegatedListeners` | `{ click: ['vehicles-body'], mouseenter: ['vehicles-body'], mouseleave: ['vehicles-body'] }` ✅ |
+| Hover ikonin päällä | `canvas.style.cursor = 'pointer'` ✅ |
+| Klikkaus (CDP-hiiritapahtuma) | popup: *"Ratikka 1 → Pyhällönpuisto A · 2 min myöhässä · Lähtö: Kaupin kampus A · Havaittu 10 s sitten"* ✅ |
+| Konsoli | 0 virhettä ✅ |
+
+
+**Verifiointi (dev, headless Chrome, ei selainlaajennuksia):** työntekijäpyyntö
+`…maplibre-gl-worker.mjs?worker_file&type=module` → 200, `map.loaded() = true`,
+15 renderöityä ajoneuvoikonia, **0 CSP-rikkomusta** ja 0 konsolin virhettä
+(paitsi dev-ympäristön `favicon.ico` 404).
+
+**Huomio selaimen konsolista:** `The page's settings blocked an inline script
+(script-src-elem) … sandbox eval code` **ei tule sovelluksesta** — julkaistu
+`index.html` sisältää vain ulkoisen moduuliskriptin eikä lainkaan
+inline-skriptiä, joten viesti tulee selainlaajennuksesta. CSP
+(`script-src 'self'`) estää sen tarkoituksellisesti, eikä samaa virhettä
+esiinny headless Chromella.
+
+### 27.2 Deploy
+
+Vain **dev**-ympäristöön: `tampere360-dev-frontend` (kahdesti: ensin
+työntekijäkorjaus §27.1, sitten klikkikorjaus §27.1.1) sekä aiemmin
+`tampere360-dev-api` (uusi `vehicle-positions`-Lambda, reitti ja
+SSM-lukuoikeus) ja `tampere360-dev-monitoring`. **Prodiin ei deployattu**
+(käyttäjän toiveesta). Prod-deployn yhteydessä on muistettava, että
+Waltti-avain on vietävä erikseen myös prodin SSM:ään
+(`/tampere360/prod/sources/nysse/api-key`, ks. §21).
+
+Huomio deploysta: `cdk deploy` kannattaa ajaa `setsid nohup stdbuf -oL …`
+-ta taustalla, jos istunto voi katketa — muuten deploy-prosessi voi kuolla
+kesken (stack jää edelliseen tilaan eikä uusi build päädy S3:een).
+
+**Verifiointi deploatusta dev-sivusta 26.9.2026 (headless Chrome, ei
+laajennuksia):**
+
+| Tarkistus | Tulos |
+|---|---|
+| `index.html` osoittaa | `assets/index-B1uOp0Ph.js` (klikkikorjauksen build) ✅ |
+| Työntekijä | `assets/maplibre-gl-worker-CNLXcz58.js` → 200 `text/javascript` ✅ |
+| Ratikkaikonit | 684 minttiä pikseliä (`#34d399`) = 11 ratikkaa ✅ (OSM-tiilissä 0 minttiä/sinistä → värit ovat varmasti omia) |
+| Ikonien sijainti | projektio `map.project(lng,lat)` osui ikoniin 2 px tarkkuudella ✅ |
+| Klikkaus ikoniin | **popup 6/6**: *"Ratikka 1 → Kaupin kampus B · ajassa · Lähtö: Pyhällönpuisto B · Havaittu 10 s sitten"* ✅ |
+| Kursori hoverissa | `pointer` ✅ |
+| CSP-rikkomukset | **0** ✅ |
+| Konsolivirheet | 1 × `502` (`/v1/vehicles`) — Waltti vastasi itse HTTP 500; sovellus säilytti edellisen datan ja ikonit ✅ |
+

@@ -125,6 +125,51 @@ export interface SourceHealthResponse {
   sources: SourceHealth[];
 }
 
+/**
+ * Joukkoliikenteen ajoneuvosijainnit (§27, `GET /v1/vehicles`).
+ *
+ * Vastaus on valmis GeoJSON: kartalla on **yksi lähde** ja sen päälle kaksi
+ * symbolikerrosta (ajoneuvon ikoni + linjanumerotunniste).
+ */
+export type VehicleMode = 'TRAM' | 'BUS';
+
+export interface VehicleProperties {
+  vehicleId: string;
+  /** Linjan numero, esim. `1` tai `80`. */
+  line: string;
+  mode: VehicleMode;
+  /** Määränpää kyltin mukaan, esim. `Keskustori G`. */
+  destination: string | null;
+  /** Lähtöpiste, esim. `Moisio`. */
+  origin: string | null;
+  direction: number | null;
+  /** Kulkusuunta asteina (0 = pohjoinen) — ikoni kiertyy tämän mukaan. */
+  bearing: number | null;
+  /** Poikkeama aikataulusta sekunteina (positiivinen = myöhässä). */
+  delaySeconds: number | null;
+  /** Lähteen havaintoaika (ISO 8601 UTC). */
+  recordedAt: string;
+}
+
+export interface VehicleFeature {
+  type: 'Feature';
+  geometry: { type: 'Point'; coordinates: [number, number] };
+  properties: VehicleProperties;
+}
+
+export interface VehicleFeatureCollection {
+  type: 'FeatureCollection';
+  source: string;
+  /** Walttin tuotantoaika — null, jos lähde ei anna sitä. */
+  generatedAt: string | null;
+  fetchedAt: string;
+  /** true = upstream-haku epäonnistui, tiedot voivat olla vanhentuneita. */
+  stale: boolean;
+  counts: Record<VehicleMode, number>;
+  count: number;
+  features: VehicleFeature[];
+}
+
 export interface CategoriesResponse {
   categories: Category[];
 }

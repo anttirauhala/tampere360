@@ -176,6 +176,30 @@ export const API_THROTTLE = { rateLimit: 10, burstLimit: 20 } as const;
 export const QUERY_RESERVED_CONCURRENCY = 5;
 
 /**
+ * Joukkoliikenteen ajoneuvosijainnit (`GET /v1/vehicles`, arkkitehtuuri §27).
+ *
+ * Karttasivu pollaa 5 sekunnin välein, joten reitti on selvästi vilkkain osa
+ * API:ta. Kustannus pidetään kurissa kolmella keinolla:
+ *
+ *  1. **Lambdan muistivälimuisti** (`VEHICLE_CACHE_MS`): N selainta aiheuttaa
+ *     enintään yhden Waltti-kutsun per TTL per lämmin kontti.
+ *  2. **Varattu concurrency** (`VEHICLE_RESERVED_CONCURRENCY`): kova katto
+ *     sille, montako konttia voi hakea Walttilta samaan aikaan. Lisäksi tämä
+ *     erottaa ajoneuvoreitin query-Lambdan kustannuskatosta (5), jotta
+ *     karttasivun liikenne ei syö tilannelistojen kapasiteettia.
+ *  3. **Havaintojen ikäraja** (`VEHICLE_MAX_AGE_MINUTES`): liian vanhat
+ *     havainnot pudotetaan pois, jotta kartalle ei jää "haamuja".
+ *
+ * Waltti dokumentoi VehicleMonitoring-pyyntöjen väliksi 1 s; me pollaamme
+ * huomattavasti harvemmin (5 s selaimesta, upstream enintään kerran TTL:ssä).
+ */
+export const VEHICLE_CACHE_MS = 5_000;
+export const VEHICLE_STALE_MAX_MS = 60_000;
+export const VEHICLE_MAX_AGE_MINUTES = 5;
+export const VEHICLE_RESERVED_CONCURRENCY = 2;
+export const VEHICLE_UPSTREAM_TIMEOUT_MS = 4_000;
+
+/**
  * Kustannusvalvonnan hälytysrajat (MonitoringStack).
  * Normaali liikenne on murto-osa näistä — hälytys tarkoittaa väärinkäyttöä,
  * ei ruuhkaa.

@@ -11,6 +11,7 @@
  *   GET /v1/categories
  *   GET /v1/sources
  *   GET /v1/health/sources
+ *   GET /v1/vehicles?mode=TRAM|BUS  (oma Lambda, ks. §27)
  */
 
 import * as path from 'path';
@@ -20,6 +21,7 @@ import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as route53 from 'aws-cdk-lib/aws-route53';
@@ -27,7 +29,17 @@ import * as route53targets from 'aws-cdk-lib/aws-route53-targets';
 import { Construct } from 'constructs';
 
 import type { AppContext, DomainConfig } from './config';
-import { QUERY_RESERVED_CONCURRENCY, API_THROTTLE, frontendOrigins, resourceName } from './config';
+import {
+  API_THROTTLE,
+  QUERY_RESERVED_CONCURRENCY,
+  VEHICLE_CACHE_MS,
+  VEHICLE_MAX_AGE_MINUTES,
+  VEHICLE_RESERVED_CONCURRENCY,
+  VEHICLE_STALE_MAX_MS,
+  VEHICLE_UPSTREAM_TIMEOUT_MS,
+  frontendOrigins,
+  resourceName,
+} from './config';
 
 export interface ApiStackProps extends cdk.StackProps {
   appContext: AppContext;
@@ -47,6 +59,12 @@ const API_ROUTES = [
   '/v1/health/sources',
 ];
 
+/**
+ * Ajoneuvoreitit: sama origin ja CORS kuin muilla, mutta oma Lambda ja oma
+ * varattu concurrency (ks. config.ts VEHICLE_*).
+ */
+const VEHICLE_ROUTES = ['/v1/vehicles'];
+
 export class ApiStack extends cdk.Stack {
   /** HTTP API (url-ominaisuus) frontendin ja testausta varten. */
   public readonly httpApi: apigwv2.HttpApi;
@@ -54,6 +72,8 @@ export class ApiStack extends cdk.Stack {
   public readonly httpApiUrl: string;
   /** Query-Lambda valvontaa varten. */
   public readonly queryFunction: lambdaNodejs.NodejsFunction;
+  /** Ajoneuvosijainnit-Lambda valvontaa varten (§27). */
+  public readonly vehiclesFunction: lambdaNodejs.NodejsFunction;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -83,6 +103,46 @@ export class ApiStack extends cdk.Stack {
     situationsTable.grantReadData(this.queryFunction);
     sourceEventsTable.grantReadData(this.queryFunction);
     ingestionStateTable.grantReadData(this.queryFunction);
+
+    // --- Ajoneuvosijainnit (§27) -------------------------------------------------
+    // Hakee Waltti SIRI VM:ltä (Basic-auth) ja palauttaa kevyen GeoJSONin.
+    // Ei DynamoDB-käyttöä: ajoneuvot ovat hetkellistä dataa.
+    this.vehiclesFunction = new lambdaNodejs.NodejsFunction(this, 'VehiclesFunction', {
+      entry: path.join(__dirname, '../../apps/vehicle-positions/src/handler.ts'),
+      handler: 'handler',
+      functionName: resourceName(appContext.envName, 'vehicles'),
+      description: 'Tampere360: joukkoliikenteen ajoneuvosijainnit (Nysse / Waltti SIRI VM)',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: 256,
+      timeout: cdk.Duration.seconds(10),
+      // Kustannuskatto: ks. config.ts VEHICLE_RESERVED_CONCURRENCY.
+      reservedConcurrentExecutions: VEHICLE_RESERVED_CONCURRENCY,
+      environment: {
+        ENVIRONMENT: appContext.envName,
+        SSM_API_KEY_PATH: `/tampere360/${appContext.envName}/sources/nysse/api-key`,
+        VEHICLE_CACHE_MS: String(VEHICLE_CACHE_MS),
+        VEHICLE_STALE_MAX_MS: String(VEHICLE_STALE_MAX_MS),
+        VEHICLE_MAX_AGE_MINUTES: String(VEHICLE_MAX_AGE_MINUTES),
+        VEHICLE_UPSTREAM_TIMEOUT_MS: String(VEHICLE_UPSTREAM_TIMEOUT_MS),
+        LOG_LEVEL: 'INFO',
+      },
+    });
+
+    // Lukuoikeus vain Nyssen API-avaimeen (sama parametri kuin ingest-nysse
+    // lukee — ks. ingestion-stack.ts). Ei laajempia SSM-oikeuksia.
+    this.vehiclesFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ssm:GetParameter'],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/tampere360/${appContext.envName}/sources/nysse/api-key`,
+        ],
+      }),
+    );
+
+    const vehicleIntegration = new apigwv2Integrations.HttpLambdaIntegration(
+      'VehiclesIntegration',
+      this.vehiclesFunction,
+    );
 
     const integration = new apigwv2Integrations.HttpLambdaIntegration(
       'QueryIntegration',
@@ -118,6 +178,14 @@ export class ApiStack extends cdk.Stack {
         path: route,
         methods: [apigwv2.HttpMethod.GET],
         integration,
+      });
+    }
+
+    for (const route of VEHICLE_ROUTES) {
+      this.httpApi.addRoutes({
+        path: route,
+        methods: [apigwv2.HttpMethod.GET],
+        integration: vehicleIntegration,
       });
     }
 
