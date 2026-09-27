@@ -1263,17 +1263,17 @@ esiinny headless Chromella.
 
 ### 27.2 Deploy
 
-Vain **dev**-ympäristöön: `tampere360-dev-frontend` (kahdesti: ensin
-työntekijäkorjaus §27.1, sitten klikkikorjaus §27.1.1) sekä aiemmin
-`tampere360-dev-api` (uusi `vehicle-positions`-Lambda, reitti ja
-SSM-lukuoikeus) ja `tampere360-dev-monitoring`. **Prodiin ei deployattu**
-(käyttäjän toiveesta). Prod-deployn yhteydessä on muistettava, että
-Waltti-avain on vietävä erikseen myös prodin SSM:ään
-(`/tampere360/prod/sources/nysse/api-key`, ks. §21).
+**Dev:** `tampere360-dev-frontend` (kahdesti: ensin työntekijäkorjaus §27.1,
+sitten klikkikorjaus §27.1.1) sekä aiemmin `tampere360-dev-api` (uusi
+`vehicle-positions`-Lambda, reitti ja SSM-lukuoikeus) ja
+`tampere360-dev-monitoring`.
+
+**Prod 27.9.2026:** ks. prod-osio tämän luvun lopussa.
 
 Huomio deploysta: `cdk deploy` kannattaa ajaa `setsid nohup stdbuf -oL …`
 -ta taustalla, jos istunto voi katketa — muuten deploy-prosessi voi kuolla
 kesken (stack jää edelliseen tilaan eikä uusi build päädy S3:een).
+
 
 **Verifiointi deploatusta dev-sivusta 26.9.2026 (headless Chrome, ei
 laajennuksia):**
@@ -1288,6 +1288,37 @@ laajennuksia):**
 | Kursori hoverissa | `pointer` ✅ |
 | CSP-rikkomukset | **0** ✅ |
 | Konsolivirheet | 1 × `502` (`/v1/vehicles`) — Waltti vastasi itse HTTP 500; sovellus säilytti edellisen datan ja ikonit ✅ |
+
+### 27.2.1 Prod-käyttöönotto (27.9.2026)
+
+Koko §27 vietiin tuotantoon `npm run deploy:prod -- --require-approval never`
+-komennolla (kahdeksan stackia, 208 s):
+
+| Stack | Tulos |
+|---|---|
+| `tampere360-prod-frontend` | ✅ 41 s — uusi asset-versio + CloudFront-invalidointi (`/*`) |
+| `tampere360-prod-api` | ✅ 57 s — `VehiclesFunction`, `/v1/vehicles`-reitti, SSM-lukuoikeus parametriin `tampere360/prod/sources/nysse/api-key` |
+| `tampere360-prod-monitoring` | ✅ 11 s — `LambdaErrorsAlarm-vehicle-positions` + dashboardin uudet widgetit |
+| foundation, data, eventing, ingestion, event-processing | ✅ *(no changes)* |
+
+`cdk diff` ennen deployta näytti **vain lisäyksiä** (ei yhtään olemassa olevan
+resurssin korvausta). IAM-muutokset olivat least privilege: `ssm:GetParameter`
+täsmälleen yhteen parametriin ja Lambda-invoke vain reitille `/v1/vehicles`.
+
+Waltti-avain oli jo valmiina prodin SSM:ssä, joten erillisiä salaisuussiirtoja ei
+tarvittu — **se on kuitenkin aina tarkistettava erikseen per ympäristö**
+(`/tampere360/{env}/sources/nysse/api-key`), koska CDK ei luo salaisuuksia.
+
+**Prod-verifiointi** (27.9.2026):
+
+| Tarkistus | Tulos |
+|---|---|
+| `https://tampere247.online/index.html` | `assets/index-Ch_Do5Yx.css` (sama build kuin devissä) ✅ |
+| `GET /v1/vehicles?mode=TRAM` | 19 ratikkaa / 125 bussia, `stale: false` ✅ |
+| `/v1/health/sources` | TAMPERE_TRAFFIC, FMI_CAP, NYSSE_ALERTS, POLICE_RSS = `OK` ✅ |
+| Etusivu + `www.` | HTTP 200 ✅ |
+| Popup selaimessa (`/nysse-kartta`, `/kartta`) | kontrastit 12,8:1 / 6,5:1 / 6,2:1, **0 konsolivirhettä** ✅ |
+| CloudWatch-hälytykset | 0 hälytystä `ALARM`-tilassa (myös uusi `prod-errors-vehicle-positions` `OK`) ✅ |
 
 ### 27.3 Popupin luettavuus (27.9.2026)
 
@@ -1332,6 +1363,7 @@ kontrastit):
 | Viive ("ajassa") | `--ok` / `--surface-2` | 6,5:1 ✅ |
 | Lisätietorivit | `--text-muted` / `--surface-2` | 6,2:1 ✅ |
 | Tilanteen popup (`/kartta`) | `--text` / `--surface-2` | 12,8:1 ✅ |
+| Sama prodissa (`tampere247.online`, 27.9.2026) | `--text` / `--surface-2` | 12,8:1 ✅ |
 
 Kaikki ylittävät WCAG AA:n (4,5:1). Popupin tausta on nyt `rgb(27, 39, 64)`
 (ennen `rgb(255, 255, 255)`), nuoli seuraa taustaväriä ja sulku-X:stä poistui
