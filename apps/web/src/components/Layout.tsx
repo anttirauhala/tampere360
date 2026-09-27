@@ -4,8 +4,8 @@ import { NavLink, Outlet } from 'react-router-dom';
  * Päänavigaation järjestys ja nimet (§29).
  */
 export const NAV = [
-  { to: '/', label: 'Nyt', end: true },
-  { to: '/kartta', label: 'Kartta', end: false },
+  { to: '/', label: 'Etusivu', end: true },
+  { to: '/kartta', label: 'Tapahtumat kartalla', end: false },
   { to: '/nysse-kartta', label: 'Nysse', end: false },
   { to: '/kamerat', label: 'Kamerat', end: false },
   { to: '/lahteet', label: 'Lähteiden tila', end: false },
