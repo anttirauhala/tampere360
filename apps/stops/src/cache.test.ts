@@ -180,3 +180,121 @@ describe('createKeyedCache', () => {
     expect(cache.peek('c')).toBe('C');
   });
 });
+
+describe('createKeyedCache — epäonnistumisen jäähdytys', () => {
+  it('ei kutsu upstreamia uudelleen jäähdytyksen aikana', async () => {
+    const clock = createClock();
+    let loads = 0;
+    const cache = createKeyedCache<string>({
+      ttlMs: 15_000,
+      staleMaxMs: 60_000,
+      maxEntries: 10,
+      failureCooldownMs: 30_000,
+      now: clock.now,
+    });
+    const load = async () => {
+      loads += 1;
+      throw new Error(`virhe ${loads}`);
+    };
+
+    await expect(cache.get('6833', load)).rejects.toThrow('virhe 1');
+    clock.advance(15_000); // selaimen seuraava pollaus
+    await expect(cache.get('6833', load)).rejects.toThrow('virhe 1');
+
+    expect(loads).toBe(1);
+  });
+
+  it('yrittää uudelleen, kun jäähdytys on kulunut', async () => {
+    const clock = createClock();
+    let loads = 0;
+    const cache = createKeyedCache<string>({
+      ttlMs: 15_000,
+      staleMaxMs: 60_000,
+      maxEntries: 10,
+      failureCooldownMs: 30_000,
+      now: clock.now,
+    });
+    const load = async () => {
+      loads += 1;
+      if (loads === 1) throw new Error('ei verkkoa');
+      return 'nyt onnistui';
+    };
+
+    await expect(cache.get('6833', load)).rejects.toThrow('ei verkkoa');
+    clock.advance(30_000);
+    const value = await cache.get('6833', load);
+
+    expect(loads).toBe(2);
+    expect(value).toMatchObject({ value: 'nyt onnistui', stale: false });
+  });
+
+  it('onnistuminen poistaa jäähdytyksen', async () => {
+    const clock = createClock();
+    let loads = 0;
+    const cache = createKeyedCache<string>({
+      ttlMs: 15_000,
+      staleMaxMs: 60_000,
+      maxEntries: 10,
+      failureCooldownMs: 30_000,
+      now: clock.now,
+    });
+    const load = async () => `arvo-${(loads += 1)}`;
+
+    await cache.get('6833', load); // onnistuu
+    clock.advance(30_000); // TTL ohitse → uusi haku onnistuu
+    await cache.get('6833', load);
+    clock.advance(30_000);
+    await cache.get('6833', load);
+
+    // Kaikki kolme hakua tehtiin: jäähdytys ei estä onnistumisen jälkeistä hakua.
+    expect(loads).toBe(3);
+  });
+
+  it('vanha arvo ohittaa jäähdytyksen (tuoreus voittaa)', async () => {
+    const clock = createClock();
+    let loads = 0;
+    const cache = createKeyedCache<string>({
+      ttlMs: 15_000,
+      staleMaxMs: 60_000,
+      maxEntries: 10,
+      failureCooldownMs: 30_000,
+      now: clock.now,
+    });
+    const load = async () => {
+      loads += 1;
+      if (loads === 1) return 'ensimmainen';
+      throw new Error('ei verkkoa');
+    };
+
+    await cache.get('6833', load); // onnistuu → välimuistissa arvo
+    clock.advance(15_000);
+    const stale = await cache.get('6833', load); // epäonnistuu → varavastaus
+    clock.advance(5_000);
+    const again = await cache.get('6833', load); // jäähdytyksestä huolimatta yrittää
+
+    expect(stale).toMatchObject({ value: 'ensimmainen', stale: true });
+    expect(again).toMatchObject({ value: 'ensimmainen', stale: true });
+    expect(loads).toBe(3);
+  });
+
+  it('ilman jäähdytysasetusta virhe toistetaan joka kutsulla', async () => {
+    const clock = createClock();
+    let loads = 0;
+    const cache = createKeyedCache<string>({
+      ttlMs: 15_000,
+      staleMaxMs: 60_000,
+      maxEntries: 10,
+      now: clock.now,
+    });
+    const load = async () => {
+      loads += 1;
+      throw new Error('virhe');
+    };
+
+    await expect(cache.get('6833', load)).rejects.toThrow('virhe');
+    clock.advance(1_000);
+    await expect(cache.get('6833', load)).rejects.toThrow('virhe');
+
+    expect(loads).toBe(2);
+  });
+});

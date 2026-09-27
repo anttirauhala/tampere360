@@ -1512,10 +1512,11 @@ Rajattu pois: kuormitusrajausta ei ole (20 peräkkäistä + 10 rinnakkaista → 
 |---|---|
 | `apps/stops/src/retry.ts` (uusi) | `withRetry`: yksi uusinta 250 ms viiveellä **vain 5xx- ja verkkovirheille**; 4xx = oma pyyntö väärä, ei uusita. `SiriUpstreamError` (uusi `siri-sm.ts`:ssä) kuljettaa statuskoodin + rungon. |
 | `apps/stops/src/coverage.ts` (uusi) | Toistuvista virheistä opittu "ei reaaliaikapeittoa" -merkintä: 3 peräkkäistä virhettä 2 min sisällä **ja jokin toinen pysäkki vastasi samana aikana** → 30 min merkintä, jonka ajan upstream-kutsua ei tehdä. Merkintä vanhenee itsestään (itsestään korjautuva). |
+| `apps/stops/src/cache.ts` | Epäonnistumisen jäähdytys (`STOP_FAILURE_COOLDOWN_MS`, 30 s): epäonnistuneelle pysäkille ei soiteta uudelleen, jos tarjolla ei ole vanhaa arvoa. Ilman tätä jokainen 15 s pollaus lähetti **2 uutta yritystä** Walttiin loputtomiin. Vanha arvo ohittaa jäähdytyksen (tuoreus voittaa). |
 | `apps/stops/src/handler.ts` | `realtimeCoverage` vastaukseen; peitoton pysäkki → **200** `realtimeCoverage: false`; ennen merkintää **503 + `Retry-After: 15`** (aiemmin 502). Myös välimuistin `stale`-varavastaus lasketaan epäonnistumiseksi. |
 | `apps/web/src/api/client.ts` | `ApiError` kuljettaa HTTP-tilakoodin; `apiErrorStatus()` lukee sen (tekstivarmistus varalla) |
 | `apps/web/src/lib/stops.ts` | `stopDeparturesNotice()` ja `NO_REALTIME_COVERAGE_TEXT` |
-| `apps/web/src/components/StopPanel.tsx` | Ei enää teknistä `API-virhe 502` -tekstiä: rauhallinen huomautus + **"Yritä uudelleen"**-painike; `realtimeCoverage === false` → tiedoksi-tyylinen huomautus |
+| `apps/web/src/components/StopPanel.tsx` | Ei enää teknistä `API-virhe 502` -tekstiä: rauhallinen huomautus + **"Yritä uudelleen"**-painike; `realtimeCoverage === false` → tiedoksi-tyylinen huomautus. Huomautus pidetään `useRef`issä uusinnan ajan, koska TanStack Query nollaa `error`in uuden yrityksen alkaessa (muuten huomautus välähti ja tilalle tuli virheellinen "Ei lähtöjä"). |
 
 **Miksi 503 eikä 502 ja miksi "ei reaaliaikapeittoa" on 200:** teknisen
 virhekoodin näyttäminen käyttäjälle ei auta häntä mitenkään; 5xx kertoo
@@ -1523,10 +1524,32 @@ selaimelle "yritä myöhemmin uudelleen" ja frontend kääntää sen luettavaksi
 huomautukseksi. Peitoton pysäkki taas on **tieto** (pysäkki on olemassa, sen
 lähtöjä ei vain ole tarjolla) eikä virhe — uusi yritys ei muuta tilannetta.
 
-**Testit:** `retry.test.ts` (11), `coverage.test.ts` (11),
-`apps/web/src/lib/stops.test.ts` (+5, sisältää regressiosuojan sille, ettei
-`API-virhe 5xx` -teksti enää näy), `apps/web/src/api/client.test.ts` (4).
-Koko sarja **329 testiä** ✅, ESLint ✅, `npm run build:web` ✅.
+**Miksi peittomerkintä vaatii "toinen pysäkki vastasi" -ehdon:** ilman sitä
+koko Walttin katkos merkitsisi kaikki pysäkit ilman peittoa. Ehto rajaa
+merkinnän tilanteeseen, jossa yhdyskäytävä vastaa muille pysäkeille mutta ei
+tälle. Tämä on tarkoituksella konservatiivinen: järjestelmä ei väitä pysäkin
+peitosta mitään ilman positiivista näyttöä (§20:n periaate "epävarmaa ei
+esitetä varmana"). Ilman merkintää pysäkki näyttää rauhallisen
+"yritämme uudelleen automaattisesti" -huomautuksen, ja jäähdytys pitää
+upstream-kutsut kurissa.
+
+**Verifiointi 27.9.2026 (dev):** API — tavalliset pysäkit `200` +
+`realtimeCoverage: true`; peitoton 6833 `503` (~0,5 s = 2 yritystä + tauko) →
+15 s myöhemmin `503` **0,07 s:ssa** (jäähdytys) → merkinnän jälkeen `200
+realtimeCoverage: false` 0,07 s:ssa. Selain (CDP, pysäkki 9433): "Lähtötietoja
+ei juuri nyt saada…" + "Yritä uudelleen" → nappi lukee "Haetaan…" ja huomautus
+pysyy näkyvissä (6/6 näytettä) → pysäkin merkinnän jälkeen tiedoksi-huomautus
+"Waltti ei tarjoa tälle pysäkille lähtötietoja…"; verkkopyynnöt
+`9433:503 ×4 → 9433:200 ×5`; DOM:issa **ei yhtään** `API-virhe`-osumaa;
+0 CSP-rikkomusta. Peitottomia pysäkeitä satunnaisotoksissa **6 / 200 ≈ 3 %**
+(6833, 6837, 6340, 6350, 6470, 9429, 9433).
+
+**Testit:** `retry.test.ts` (11), `coverage.test.ts` (11), `cache.test.ts`
+(+5 jäähdytyksestä), `apps/web/src/lib/stops.test.ts` (+5, sisältää
+regressiosuojan sille, ettei `API-virhe 5xx` -teksti enää näy),
+`apps/web/src/api/client.test.ts` (4). Koko sarja **334 testiä** ✅, ESLint ✅,
+`npm run build:web` ✅. Deploy: `tampere360-dev-api` + `tampere360-dev-frontend`
+(vain dev).
 
 ### Rajaukset ja tunnetut puutteet
 

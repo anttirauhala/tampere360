@@ -289,6 +289,7 @@ rungossa, joten "tuntematon pysäkki" ja "hetkellinen vika" ovat vastauksesta
 | **Uusintayritys** | `apps/stops/src/retry.ts`: yksi uusinta 250 ms viiveellä **vain 5xx- ja verkkovirheille** (4xx = oma pyyntö on väärä, ei uusita). Tilapäiset virheet eivät enää näy käyttäjälle. |
 | **Peiton oppiminen** | `apps/stops/src/coverage.ts`: kun pysäkille saadaan `failureThreshold` (3) peräkkäistä virhettä 2 minuutin sisällä **ja jokin toinen pysäkki on vastannut samana aikana**, pysäkki merkitään 30 minuutiksi "ei reaaliaikapeittoa". Merkinnän ajan Walttiin ei soiteta: vastaus on rehellinen `200 { realtimeCoverage: false }`. Merkintä vanhenee itsestään, joten tilanne korjautuu ilman uudelleenkäynnistystä. |
 | **Rehellisempi virhevastaus** | Ennen merkintää vastaus on **503 + `Retry-After: 15`** (aiemmin 502). 503 kertoo, että lähde ei vastannut, ja selain saa yrittää uudelleen. |
+| **Jäähdytys epäonnistumisille** | `cache.ts`: epäonnistuneelle pysäkille ei soiteta uudelleen 30 sekuntiin (`STOP_FAILURE_COOLDOWN_MS`), jos tarjolla ei ole vanhaa arvoa. Ilman tätä jokainen selaimen 15 sekunnin pollaus olisi lähettänyt **kaksi uutta yritystä** Walttiin (`retry.ts`) loputtomiin. Vanha arvo ohittaa jäähdytyksen, koska tuoreus voittaa. |
 
 **Miksi "jokin toinen pysäkki on vastannut" -ehto:** ilman sitä koko Walttin
 katkos merkitsisi kaikki pysäkit ilman peittoa. Ehto rajaa merkinnän tilanteeseen,
@@ -307,6 +308,7 @@ muuta tilannetta.
 | `api/client.ts` | `ApiError` kuljettaa HTTP-tilakoodin oliona (`apiErrorStatus(error)` lukee sen; tekstivarmistus säilyy varalla) |
 | `lib/stops.ts` | `stopDeparturesNotice(status)` → rauhallinen teksti; `NO_REALTIME_COVERAGE_TEXT` peitottomalle pysäkille |
 | `components/StopPanel.tsx` | Virhe näytetään luettavana huomautuksena **ilman** teknistä `API-virhe 502` -tekstiä, mukana **"Yritä uudelleen"** -painike. `realtimeCoverage === false` → tiedoksi-tyylinen huomautus (ei virhe). |
+| `components/StopPanel.tsx` (nykäisyn esto) | TanStack Query nollaa `error`in uuden yrityksen alkaessa, joten pelkkä `error`-tarkistus piilottaisi huomautuksen joka 15 sekunnin pollauksella (ja väläyttäisi virheellisesti "Ei lähtöjä seuraavan tunnin aikana"). Viimeisin huomautus pidetään `useRef`issä ja näytetään uusinnan ajan — painike lukee silloin **"Haetaan…"**. |
 | `styles.css` | `.state--info`, `.state__retry`, `.stop-panel__notice` |
 
 Käyttäjälle näkyvät tekstit:
@@ -322,6 +324,7 @@ Käyttäjälle näkyvät tekstit:
 |---|---|---|
 | `STOP_RETRY_ATTEMPTS` | 2 | yritysten kokonaismäärä |
 | `STOP_RETRY_BACKOFF_MS` | 250 | tauko yritysten välissä |
+| `STOP_FAILURE_COOLDOWN_MS` | 30000 | epäonnistuneen pysäkin uudelleenyrityksen jäähdytys |
 | `STOP_COVERAGE_FAILURE_THRESHOLD` | 3 | peräkkäiset virheet ennen merkintää |
 | `STOP_COVERAGE_WINDOW_MS` | 120000 | ikkuna, jonka sisällä virheet lasketaan |
 | `STOP_COVERAGE_TTL_MS` | 1800000 | merkinnän voimassaolo (30 min) |
@@ -332,8 +335,39 @@ Käyttäjälle näkyvät tekstit:
 `retry.test.ts` (11: uusinta 5xx:llä, ei 4xx:llä, verkkovirhe, viimeisen virheen
 heitto, `onRetry`), `coverage.test.ts` (11: kynnys, ikkuna, "toinen pysäkki
 vastasi" -ehto, onnistumisen nollaus, TTL, muistin rajaus),
+`cache.test.ts` (+5: jäähdytys, jäähdytyksen umpeutuminen, onnistumisen
+nollaus, vanhan arvon etusija, jäähdytyksen poiskytkentä),
 `apps/web/src/lib/stops.test.ts` (+5: ettei teknistä virhekoodia enää näytetä),
 `apps/web/src/api/client.test.ts` (4: tilakoodin luku oliosta ja tekstistä).
+
+### Verifiointi 27.9.2026
+
+**1. API (curl, dev):**
+
+| Tilanne | Tulos |
+|---|---|
+| Tavallinen pysäkki (1409, 1027, 6154, 6155) | `200`, `realtimeCoverage: true`, lähdöt mukana ✅ |
+| Peitoton pysäkki (6833) ennen merkintää | `503 UPSTREAM_UNAVAILABLE`, vastausaika ~0,5 s = **2 yritystä + 250 ms tauko** ✅ |
+| Sama pysäkki uudelleen 15 s kuluttua | `503`, mutta **0,07 s** (jäähdytys: upstream-kutsua ei tehdä) ✅ |
+| Peitoton pysäkki merkinnän jälkeen | `200`, `realtimeCoverage: false`, `departures: []`, ~0,07 s ✅ |
+| Virheellinen tunniste / tuntematon polku | `400 INVALID_STOP_ID` / `404` ✅ |
+| Lokit | `Waltti SIRI SM uudelleenyritys` (10), `Pysäkki merkitty ilman reaaliaikapeittoa` (1), `…upstream-kutsu ohitetaan` (2) ✅ |
+
+Peitottomien pysäkkien osuus mitattiin kahdella satunnaisotoksella (60 + 140
+pysäkkiä): **6 / 200 ≈ 3 %** (6833, 6837, 6340, 6350, 6470, 9429, 9433).
+
+**2. Selain (headless Chrome + CDP, pysäkki 9433):**
+
+| Vaihe | Tulos |
+|---|---|
+| Ennen merkintää | `VIRHE: Lähtötietoja ei juuri nyt saada tälle pysäkille — lähde (Waltti) ei vastannut. Yritämme uudelleen automaattisesti.` + **Yritä uudelleen** ✅ |
+| Tekninen virheteksti DOM:issa | **ei yhtään** `API-virhe`-osumaa ✅ (regressio korjattu) |
+| "Yritä uudelleen" -klikkaus | nappi lukee **"Haetaan…"** ja huomautus pysyy näkyvissä (6/6 sekunnin näyte: `nakyy`) — ei enää välähdystä "Ei lähtöjä" ✅ |
+| Merkinnän jälkeen (t+14 s … t+70 s) | `TIETO: Waltti ei tarjoa tälle pysäkille lähtötietoja, joten reaaliaikaista aikataulua ei ole näytettävissä.` — ei virhettä, ei uusintanappia ✅ |
+| Verkkopyynnöt | `9433:503` ×4 → `9433:200` ×5 (merkinnän jälkeen upstream-kutsuja ei enää tehdä) ✅ |
+| Tavallinen pysäkki (1409) samassa istunnossa | 2 lähtöriviä, ei huomautuksia ✅ |
+| Konsoli | vain selaimen omat `Failed to load resource: 503` -rivit (odotettuja 5xx-vastauksia), **ei JS-virheitä** |
+| CSP-rikkomukset | **0** ✅ |
 
 ## Käyttöönotto ja vianetsintä
 

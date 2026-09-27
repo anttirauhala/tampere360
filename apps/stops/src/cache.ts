@@ -58,6 +58,9 @@ export interface KeyedCache<T> {
 export function createKeyedCache<T>(options: KeyedCacheOptions): KeyedCache<T> {
   const entries = new Map<string, { value: T; fetchedAt: number }>();
   const inflight = new Map<string, Promise<T>>();
+  /** Viimeisin epäonnistuminen avainta kohden (jäähdytystä varten). */
+  const failures = new Map<string, { error: unknown; at: number }>();
+  const cooldownMs = options.failureCooldownMs ?? 0;
 
   function store(key: string, value: T, fetchedAt: number): void {
     // Map säilyttää lisäysjärjestyksen → ensimmäinen avain on vanhin.
@@ -83,17 +86,30 @@ export function createKeyedCache<T>(options: KeyedCacheOptions): KeyedCache<T> {
 
   return {
     async get(key: string, load: () => Promise<T>): Promise<CachedValue<T>> {
+      const now = options.now();
       const entry = entries.get(key);
-      if (entry && options.now() - entry.fetchedAt < options.ttlMs) {
+      if (entry && now - entry.fetchedAt < options.ttlMs) {
         return { value: entry.value, stale: false, fetchedAt: entry.fetchedAt };
+      }
+
+      // Tuore arvo puuttuu. Jos upstream-haku epäonnistui hetki sitten eikä
+      // vanhaakaan arvoa ole tarjolla (stale-kelpoisena), ei soiteta uudelleen
+      // joka pollauksella — virhe toistetaan jäähdytyksen ajan.
+      const usableStale = entry && now - entry.fetchedAt <= options.staleMaxMs;
+      const failed = failures.get(key);
+      if (!usableStale && failed && now - failed.at < cooldownMs) {
+        throw failed.error;
       }
 
       try {
         const value = await refresh(key, load);
         const fetchedAt = options.now();
         store(key, value, fetchedAt);
+        failures.delete(key);
         return { value, stale: false, fetchedAt };
       } catch (error) {
+        failures.delete(key);
+        failures.set(key, { error, at: options.now() });
         if (entry && options.now() - entry.fetchedAt <= options.staleMaxMs) {
           return { value: entry.value, stale: true, fetchedAt: entry.fetchedAt };
         }

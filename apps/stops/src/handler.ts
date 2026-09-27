@@ -90,6 +90,9 @@ const departureCache = createKeyedCache<DeparturesPayload>({
   ttlMs: envNumber('STOP_CACHE_MS', 15_000),
   staleMaxMs: envNumber('STOP_STALE_MAX_MS', 60_000),
   maxEntries: envNumber('STOP_CACHE_MAX_ENTRIES', 200),
+  // Peitoton pysäkki vastaa 500:lla joka kerta: jäähdytys estää sen, että jokainen
+  // 15 sekunnin pollaus lähettäisi kaksi uutta yritystä Walttiin (ks. `cache.ts`).
+  failureCooldownMs: envNumber('STOP_FAILURE_COOLDOWN_MS', 30_000),
   now: () => Date.now(),
 });
 
