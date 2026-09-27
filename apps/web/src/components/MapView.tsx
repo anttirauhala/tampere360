@@ -128,7 +128,7 @@ const EMPTY_COLLECTION = { type: 'FeatureCollection', features: [] } as const;
 interface Props {
   /** Tilanteet pisteinä (Kartta-välilehti). */
   features?: MapFeature[];
-  /** Ajoneuvot (Nysse kartalla -välilehti, §27). */
+  /** Ajoneuvot (Nysse-välilehti, §27). */
   vehicles?: VehicleFeatureCollection | null;
   /** Pysäkit (vain kun "Näytä pysäkit" on valittu, §28). */
   stops?: StopFeatureCollection | null;

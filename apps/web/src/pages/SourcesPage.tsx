@@ -66,11 +66,6 @@ export function SourcesPage() {
           </tbody>
         </table>
       )}
-
-      <p className="page__note">
-        Lähdeluettelo määräytyy infrasta (infra/lib/config.ts). Visit Tampere -tapahtumalähde on
-        toistaiseksi pois käytöstä, koska sen rajapinta ei ole enää saatavilla.
-      </p>
     </section>
   );
 }

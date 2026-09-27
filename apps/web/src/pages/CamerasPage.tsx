@@ -6,7 +6,7 @@ import { CAMERA_RADIUS_KM, toTrafficCameras } from '../lib/cameras';
 import { formatTime } from '../lib/format';
 
 /**
- * Liikennekamerat-välilehti: Tampereen alueen kelikamerat.
+ * Kamerat-välilehti (§25): Tampereen alueen kelikamerat.
  *
  * Kuvat tulevat suoraan Digitrafficilta (ks. api/cameras.ts) — ne eivät kulje
  * oman API:n kautta. Lista suodatetaan `lib/cameras.ts`:ssä: vain alle 10 km
@@ -30,7 +30,7 @@ export function CamerasPage() {
 
   return (
     <section className="page">
-      <h1 className="page__title">Liikennekamerat</h1>
+      <h1 className="page__title">Kamerat</h1>
       <p className="page__lead">
         Tampereen alueen kelikamerat — alle {CAMERA_RADIUS_KM} km päässä keskustasta.
       </p>

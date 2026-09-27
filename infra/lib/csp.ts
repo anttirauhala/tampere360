@@ -17,7 +17,7 @@ export const TILE_ORIGINS = [
 ];
 
 /**
- * Kelikameroiden originit (Liikennekamerat-välilehti, ks. apps/web/src/api/cameras.ts).
+ * Kelikameroiden originit (Kamerat-välilehti, ks. apps/web/src/api/cameras.ts).
  *
  * - `tie.digitraffic.fi` — asemaluettelo, haetaan `fetch`:llä → `connect-src`
  * - `weathercam.digitraffic.fi` — itse kuvatiedostot `<img>`-elementillä → `img-src`

@@ -4,18 +4,25 @@ import { useStops, useVehicles } from '../api/queries';
 import type { Stop, VehicleMode } from '../api/types';
 import { MapView } from '../components/MapView';
 import { StopPanel } from '../components/StopPanel';
+import { TransitDisruptionsPanel } from '../components/TransitDisruptionsPanel';
 import { buildStopIndex } from '../lib/stops';
 import { MODE_LABELS_PLURAL, formatVehicleAge, vehicleSummary } from '../lib/vehicles';
 
 const MODES: VehicleMode[] = ['TRAM', 'BUS'];
 
 /**
- * Nysse kartalla -välilehti (§27, §28): joukkoliikenteen ajoneuvot reaaliajassa
- * ja valinnaisesti pysäkit, joita klikkaamalla saa pysäkin lähtölistan.
+ * Nysse-välilehti (§27, §28, §29): joukkoliikenteen ajoneuvot reaaliajassa,
+ * valinnaisesti pysäkit (klikkaamalla lähtöaikataulu) ja **joukkoliikenteen
+ * poikkeustilanteet sivupaneelissa**.
  *
  * Oletuksena ratikat (noin 20 ajoneuvoa) — bussit saa yhdellä napsautuksella.
  * **Pysäkit ovat oletuksena piilossa**: niitä on 3 423, joten ne ladataan ja
  * piirretään vasta kun käyttäjä valitsee "Näytä pysäkit".
+ *
+ * Sivupaneeli korvaa entisen "Joukkoliikenne poikkeustilanteet" -välilehden
+ * (poistettu päänavigaatiosta 27.9.2026): poikkeukset kuuluvat samaan
+ * näkymään liikkuvan kaluston kanssa. Täysi lista on edelleen reitillä
+ * `/joukkoliikenne`.
  *
  * Pollaus on 5 sekuntia (`useVehicles`) ja Lambda pitää yllä 5 sekunnin
  * välimuistia, joten useampi avoin selain ei lisää Waltti-kutsuja. Pysäkin
@@ -62,11 +69,9 @@ export function NysseMapPage() {
 
   return (
     <section className="page page--map">
-      <h1 className="page__title">Nysse kartalla</h1>
+      <h1 className="page__title">Nysse</h1>
       <p className="page__lead">
-        Tampereen joukkoliikenteen ajoneuvot reaaliajassa. Ikoni kertoo linjan numeron ja kiertyy
-        kulkusuuntaan; sijainti päivittyy 5 sekunnin välein. Valitse pysäkit nähdäksesi pysäkit —
-        niitä klikkaamalla avautuu pysäkin lähtöaikataulu.
+        Tampereen joukkoliikenteen ajoneuvot reaaliajassa.
       </p>
 
       <div className="vehicle-toolbar">
@@ -116,14 +121,19 @@ export function NysseMapPage() {
         <p className="state state--error">Pysäkkien haku epäonnistui: {stops.error.message}</p>
       )}
 
-      <div className="map-shell">
-        <MapView
-          vehicles={data}
-          stops={showStops ? (stops.data ?? null) : null}
-          selectedStopId={selectedStopId}
-          onSelectStop={handleSelectStop}
-        />
-        {selectedStop && <StopPanel stop={selectedStop} onClose={handleClosePanel} />}
+      <div className="nysse-layout">
+        <div className="map-shell">
+          <MapView
+            vehicles={data}
+            stops={showStops ? (stops.data ?? null) : null}
+            selectedStopId={selectedStopId}
+            onSelectStop={handleSelectStop}
+          />
+          {selectedStop && <StopPanel stop={selectedStop} onClose={handleClosePanel} />}
+        </div>
+
+        {/* Poikkeustilanteet samassa näkymässä kaluston kanssa (§29). */}
+        <TransitDisruptionsPanel />
       </div>
 
       {!isLoading && !error && count === 0 && (
@@ -131,11 +141,11 @@ export function NysseMapPage() {
       )}
 
       <p className="page__note">
-        Ajoneuvot ja lähdöt: Nysse / Waltti (CC BY 4.0). Pysäkit: Nysse / GTFS-static. Näytetty
-        sijainti on ajoneuvon itsensä lähettämä viimeisin havainto{age ? ` (${age})` : ''} — se ei ole
-        ennuste. Napsauta ajoneuvoa, niin näet määränpään ja aikataulupoikkeaman.
+        Ajoneuvot, lähdöt ja poikkeustilanteet: Nysse / Waltti (CC BY 4.0). Pysäkit: Nysse /
+        GTFS-static. Näytetty sijainti on ajoneuvon itsensä lähettämä viimeisin havainto
+        {age ? ` (${age})` : ''} — se ei ole ennuste. Napsauta ajoneuvoa, niin näet määränpään ja
+        aikataulupoikkeaman. Napsauta pysäkkiä, niin näet pysäkkiaikataulun.
       </p>
     </section>
   );
 }
-

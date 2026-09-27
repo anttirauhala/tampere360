@@ -15,7 +15,7 @@ interface Props {
  * koostekortilla) ja infoteksti näytetään kokonaisuudessaan.
  *
  * Taustana on muiden sivujen tapaan tasainen `--bg` (Lähteiden tila,
- * Liikennekamerat) — Nyt-sivun taustakuvaa (`now-backdrop`) ei käytetä täällä,
+ * Kamerat) — Nyt-sivun taustakuvaa (`now-backdrop`) ei käytetä täällä,
  * jotta tilannelista pysyy rauhallisena luettavana.
  */
 export function CategoryPage({ category }: Props) {

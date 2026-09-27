@@ -1,14 +1,13 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
-const NAV = [
+/**
+ * Päänavigaation järjestys ja nimet (§29).
+ */
+export const NAV = [
   { to: '/', label: 'Nyt', end: true },
   { to: '/kartta', label: 'Kartta', end: false },
-  { to: '/nysse-kartta', label: 'Nysse kartalla', end: false },
-  { to: '/liikenne', label: 'Liikenne', end: false },
-  { to: '/kamerat', label: 'Liikennekamerat', end: false },
-  { to: '/saa', label: 'Säävaroitukset', end: false },
-  { to: '/poliisi', label: 'Poliisi', end: false },
-  { to: '/joukkoliikenne', label: 'Joukkoliikenne poikkeustilanteet', end: false },
+  { to: '/nysse-kartta', label: 'Nysse', end: false },
+  { to: '/kamerat', label: 'Kamerat', end: false },
   { to: '/lahteet', label: 'Lähteiden tila', end: false },
 ];
 
@@ -53,8 +52,8 @@ export function Layout() {
             OpenStreetMap contributors
           </a>
           . Säävaroitukset: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet ja kelikamerat:
-          Fintraffic / Digitraffic. Poliisitiedotteet: Sisä-Suomen poliisilaitos.
-          Joukkoliikenteen häiriötiedotteet ja ajoneuvosijainnit: Nysse / Waltti (CC BY 4.0).
+          Fintraffic / Digitraffic. Poliisitiedotteet: Sisä-Suomen poliisilaitos. Joukkoliikenteen
+          häiriötiedotteet ja ajoneuvosijainnit: Nysse / Waltti (CC BY 4.0).
         </p>
         {/*
           Vakavuusluokittelu on oma arviomme (otsikon ja lähdetietojen

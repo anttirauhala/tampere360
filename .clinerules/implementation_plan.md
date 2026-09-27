@@ -1565,3 +1565,53 @@ regressiosuojan sille, ettei `API-virhe 5xx` -teksti enää näy),
 - Peruutus-/poikkeustietoja (esim. peruttu vuoro) ei erikseen korosteta —
   SIRI antaa ne `DepartureStatus`-kentässä, jos niitä halutaan myöhemmin.
 
+
+## 29. Navigaatio ja Joukkoliikenne-paneeli (27.9.2026)
+
+Välilehtijärjestys ja nimet muutettiin ja "Joukkoliikenne poikkeustilanteet"
+-poistettiin päänavigaatiosta: sen sisältö näytetään nyt **Nysse-välilehden
+sivupaneelissa** kompaktisti.
+
+| Ennen | Nyt |
+|---|---|
+| Nyt, Kartta, **Nysse kartalla**, Liikenne, **Liikennekamerat**, Säävaroitukset, Poliisi, **Joukkoliikenne poikkeustilanteet**, Lähteiden tila | Nyt, Kartta, **Nysse**, **Kamerat**, **Poliisi**, **Liikenne**, Säävaroitukset, Lähteiden tila |
+
+| Osa | Muutos |
+|---|---|
+| `components/Layout.tsx` | `NAV` vietiin järjestykseen ja nimettiin uudelleen; **`NAV` on nyt export** regressiosuojatestiä varten |
+| `components/TransitDisruptionsPanel.tsx` (uusi) | Joukkoliikenteen poikkeustilanteet (`PUBLIC_TRANSPORT`) sivupaneelina: vakavuusmerkki, otsikko, aika ja **enintään 2 rivin** infoteksti (`-webkit-line-clamp: 2`). Enintään 8 kohdetta (`TRANSIT_PANEL_LIMIT`) ja linkki **"Kaikki poikkeukset →"** reitille `/joukkoliikenne` |
+| `pages/NysseMapPage.tsx` | Otsikko `Nysse kartalla` → **`Nysse`**; kartta ja paneeli kaksi palstaa (`.nysse-layout`), lead-teksti ja lähdehuomautus päivitetty |
+| `pages/CamerasPage.tsx` | Otsikko `Liikennekamerat` → **`Kamerat`**, jotta sivun otsikko vastaa välilehden nimeä (kuten muillakin sivuilla); kelikamerat mainitaan edelleen lead-tekstissä |
+| `styles.css` | `.nysse-layout` (grid `minmax(0, 1fr) 320px`, ≤1100 px yhdeksi palstaksi) ja `.transit-panel*` — max-korkeus `60vh` kartan tahdissa, sisäinen vieritys listalle |
+| kommentit | `MapView.tsx`, `CamerasPage.tsx`, `CategoryPage.tsx`, `infra/lib/csp.ts` viittaavat uusiin nimiin |
+
+**Miksi `/joukkoliikenne`-reittiä ei poistettu:** täysi lista säilyy yhtenä
+napsautuksena (`TransitDisruptionsPanel` → "Kaikki poikkeukset" sekä Nyt-sivun
+koostekortti `CATEGORY_ROUTES.PUBLIC_TRANSPORT`). Sivupaneeli näyttää 8 uusinta,
+joten pitkää listaa ei ole pakko mahduttaa pieneen paneeliin eikä
+`CategoryPage`-näkymää tarvitse poistaa. Reitti ei enää näy navigaatiossa, ja
+testi varmistaa sen (`layout.test.ts`).
+
+**Huom:** sivupaneelin haku käyttää samaa `useSituations`-kyselyä kuin ennenkin
+(`category=PUBLIC_TRANSPORT`, 30 s pollaus), joten uusia API-kutsuja tai
+backend-muutoksia ei tarvittu — muutos on kokonaan frontendissä.
+
+**Testit:** `apps/web/src/components/layout.test.ts` (4: järjestys ja nimet,
+poistettu välilehti, uudelleennimetyt reitit, `end`-lippu vain etusivulla).
+Koko sarja **338 testiä** ✅, ESLint ✅, `npm run build:web` ✅,
+Prettier ✅ (omat tiedostot). Deploy vain deviin
+(`tampere360-dev-frontend`); prodia ei muutettu.
+
+**Selainverifiointi (dev, headless Chrome + CDP, 1440×900 ja 900×900):**
+
+| Tarkistus | Tulos |
+|---|---|
+| Navigaatio | `Nyt \| Kartta \| Nysse \| Kamerat \| Poliisi \| Liikenne \| Säävaroitukset \| Lähteiden tila` ✅ |
+| Poistettu välilehti | ei näy navigaatiossa ✅ (`/joukkoliikenne`-reitti toimii yhä) |
+| `/nysse-kartta` | otsikko `Nysse`, paneeli `🚌 Joukkoliikenne poikkeustilanteet` (4 kohdetta: Tesoma F, Käräjätörmä, Tesoma A, Vihola) ✅ |
+| Palstat leveällä | kartta x=20…1073, paneeli x=1085…1405 → **vieressä** ✅ |
+| Palstat 900 px | paneeli kartan **alla** (y=924 > kartan alaosa 900) ✅ |
+| "Kaikki poikkeukset →" | vie `/joukkoliikenne`, täysi lista 10 riviä ✅ |
+| `/kamerat` | otsikko `Kamerat`, 24 kamerakorttia ✅ |
+| Konsoli / CSP | 0 konsolivirhettä, 0 CSP-rikkomusta ✅ |
+

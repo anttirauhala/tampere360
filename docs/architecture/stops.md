@@ -7,9 +7,14 @@
 
 ## Tehtävä
 
-Näyttää Nysse-kartalla (`/nysse-kartta`) pysäkit ja avata pysäkin klikkauksesta
+Näyttää Nysse-välilehdellä (`/nysse-kartta`) pysäkit ja avata pysäkin klikkauksesta
 sidepanel, jossa on pysäkin reaaliaikaiset lähdöt. Pysäkit ovat oletuksena
 piilossa ("Näytä pysäkit" -valinta), koska niitä on 3 423.
+
+> Sama näkymä näyttää myös joukkoliikenteen poikkeustilanteet oikean reunan
+> sivupaneelissa (§29, `TransitDisruptionsPanel`) — entinen
+> "Joukkoliikenne poikkeustilanteet" -välilehti poistettiin päänavigaatiosta
+> 27.9.2026.
 
 Ominaisuus on tarkoituksella pieni: **ei** ajoneuvon seurantaa, reitin
 seuraamista, suosikkeja eikä aikatauluhistoriaa.
