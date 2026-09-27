@@ -355,6 +355,138 @@ a {
   font-weight: 700;
 }
 
+/* --- Kartan popupit (MapLibre) --- */
+
+/*
+ * MapLibren oma tyylitiedosto tekee popupista valkoisen laatikon
+ * (.maplibregl-popup-content { background: #fff }) mutta EI aseta tekstin
+ * väriä, ja nuoli sekä sulkunappi on tarkoitettu valkoiselle pohjalle.
+ *
+ * Siksi popupin sisältö peri aiemmin bodyn vaalean --text-värin (#e8eefc) ja
+ * jäi valkoiselle taustalle lähes lukukelvottomaksi. Tässä tausta, teksti,
+ * nuoli ja sulkunappi sovitetaan tummaan teemaan ja sisällölle annetaan
+ * selkeä järjestys: otsikko → viive (tilan mukaan värjättynä) → lisätiedot.
+ */
+/*
+ * HUOM kaskadista: MapLibren oma CSS tuodaan `MapView`-komponentissa, joten
+ * Vite jakaa sen erilliseen tiedostoon ja selain lataa sen sovelluksen
+ * tyylitiedoston JÄLKEEN. Samalla spesifisyydellä MapLibren oletus
+ * (background: #fff) voittaisi. Siksi nämä säännöt on kirjoitettu MapLibren
+ * valitsimia tarkemmiksi (`.maplibregl-popup .maplibregl-popup-*`), jolloin
+ * tumma teema toimii latausjärjestyksestä riippumatta.
+ */
+.maplibregl-popup .maplibregl-popup-content {
+  max-width: 280px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Nuoli seuraa popupin taustaväriä (oletus: valkoinen). */
+.maplibregl-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--surface-2);
+}
+
+.maplibregl-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--surface-2);
+}
+
+.maplibregl-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--surface-2);
+}
+
+.maplibregl-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--surface-2);
+}
+
+/* Sulkunappi: näkyvä koko ja väri tummalla pohjalla. */
+.maplibregl-popup .maplibregl-popup-close-button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 0 var(--radius) 0 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.maplibregl-popup .maplibregl-popup-close-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+/*
+ * MapLibre siirtää popupin avautuessa fokuksen sulkunappiin (esteettömyys).
+ * Selaimen oletusrengas (outline: auto) näyttää tummalla popupilla
+ * vahingossa syntyneeltä laatikolta, joten se korvataan: hiirellä avatussa
+ * popupissa ei rengasta, näppäimistöllä fokusoidessa selkeä teeman väri.
+ */
+.maplibregl-popup .maplibregl-popup-close-button:focus {
+  outline: none;
+}
+
+.maplibregl-popup .maplibregl-popup-close-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  color: var(--text);
+}
+
+/* Sama sisältörakenne sekä tilanteiden että ajoneuvojen popupeissa. */
+.map-popup__title {
+  /* Oikea marginaali jättää tilaa sulkunapille. */
+  margin: 0 22px 6px 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.map-popup__delay {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.map-popup__delay.is-ontime {
+  color: var(--ok);
+}
+
+.map-popup__delay.is-late {
+  color: var(--major);
+}
+
+.map-popup__delay.is-early {
+  color: var(--accent);
+}
+
+.map-popup__delay.is-unknown {
+  color: var(--text-muted);
+}
+
+.map-popup__row {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.map-popup__label {
+  color: var(--text-muted);
+}
+
+.map-popup__value {
+  color: var(--text);
+}
+
 /* --- Footer --- */
 
 .footer {

@@ -1289,3 +1289,52 @@ laajennuksia):**
 | CSP-rikkomukset | **0** ✅ |
 | Konsolivirheet | 1 × `502` (`/v1/vehicles`) — Waltti vastasi itse HTTP 500; sovellus säilytti edellisen datan ja ikonit ✅ |
 
+### 27.3 Popupin luettavuus (27.9.2026)
+
+**Ongelma (käyttäjän havainto):** ajoneuvon tietoikkuna oli lähes lukukelvoton —
+vaalea teksti valkoisella taustalla.
+
+**Juurisyy:** MapLibren oma CSS tekee popupista valkoisen laatikon
+(`.maplibregl-popup-content { background: #fff }`) mutta **ei aseta tekstin
+väriä**, joten teksti peri bodyn vaalean `--text`-värin (`#e8eefc`). Lisäksi
+`styles.css`issä ei ollut yhtään popup-sääntöä (`grep -n popup` → ei osumia).
+
+**Toinen, helposti ohitse menevä yksityiskohta:** MapLibren CSS tuodaan
+`MapView.tsx`:ssä, joten Vite jakaa sen omaan tiedostoon (`MapView-*.css`) ja
+selain lataa sen sovelluksen tyylitiedoston **jälkeen**. Samalla spesifisyydellä
+MapLibren sääntö voitti oman sääntömme → tausta pysyi valkoisena myös
+ensimmäisen korjauksen jälkeen (mitattu: `background: rgb(255,255,255)`).
+Siksi omat säännöt on kirjoitettu MapLibren valitsimia tarkemmiksi
+(`.maplibregl-popup .maplibregl-popup-content` = 0,2,0 ja nuolelle
+`.maplibregl-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip` =
+0,3,0) — tumma teema toimii nyt latausjärjestyksestä riippumatta.
+
+**Muutokset:**
+
+| Osa | Muutos |
+|---|---|
+| `styles.css` (uusi osio "Kartan popupit") | tumma tausta `--surface-2`, teksti `--text`, reunus, varjo, max 280 px, nuoli ja sulkunappi teeman mukaan |
+| `styles.css` | fokusrengas: MapLibre siirtää fokuksen sulkunappiin avatessa → UA-oletus (`outline: auto`, näkyi vahingossa syntyneenä laatikkona) pois, tilalle `--accent`-rengas vain `:focus-visible`illa |
+| `components/MapView.tsx` | molemmat popupit (tilanne + ajoneuvo) rakennetaan `map-popup__*`-luokilla; tyylittely on CSS:ssä eikä HTML-merkkijonossa |
+| `lib/vehicles.ts` | uusi `delayTone()` ja jaettu `delayMinutes()`: viiveen **väri ja teksti eivät voi eriytyä** (sama kynnys) |
+| `lib/vehicles.test.ts` | +4 testiä (17) |
+
+Hierarkia: otsikko (15 px, 600, `--text`) → viive (14 px, 700, sävyn mukaan
+`--ok` / `--major` / `--accent` / `--text-muted`) → lisätiedot (13 px,
+`--text-muted`, mutta arvo `--text`).
+
+**Verifiointi** (paikallinen tuotantobuildi + headless Chrome, lasketut
+kontrastit):
+
+| Elementti | Väri / tausta | Kontrasti |
+|---|---|---|
+| Otsikko | `--text` / `--surface-2` | **12,8:1** ✅ |
+| Viive ("ajassa") | `--ok` / `--surface-2` | 6,5:1 ✅ |
+| Lisätietorivit | `--text-muted` / `--surface-2` | 6,2:1 ✅ |
+| Tilanteen popup (`/kartta`) | `--text` / `--surface-2` | 12,8:1 ✅ |
+
+Kaikki ylittävät WCAG AA:n (4,5:1). Popupin tausta on nyt `rgb(27, 39, 64)`
+(ennen `rgb(255, 255, 255)`), nuoli seuraa taustaväriä ja sulku-X:stä poistui
+ylimääräinen oletusrengas. Sama korjaus koskee myös `/kartta`-sivun
+tilannepopupia, jossa oli sama vika.
+

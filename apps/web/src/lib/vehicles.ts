@@ -29,7 +29,9 @@ export const MODE_LABELS_PARTITIVE: Record<VehicleMode, string> = {
 };
 
 /** Popupin otsikko: "Ratikka 1 → Hervantajärvi A". */
-export function vehicleTitle(vehicle: Pick<VehicleProperties, 'mode' | 'line' | 'destination'>): string {
+export function vehicleTitle(
+  vehicle: Pick<VehicleProperties, 'mode' | 'line' | 'destination'>,
+): string {
   const head = `${MODE_LABELS[vehicle.mode]} ${vehicle.line}`;
   return vehicle.destination ? `${head} → ${vehicle.destination}` : head;
 }
@@ -42,12 +44,40 @@ export function vehicleTitle(vehicle: Pick<VehicleProperties, 'mode' | 'line' | 
  * merkityksellinen (ja aikatauluissa on muutenkin minuutin tarkkuus).
  */
 export function delayLabel(delaySeconds: number | null | undefined): string {
-  if (delaySeconds === null || delaySeconds === undefined || !Number.isFinite(delaySeconds)) {
-    return 'aikataulusta ei tietoa';
+  const minutes = delayMinutes(delaySeconds);
+  switch (delayTone(delaySeconds)) {
+    case 'unknown':
+      return 'aikataulusta ei tietoa';
+    case 'ontime':
+      return 'ajassa';
+    case 'late':
+      return `${minutes} min myöhässä`;
+    default:
+      return `${minutes} min etuajassa`;
   }
-  const minutes = Math.round(Math.abs(delaySeconds) / 60);
-  if (minutes === 0) return 'ajassa';
-  return delaySeconds > 0 ? `${minutes} min myöhässä` : `${minutes} min etuajassa`;
+}
+
+/**
+ * Viiveen sävy popupin tyylittelyä varten.
+ *
+ * Sama kynnys kuin `delayLabel`illa (alle minuutin heitto on "ajassa"), jotta
+ * teksti ja väri eivät voi kertoa eri asiaa.
+ */
+export type DelayTone = 'ontime' | 'late' | 'early' | 'unknown';
+
+export function delayTone(delaySeconds: number | null | undefined): DelayTone {
+  const minutes = delayMinutes(delaySeconds);
+  if (minutes === null) return 'unknown';
+  if (minutes === 0) return 'ontime';
+  return (delaySeconds ?? 0) > 0 ? 'late' : 'early';
+}
+
+/** Viive pyöristettynä minuutteina; `null`, jos viivettä ei tiedetä. */
+function delayMinutes(delaySeconds: number | null | undefined): number | null {
+  if (delaySeconds === null || delaySeconds === undefined || !Number.isFinite(delaySeconds)) {
+    return null;
+  }
+  return Math.round(Math.abs(delaySeconds) / 60);
 }
 
 /**

@@ -134,6 +134,27 @@ Siksi `apps/web/src/lib/maplibre-worker.ts` bundlaa työntekijän Viten
 `?worker&url`-kyselyllä ja kutsuu `setWorkerUrl()`ia ennen kartan luontia.
 Tarkempi kuvaus ja diagnoosi: `.clinerules/implementation_plan.md` §27.1.
 
+### Popupin tyylittely (lukekelpoisuus)
+
+Popupin sisältö rakennetaan `map-popup__*`-luokilla (otsikko, viive, rivit) ja
+tyylit ovat `apps/web/src/styles.css`issä osiossa "Kartan popupit".
+
+Kaksi asiaa, jotka on hyvä tietää muutettaessa:
+
+1. MapLibren oma CSS tekee popupista **valkoisen** laatikon
+   (`.maplibregl-popup-content { background: #fff }`) eikä aseta tekstin väriä →
+   ilman omia sääntöjä teksti perii bodyn vaalean `--text`-värin ja häviää
+   taustaan.
+2. MapLibren CSS tuodaan `MapView`-komponentissa, joten se on omassa
+   Vite-chunkissaan (`MapView-*.css`) ja latautuu sovelluksen tyylien
+   **jälkeen**. Siksi omat säännöt ovat tarkoituksella MapLibren valitsimia
+   tarkempia: `.maplibregl-popup .maplibregl-popup-content` ja nuolelle
+   `.maplibregl-popup.maplibregl-popup-anchor-* .maplibregl-popup-tip`.
+
+Viiveen väri tulee `delayTone()`-funktiosta, joka jakaa kynnyksen `delayLabel()`
+kanssa — teksti ja väri eivät voi kertoa eri asiaa. Yksityiskohdat ja
+kontrastimittaukset: `.clinerules/implementation_plan.md` §27.3.
+
 ## Testit
 
 ```
@@ -164,6 +185,7 @@ Tyypilliset syyt tyhjään karttaan:
 | `stale: true` toistuvasti | Waltti-virhe tai avain vanhentunut |
 | `502 UPSTREAM_UNAVAILABLE` | SSM-avain puuttuu tai Waltti ei vastaa |
 | Kartta näkyy, ikonit eivät | MapLibren työntekijä ei lataudu → ks. §27.1 |
+| Popupin teksti on himmeää / häviää taustaan | MapLibren oletus-CSS voitti omat popup-säännöt (latausjärjestys) tai säännöt puuttuvat → ks. §27.3 |
 | Ikonit näkyvät, klikkaus ei avaa popupia | kerroskohtaiset kuuntelijat rekisteröitiin ennen kerroksen luontia (korjattu 26.9.2026, ks. §27.1.1) |
 | Ikonit eivät päivity | Selain pollaa 5 s; taustavälilehdellä `refetchIntervalInBackground: false` |
 

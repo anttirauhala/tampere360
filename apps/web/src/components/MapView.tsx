@@ -29,7 +29,21 @@ import {
   createLineTagIcon,
   lineTagIconId,
 } from '../lib/vehicle-icons';
-import { delayLabel, formatVehicleAge, vehicleTitle } from '../lib/vehicles';
+import {
+  type DelayTone,
+  delayLabel,
+  delayTone,
+  formatVehicleAge,
+  vehicleTitle,
+} from '../lib/vehicles';
+
+/** Viiveen sävy → CSS-luokka (tyylit: `styles.css` → "Kartan popupit"). */
+const DELAY_TONE_CLASS: Record<DelayTone, string> = {
+  ontime: 'is-ontime',
+  late: 'is-late',
+  early: 'is-early',
+  unknown: 'is-unknown',
+};
 
 /**
  * MapLibre GL JS -kartta (§11). Tiililähteenä OpenStreetMap-rasteritiilet —
@@ -141,7 +155,9 @@ export function MapView({ features, vehicles }: Props) {
       el.title = sanitizeText(feature.properties.title);
 
       const popup = new Popup({ offset: 16 }).setHTML(
-        `<strong>${escapeHtml(sanitizeText(feature.properties.title))}</strong>`,
+        `<div class="map-popup"><p class="map-popup__title">${escapeHtml(
+          sanitizeText(feature.properties.title),
+        )}</p></div>`,
       );
 
       const marker = new Marker({ element: el }).setLngLat([lng, lat]).setPopup(popup);
@@ -284,16 +300,32 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-/** Ajoneuvon popup: linja, määränpää, viive ja havainnon ikä. */
+/**
+ * Ajoneuvon popup: linja, määränpää, viive ja havainnon ikä.
+ *
+ * Sisältö on jäsennelty luokilla (`map-popup__*`), jotta tyylittely on
+ * `styles.css`issä eikä HTML-merkkijonossa. Tämä on myös korjaus
+ * luettavuuteen: MapLibren oletus-CSS tekee valkoisen popup-laatikon mutta ei
+ * aseta tekstin väriä, joten pelkkä `<strong>`/`<div>` otti värin bodysta ja
+ * jäi valkoiselle taustalle (ks. `styles.css` → "Kartan popupit").
+ */
 function vehiclePopupHtml(properties: VehicleProperties): string {
   const rows = [
-    `<strong>${escapeHtml(sanitizeText(vehicleTitle(properties)))}</strong>`,
-    `<div>${escapeHtml(delayLabel(properties.delaySeconds))}</div>`,
+    `<p class="map-popup__title">${escapeHtml(sanitizeText(vehicleTitle(properties)))}</p>`,
+    `<p class="map-popup__delay ${DELAY_TONE_CLASS[delayTone(properties.delaySeconds)]}">${escapeHtml(
+      delayLabel(properties.delaySeconds),
+    )}</p>`,
   ];
   if (properties.origin) {
-    rows.push(`<div>Lähtö: ${escapeHtml(sanitizeText(properties.origin))}</div>`);
+    rows.push(
+      `<p class="map-popup__row"><span class="map-popup__label">Lähtö:</span> <span class="map-popup__value">${escapeHtml(
+        sanitizeText(properties.origin),
+      )}</span></p>`,
+    );
   }
   const age = formatVehicleAge(properties.recordedAt);
-  if (age) rows.push(`<div>Havaittu ${escapeHtml(age)}</div>`);
-  return rows.join('');
+  if (age) {
+    rows.push(`<p class="map-popup__row">Havaittu ${escapeHtml(age)}</p>`);
+  }
+  return `<div class="map-popup">${rows.join('')}</div>`;
 }

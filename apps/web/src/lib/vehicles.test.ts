@@ -5,6 +5,7 @@ import {
   MODE_LABELS_PARTITIVE,
   MODE_LABELS_PLURAL,
   delayLabel,
+  delayTone,
   formatVehicleAge,
   vehicleSummary,
   vehicleTitle,
@@ -43,6 +44,36 @@ describe('delayLabel', () => {
     expect(delayLabel(null)).toBe('aikataulusta ei tietoa');
     expect(delayLabel(undefined)).toBe('aikataulusta ei tietoa');
     expect(delayLabel(Number.NaN)).toBe('aikataulusta ei tietoa');
+  });
+});
+
+describe('delayTone', () => {
+  it('antaa ajassa kulkevalle vihreän sävyn', () => {
+    expect(delayTone(0)).toBe('ontime');
+    expect(delayTone(20)).toBe('ontime');
+    expect(delayTone(-29)).toBe('ontime');
+  });
+
+  it('erottaa myöhässä ja etuajassa kulkevat', () => {
+    expect(delayTone(84)).toBe('late');
+    expect(delayTone(-120)).toBe('early');
+  });
+
+  it('antaa saman tuloksen kuin delayLabel (kynnys ei voi eriytyä)', () => {
+    for (const seconds of [0, 29, 30, 60, 90, 600, -60, -600]) {
+      const label = delayLabel(seconds);
+      const tone = delayTone(seconds);
+      if (label === 'ajassa') expect(tone).toBe('ontime');
+      else if (label === 'aikataulusta ei tietoa') expect(tone).toBe('unknown');
+      else if (label.includes('myöhässä')) expect(tone).toBe('late');
+      else expect(tone).toBe('early');
+    }
+  });
+
+  it('merkitsee tuntemattoman viiveen omalla sävyllään', () => {
+    expect(delayTone(null)).toBe('unknown');
+    expect(delayTone(undefined)).toBe('unknown');
+    expect(delayTone(Number.NaN)).toBe('unknown');
   });
 });
 

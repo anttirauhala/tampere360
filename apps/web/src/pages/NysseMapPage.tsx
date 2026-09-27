@@ -66,9 +66,7 @@ export function NysseMapPage() {
 
       <p className="page__note">
         Ajoneuvot: Nysse / Waltti (CC BY 4.0). Näytetty sijainti on ajoneuvon itsensä lähettämä
-        viimeisin havainto{age ? ` (${age})` : ''} — se ei ole ennuste. Ratikan ikoni on ohut ja
-        pitkä suorakulmio, bussin lyhyempi; vaalea kärki näyttää kulkusuunnan. Kartta ei siirry
-        automaattisesti ajoneuvojen mukana. Napsauta ajoneuvoa, niin näet määränpään ja
+        viimeisin havainto{age ? ` (${age})` : ''} — se ei ole ennuste. Napsauta ajoneuvoa, niin näet määränpään ja
         aikataulupoikkeaman.
       </p>
     </section>
