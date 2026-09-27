@@ -200,6 +200,42 @@ export const VEHICLE_RESERVED_CONCURRENCY = 2;
 export const VEHICLE_UPSTREAM_TIMEOUT_MS = 4_000;
 
 /**
+ * Pysäkit ja pysäkkimonitori (`/v1/stops`, `/v1/stops/{stopId}/departures`,
+ * arkkitehtuuri §28).
+ *
+ * Kaksi hyvin erilaista dataa samassa Lambdassa, mutta **eri välimuisteilla**:
+ *
+ *  1. **Staattinen pysäkkirekisteri** (GTFS-static, ~17 Mt zip): muuttuu
+ *     käytännössä päivittäin, joten TTL on tunteja. Purku kestää ~200 ms, joten
+ *     sitä ei pidä tehdä kuin kerran kontin elinaikana.
+ *  2. **Reaaliaikaiset lähdöt** (Waltti SIRI StopMonitoring): TTL 15 s,
+ *     koska lähde itse päivittyy 30 sekunnin välein — tiuhempi kysely ei toisi
+ *     tuoreempaa tietoa, mutta kertautuisi jokaisen avoimen selaimen myötä.
+ *
+ * Varattu concurrency on pieni ja **erillään** sekä query-Lambdasta (5) että
+ * ajoneuvolambdasta (2), jotta pysäkkimonitorin pollaus ei syö kummankaan
+ * kustannuskattoa.
+ */
+export const STOP_CACHE_MS = 15_000;
+export const STOP_STALE_MAX_MS = 60_000;
+export const STOP_CACHE_MAX_ENTRIES = 200;
+export const STOP_RESERVED_CONCURRENCY = 2;
+export const STOP_UPSTREAM_TIMEOUT_MS = 5_000;
+/** Kuinka pitkälle tulevaisuuteen lähtöjä näytetään (`PreviewInterval`). */
+export const STOP_PREVIEW_MINUTES = 60;
+/** Kuinka monta lähtöä sidepaneliin enintään palautetaan. */
+export const STOP_DEPARTURE_LIMIT = 20;
+/** Staattisen pysäkkirekisterin TTL (tunteja) ja varafallbackin enimmäisikä. */
+export const GTFS_STOPS_CACHE_MS = 6 * 3_600_000;
+export const GTFS_STOPS_STALE_MAX_MS = 7 * 86_400_000;
+/** GTFS-paketin latauksen aikakatkaisu (17 Mt; selvästi Lambdan timeoutia lyhyempi). */
+export const GTFS_STOPS_TIMEOUT_MS = 15_000;
+/** Tampereen/Nyssen GTFS-static-paketti (ITS Factory, CC BY 4.0). */
+export const GTFS_STOPS_URL =
+  'https://data.itsfactory.fi/journeys/files/gtfs/latest/gtfs_tampere.zip';
+
+
+/**
  * Kustannusvalvonnan hälytysrajat (MonitoringStack).
  * Normaali liikenne on murto-osa näistä — hälytys tarkoittaa väärinkäyttöä,
  * ei ruuhkaa.

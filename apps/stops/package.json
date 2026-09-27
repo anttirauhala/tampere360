@@ -1,0 +1,17 @@
+{
+  "name": "@tampere360/stops",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tampere360 — Nysse-pysäkit ja reaaliaikaiset lähdöt (GTFS static + Waltti SIRI StopMonitoring) reittejä /v1/stops ja /v1/stops/{stopId}/departures varten",
+  "main": "dist/handler.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.700.0",
+    "@tampere360/observability": "0.1.0",
+    "fast-xml-parser": "^5.0.0",
+    "fflate": "^0.8.2"
+  }
+}

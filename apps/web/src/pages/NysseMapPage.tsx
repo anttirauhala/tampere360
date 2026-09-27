@@ -1,23 +1,60 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
-import { useVehicles } from '../api/queries';
-import type { VehicleMode } from '../api/types';
+import { useStops, useVehicles } from '../api/queries';
+import type { Stop, VehicleMode } from '../api/types';
 import { MapView } from '../components/MapView';
+import { StopPanel } from '../components/StopPanel';
+import { buildStopIndex } from '../lib/stops';
 import { MODE_LABELS_PLURAL, formatVehicleAge, vehicleSummary } from '../lib/vehicles';
 
 const MODES: VehicleMode[] = ['TRAM', 'BUS'];
 
 /**
- * Nysse kartalla -välilehti (§27): joukkoliikenteen ajoneuvot reaaliajassa.
+ * Nysse kartalla -välilehti (§27, §28): joukkoliikenteen ajoneuvot reaaliajassa
+ * ja valinnaisesti pysäkit, joita klikkaamalla saa pysäkin lähtölistan.
  *
  * Oletuksena ratikat (noin 20 ajoneuvoa) — bussit saa yhdellä napsautuksella.
+ * **Pysäkit ovat oletuksena piilossa**: niitä on 3 423, joten ne ladataan ja
+ * piirretään vasta kun käyttäjä valitsee "Näytä pysäkit".
  *
  * Pollaus on 5 sekuntia (`useVehicles`) ja Lambda pitää yllä 5 sekunnin
- * välimuistia, joten useampi avoin selain ei lisää Waltti-kutsuja.
+ * välimuistia, joten useampi avoin selain ei lisää Waltti-kutsuja. Pysäkin
+ * lähtölistaa päivitetään 15 sekunnin välein vain valitulle pysäkille.
  */
 export function NysseMapPage() {
   const [mode, setMode] = useState<VehicleMode>('TRAM');
+  const [showStops, setShowStops] = useState(false);
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+
   const { data, isLoading, error } = useVehicles(mode);
+  const stops = useStops(showStops);
+
+  // Pysäkkihakemisto: kartan klikkaus antaa vain tunnisteen, joten nimi
+  // haetaan tästä eikä erillisellä API-kutsulla.
+  const stopIndex = useMemo(
+    () => buildStopIndex(showStops ? stops.data : null),
+    [showStops, stops.data],
+  );
+
+  const selectedStop: Stop | null = useMemo(() => {
+    if (!selectedStopId) return null;
+    // Jos pysäkkiä ei löydy rekisteristä (esim. aineisto vaihtui), näytetään
+    // tunniste — sidepanel täydentää nimen API-vastauksesta.
+    return (
+      stopIndex.get(selectedStopId) ?? {
+        id: selectedStopId,
+        name: selectedStopId,
+        latitude: null,
+        longitude: null,
+      }
+    );
+  }, [selectedStopId, stopIndex]);
+
+  const handleSelectStop = useCallback((stopId: string): void => {
+    setSelectedStopId(stopId);
+  }, []);
+
+  const handleClosePanel = useCallback((): void => setSelectedStopId(null), []);
 
   const count = data?.count ?? 0;
   const updatedAt = data?.generatedAt ?? data?.fetchedAt ?? null;
@@ -28,7 +65,8 @@ export function NysseMapPage() {
       <h1 className="page__title">Nysse kartalla</h1>
       <p className="page__lead">
         Tampereen joukkoliikenteen ajoneuvot reaaliajassa. Ikoni kertoo linjan numeron ja kiertyy
-        kulkusuuntaan; sijainti päivittyy 5 sekunnin välein.
+        kulkusuuntaan; sijainti päivittyy 5 sekunnin välein. Valitse pysäkit nähdäksesi pysäkit —
+        niitä klikkaamalla avautuu pysäkin lähtöaikataulu.
       </p>
 
       <div className="vehicle-toolbar">
@@ -46,6 +84,24 @@ export function NysseMapPage() {
             </button>
           ))}
         </div>
+
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={showStops}
+            onChange={(event) => {
+              const checked = event.target.checked;
+              setShowStops(checked);
+              // Kerroksen sammuttaminen sulkee sidepanelin: muuten paneeli
+              // jäisi näkyviin pysäkille, jota ei enää näy kartalla.
+              if (!checked) setSelectedStopId(null);
+            }}
+          />
+          Näytä pysäkit
+          {showStops && stops.isLoading ? ' (ladataan…)' : ''}
+          {showStops && stops.data ? ` (${stops.data.count})` : ''}
+        </label>
+
         <span className="vehicle-toolbar__info">
           {isLoading ? 'Ladataan…' : vehicleSummary(mode, count, updatedAt)}
           {data?.stale ? ' · tiedot voivat olla hetken vanhentuneita' : ''}
@@ -53,22 +109,33 @@ export function NysseMapPage() {
       </div>
 
       {error && (
-        <p className="state state--error">
-          Ajoneuvotietojen haku epäonnistui: {error.message}
-        </p>
+        <p className="state state--error">Ajoneuvotietojen haku epäonnistui: {error.message}</p>
       )}
 
-      <MapView vehicles={data} />
+      {showStops && stops.error && (
+        <p className="state state--error">Pysäkkien haku epäonnistui: {stops.error.message}</p>
+      )}
+
+      <div className="map-shell">
+        <MapView
+          vehicles={data}
+          stops={showStops ? (stops.data ?? null) : null}
+          selectedStopId={selectedStopId}
+          onSelectStop={handleSelectStop}
+        />
+        {selectedStop && <StopPanel stop={selectedStop} onClose={handleClosePanel} />}
+      </div>
 
       {!isLoading && !error && count === 0 && (
         <p className="state">Ei ajoneuvoja liikenteessä juuri nyt.</p>
       )}
 
       <p className="page__note">
-        Ajoneuvot: Nysse / Waltti (CC BY 4.0). Näytetty sijainti on ajoneuvon itsensä lähettämä
-        viimeisin havainto{age ? ` (${age})` : ''} — se ei ole ennuste. Napsauta ajoneuvoa, niin näet määränpään ja
-        aikataulupoikkeaman.
+        Ajoneuvot ja lähdöt: Nysse / Waltti (CC BY 4.0). Pysäkit: Nysse / GTFS-static. Näytetty
+        sijainti on ajoneuvon itsensä lähettämä viimeisin havainto{age ? ` (${age})` : ''} — se ei ole
+        ennuste. Napsauta ajoneuvoa, niin näet määränpään ja aikataulupoikkeaman.
       </p>
     </section>
   );
 }
+

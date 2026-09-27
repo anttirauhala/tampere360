@@ -14,6 +14,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 import type {
   MapFeature,
+  StopFeatureCollection,
   VehicleFeatureCollection,
   VehicleMode,
   VehicleProperties,
@@ -50,15 +51,29 @@ const DELAY_TONE_CLASS: Record<DelayTone, string> = {
  * attribuutio näytetään kartalla (MapLibren oma attributionControl) ja
  * sovelluksen footerissa.
  *
- * Kartalla on kaksi erillistä sisältöä:
+ * Kartalla on kolme erillistä sisältöä:
  *  - tilanteet pisteinä (DOM-markerit)
  *  - ajoneuvot **yhdestä GeoJSON-lähteestä** (§27), jonka päällä on kaksi
  *    symbolikerrosta: ajoneuvon runko (kiertyy suunnan mukaan) ja
  *    linjanumerotunniste. Linjanumero piirretään ikoniin canvasilla, koska
  *    tekstikerros vaatisi glyph-lähteen, jota rasteritiilistylessämme ei ole.
+ *  - pysäkit **yhdestä GeoJSON-lähteestä** (§28) MapLibren omalla
+ *    klusteroinnilla: klusterit ympyröinä, joissa pysäkkien lukumäärä
+ *    tekstinä, ja yksittäiset pysäkit pieninä ympyröinä. Pysäkkikerrokset
+ *    lisätään ajoneuvokerrosten **alle**, jotta liikkuva kalusto pysyy
+ *    luettavimpana.
  */
 const OSM_STYLE: StyleSpecification = {
   version: 8,
+  /**
+   * Glyph-lähde klusterien lukumäärätekstiä varten.
+   *
+   * MapLibren `text-field` vaatii fonttipaketit. Origin on jo sallittu CSP:ssä
+   * karttatiilien takia (`infra/lib/csp.ts` → TILE_ORIGINS), joten tämä ei
+   * vaadi uutta originia eikä uutta riippuvuutta. Jos glyphit eivät lataudu,
+   * klusteriympyrät piirtyvät silti — vain lukumäärä jää puuttumaan.
+   */
+  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
   sources: {
     osm: {
       type: 'raster',
@@ -92,6 +107,21 @@ const SEVERITY_COLOR: Record<string, string> = {
 const VEHICLE_SOURCE_ID = 'vehicles';
 const VEHICLE_BODY_LAYER = 'vehicles-body';
 const VEHICLE_TAG_LAYER = 'vehicles-tag';
+
+/** Pysäkkikerrokset (§28): yksi lähde, klusterit + yksittäiset pysäkit. */
+const STOP_SOURCE_ID = 'stops';
+const STOP_CLUSTER_LAYER = 'stops-clusters';
+const STOP_CLUSTER_COUNT_LAYER = 'stops-cluster-count';
+const STOP_POINT_LAYER = 'stops-points';
+const STOP_SELECTED_LAYER = 'stops-selected';
+/**
+ * Klusterit hajoavat tällä zoomilla: sen yläpuolella näytetään yksittäiset
+ * pysäkit. Tampereen keskustassa zoom 15 erottaa jo vierekkäiset laiturit.
+ */
+const STOP_CLUSTER_MAX_ZOOM = 14;
+/** Klusteriympyrän ja lukumäärän väri — erottuu ajoneuvojen vihreästä/sinisestä. */
+const STOP_CLUSTER_COLOR = '#f59e0b';
+
 /** Tyhjä GeoJSON, jotta lähde voidaan luoda ennen ensimmäistä dataa. */
 const EMPTY_COLLECTION = { type: 'FeatureCollection', features: [] } as const;
 
@@ -100,9 +130,15 @@ interface Props {
   features?: MapFeature[];
   /** Ajoneuvot (Nysse kartalla -välilehti, §27). */
   vehicles?: VehicleFeatureCollection | null;
+  /** Pysäkit (vain kun "Näytä pysäkit" on valittu, §28). */
+  stops?: StopFeatureCollection | null;
+  /** Valittu pysäkki korostetaan kartalla (`null` = ei valintaa). */
+  selectedStopId?: string | null;
+  /** Kutsutaan, kun käyttäjä klikkaa yksittäistä pysäkkiä. */
+  onSelectStop?: (stopId: string) => void;
 }
 
-export function MapView({ features, vehicles }: Props) {
+export function MapView({ features, vehicles, stops, selectedStopId, onSelectStop }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
@@ -110,6 +146,15 @@ export function MapView({ features, vehicles }: Props) {
   const tagIconsRef = useRef<Set<string>>(new Set());
   /** Onko kerroskohtaiset hiirikuuntelijat jo rekisteröity tähän karttaan. */
   const listenersRegisteredRef = useRef(false);
+  /** Sama pysäkkikerroksille (§28) — oma lippu, koska kerrokset ovat eri efektissä. */
+  const stopListenersRegisteredRef = useRef(false);
+  /**
+   * Klikkauksen takaisinkutsu refissä: kuuntelijat rekisteröidään kerran, joten
+   * suora prop-viittaus jäisi ensimmäisen renderöinnin versioon (vanhentunut
+   * sulkeuma). Ref päivittyy jokaisella renderöinnillä.
+   */
+  const onSelectStopRef = useRef(onSelectStop);
+  onSelectStopRef.current = onSelectStop;
 
   // Alusta kartta kerran
   useEffect(() => {
@@ -125,8 +170,12 @@ export function MapView({ features, vehicles }: Props) {
       attributionControl: false,
     });
 
-    map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
-    map.addControl(new AttributionControl({ compact: true }));
+    // Karttakontrollit sijoitetaan **vasemmalle**, koska pysäkin sidepanel (§28)
+    // avautuu kartan oikeaan reunaan ja peittäisi oikean reunan kontrollit
+    // alleen (MapLibren `.maplibregl-ctrl-*`-säiliöllä on z-index 2, joten
+    // paneelin sulkunappi jäi aiemmin zoom-painikkeiden alle eikä toiminut).
+    map.addControl(new NavigationControl({ showCompass: false }), 'top-left');
+    map.addControl(new AttributionControl({ compact: true }), 'bottom-left');
     mapRef.current = map;
 
     return () => {
@@ -287,6 +336,185 @@ export function MapView({ features, vehicles }: Props) {
       // ja kartan `remove()` siivoaa ne, kun komponentti puretaan.
     };
   }, [vehicles]);
+
+  // Pysäkit (§28): oma lähde klusteroituna. Kerrokset luodaan kerran ja data
+  // päivitetään `setData`:lla, kuten ajoneuvoissa. Pysäkit eivät kosketa
+  // kartan näkymään (ei fitBoundsia) eikä ajoneuvojen kerroksiin.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    /** Pysäkkikerrokset lisätään ajoneuvokerrosten alle, jos ne ovat jo olemassa. */
+    const beforeId = (): string | undefined =>
+      map.getLayer(VEHICLE_BODY_LAYER) ? VEHICLE_BODY_LAYER : undefined;
+
+    const ensureLayers = (): void => {
+      if (map.getSource(STOP_SOURCE_ID)) return;
+
+      map.addSource(STOP_SOURCE_ID, {
+        type: 'geojson',
+        data: EMPTY_COLLECTION as never,
+        // MapLibren oma klusterointi: klusterit lasketaan selaimessa, joten
+        // kartta ei tarvitse yhtään pyyntöä zoomauksen tai siirron yhteydessä.
+        cluster: true,
+        clusterRadius: 50,
+        clusterMaxZoom: STOP_CLUSTER_MAX_ZOOM,
+        clusterMinPoints: 2,
+      });
+
+      // Klusterin ympyrä: koko kasvaa pysäkkien määrän mukaan.
+      map.addLayer(
+        {
+          id: STOP_CLUSTER_LAYER,
+          type: 'circle',
+          source: STOP_SOURCE_ID,
+          filter: ['has', 'point_count'],
+          paint: {
+            'circle-color': STOP_CLUSTER_COLOR,
+            'circle-opacity': 0.9,
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#0b1220',
+            'circle-radius': ['step', ['get', 'point_count'], 13, 10, 17, 50, 21, 200, 26],
+          },
+        },
+        beforeId(),
+      );
+
+      // Klusterin lukumäärä tekstinä (`point_count_abbreviated` lyhentää isot
+      // luvut, esim. "1.2k"). Vaatii glyph-lähteen (ks. OSM_STYLE).
+      map.addLayer(
+        {
+          id: STOP_CLUSTER_COUNT_LAYER,
+          type: 'symbol',
+          source: STOP_SOURCE_ID,
+          filter: ['has', 'point_count'],
+          layout: {
+            'text-field': ['get', 'point_count_abbreviated'],
+            'text-font': ['Noto Sans Bold'],
+            'text-size': ['step', ['get', 'point_count'], 11, 50, 12, 200, 13],
+            'text-allow-overlap': true,
+            'text-ignore-placement': true,
+          },
+          paint: { 'text-color': '#0b1220' },
+        },
+        beforeId(),
+      );
+
+      // Yksittäinen pysäkki: pieni valkoinen ympyrä (ajoneuvot ovat värillisiä
+      // ikoneita linjanumerolla, joten pysäkit erottuvat selvästi).
+      map.addLayer(
+        {
+          id: STOP_POINT_LAYER,
+          type: 'circle',
+          source: STOP_SOURCE_ID,
+          filter: ['!', ['has', 'point_count']],
+          paint: {
+            'circle-color': '#ffffff',
+            'circle-opacity': 0.95,
+            'circle-stroke-width': 1.5,
+            'circle-stroke-color': '#0b1220',
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 5],
+          },
+        },
+        beforeId(),
+      );
+
+      // Valittu pysäkki: korostusrengas (filtteri päivitetään `applyData`ssa).
+      map.addLayer(
+        {
+          id: STOP_SELECTED_LAYER,
+          type: 'circle',
+          source: STOP_SOURCE_ID,
+          filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'id'], '']],
+          paint: {
+            'circle-color': 'rgba(77, 163, 255, 0.35)',
+            'circle-stroke-width': 2.5,
+            'circle-stroke-color': '#4da3ff',
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 7, 16, 11],
+          },
+        },
+        beforeId(),
+      );
+    };
+
+    const applyData = (): void => {
+      const source = map.getSource(STOP_SOURCE_ID) as GeoJSONSource | undefined;
+      if (!source) return;
+      source.setData((stops ?? EMPTY_COLLECTION) as never);
+
+      // Korostus tehdään filtterillä: valinnan vaihtaminen ei vaadi uuden
+      // GeoJSON-aineiston lähettämistä työntekijälle.
+      if (map.getLayer(STOP_SELECTED_LAYER)) {
+        map.setFilter(STOP_SELECTED_LAYER, [
+          'all',
+          ['!', ['has', 'point_count']],
+          ['==', ['get', 'id'], selectedStopId ?? ''],
+        ]);
+      }
+    };
+
+    /** Klusterin klikkaus zoomaa klusterin sisältöön — paneelia ei avata. */
+    const onClusterClick = (event: MapLayerMouseEvent): void => {
+      const feature = event.features?.[0];
+      const clusterId = feature?.properties?.['cluster_id'] as number | undefined;
+      const coordinates = (feature?.geometry as { coordinates?: [number, number] } | undefined)
+        ?.coordinates;
+      if (clusterId === undefined || !coordinates) return;
+
+      const source = map.getSource(STOP_SOURCE_ID) as GeoJSONSource | undefined;
+      void source
+        ?.getClusterExpansionZoom(clusterId)
+        .then((zoom) => {
+          // Pieni lisäys, jotta klusteri varmasti hajoaa: rajazoomilla se voisi
+          // jäädä vielä kasaan ja klikkaus tuntuisi toimimattomalta.
+          map.easeTo({ center: coordinates, zoom: zoom + 0.2, duration: 500 });
+        })
+        .catch(() => {
+          // Hajotuszoomia ei saatu — ei kaadeta UI:ta sen takia.
+        });
+    };
+
+    const onStopClick = (event: MapLayerMouseEvent): void => {
+      const stopId = event.features?.[0]?.properties?.['id'] as string | undefined;
+      if (stopId) onSelectStopRef.current?.(stopId);
+    };
+
+    const onEnter = (): void => {
+      map.getCanvas().style.cursor = 'pointer';
+    };
+    const onLeave = (): void => {
+      map.getCanvas().style.cursor = '';
+    };
+
+    /**
+     * Kuuntelijat rekisteröidään kerrosten luonnin yhteydessä (sama opetus kuin
+     * §27.1.1:ssä): eri efektissä tehty rekisteröinti voisi jäädä väliin, jos
+     * kerrosta ei vielä olisi olemassa — ja silloin klikkaus ei toimisi koskaan.
+     */
+    const registerListeners = (): void => {
+      if (stopListenersRegisteredRef.current || !map.getLayer(STOP_POINT_LAYER)) return;
+      map.on('click', STOP_CLUSTER_LAYER, onClusterClick);
+      map.on('click', STOP_POINT_LAYER, onStopClick);
+      map.on('mouseenter', STOP_CLUSTER_LAYER, onEnter);
+      map.on('mouseleave', STOP_CLUSTER_LAYER, onLeave);
+      map.on('mouseenter', STOP_POINT_LAYER, onEnter);
+      map.on('mouseleave', STOP_POINT_LAYER, onLeave);
+      stopListenersRegisteredRef.current = true;
+    };
+
+    const setup = (): void => {
+      ensureLayers();
+      applyData();
+      registerListeners();
+    };
+
+    if (map.isStyleLoaded()) setup();
+    else map.once('load', setup);
+
+    return () => {
+      map.off('load', setup);
+    };
+  }, [stops, selectedStopId]);
 
   return <div className="map" ref={containerRef} role="application" aria-label="Kartta" />;
 }

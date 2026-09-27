@@ -1370,3 +1370,175 @@ Kaikki ylittävät WCAG AA:n (4,5:1). Popupin tausta on nyt `rgb(27, 39, 64)`
 ylimääräinen oletusrengas. Sama korjaus koskee myös `/kartta`-sivun
 tilannepopupia, jossa oli sama vika.
 
+
+## 28. Nysse-pysäkit ja pysäkkimonitori (27.9.2026)
+
+`/nysse-kartta`-näkymään lisättiin pysäkit ja pysäkin reaaliaikainen
+lähtötaulu. Ominaisuus on tarkoituksella pieni: **ei** ajoneuvon seurantaa,
+reitin seuraamista, suosikkeja eikä aikatauluhistoriaa.
+
+| Osa | Ratkaisu |
+|---|---|
+| Pysäkkidata | Tampereen/Nyssen **GTFS-static** (`stops.txt`): `https://data.itsfactory.fi/journeys/files/gtfs/latest/gtfs_tampere.zip` (ITS Factory, CC BY 4.0) → **3 423 pysäkkiä** |
+| Reaaliaikaiset lähdöt | **Waltti SIRI StopMonitoring** v1.3: `POST https://data.waltti.fi/tampere/api/sirirealtime/v1.3/ws` (Basic-auth, sama SSM-avain kuin ajoneuvoissa) |
+| Uusi Lambda | `apps/stops` → `tampere360-{env}-stops`, reitit `GET /v1/stops` ja `GET /v1/stops/{stopId}/departures` |
+| Välimuistit | staattinen rekisteri **6 h** (`GTFS_STOPS_CACHE_MS`), reaaliaikaiset lähdöt **15 s** (`STOP_CACHE_MS`) — erilliset instanssit, ei sekaantumisvaaraa |
+| Kartta | yksi GeoJSON-lähde + MapLibren **oma klusterointi** (radius 50, `clusterMaxZoom: 14`): klusterit ympyröinä **tarkalla lukumäärällä**, yksittäiset pysäkit valkoisina ympyröinä |
+| Sidepanel | `components/StopPanel.tsx`: pysäkin nimi + tunniste, lähtölista (linja · määränpää · aika), päivitysaika, loading/virhe/tyhjä-tilat |
+| Tila | `showStops` (oletus **false**) ja `selectedStopId` (`null` = paneeli kiinni) |
+| `/v1/vehicles` | **ei muutettu**: ajoneuvot ja pysäkkilähdöt ovat eri SIRI-palveluja eri välimuisteilla |
+
+### SIRI StopMonitoring: `PreviewInterval` on pakollinen
+
+SM-pyyntö samaan `/ws`-päätepisteeseen kuin VehicleMonitoring, mutta ilman
+`<PreviewInterval>`-elementtiä Walttin yhdyskäytävä vastaa **HTTP 406** tyhjällä
+vastauksella. Se näyttää siltä kuin SM-palvelua ei olisi — sama päätepiste
+palvelee VM:ää ongelmitta. Toimiva muoto (Nyssen kehittäjäportaalin
+dokumentaatiosta) on `siri-sm.ts`:ssä ja testattu `siri-sm.test.ts`issä:
+
+```xml
+<StopMonitoringRequest version="1.3">
+  <PreviewInterval>PT60M00S</PreviewInterval>
+  <MonitoringRef>0015</MonitoringRef>
+</StopMonitoringRequest>
+```
+
+`MonitoringRef` on **GTFS `stop_id`** — juuri siksi pysäkkirekisterin lähde on
+GTFS-static eikä mikään muu: SIRI ei anna pysäkkien luetteloa eikä
+koordinaatteja, ja tunnisteavaruuden on osuttava yhteen. Enintään 100
+`StopMonitoringRequest`-elementtiä per pyyntö.
+
+### Tietoturva: tunniste upotetaan XML:ään
+
+`stopId` tulee URL-polusta ja menee SIRI-pyyntöön, joten se validoidaan
+(`^[A-Za-z0-9:_-]{1,24}$`) **ja** escapetaan. Virheellinen tunniste on `400
+INVALID_STOP_ID` eikä "tyhjä pysäkkilista". Testit kattavat XML-injektioyritykset
+(`0015</MonitoringRef>`).
+
+### Pysäkit kartalla ja klusterien lukumäärä
+
+Klusterien lukumääräteksti (`point_count_abbreviated`, esim. `1.2k`) vaatii
+MapLibren **glyph-lähteen**: `glyphs: https://tiles.openfreemap.org/fonts/...`.
+Tämä ei vaatinut CSP-muutosta, koska sama origin (`tiles.openfreemap.org`) on jo
+`TILE_ORIGINS`-listalla sekä `img-src`:ssä että `connect-src`:ssä karttatiilien
+takia. Pysäkkikerrokset lisätään ajoneuvokerrosten **alle** (`beforeId`), jotta
+liikkuva kalusto pysyy luettavimpana. Klusterin klikkaus zoomaa klusterin
+sisältöön (`getClusterExpansionZoom`) eikä avaa paneelia.
+
+### Mitatut vasteajat ja kustannukset (dev 27.9.2026)
+
+| Kutsu | Kylmä | Lämmin |
+|---|---|---|
+| `GET /v1/stops` (3 423 pysäkkiä, ~430 kt) | 3,0 s (sisältää 17 Mt:n GTFS-latauksen + purun) | **0,28 s** |
+| `GET /v1/stops/0015/departures` | 0,9 s | ~0,3 s |
+
+GTFS-paketin lataus ja purku mitattiin paikallisesti: **171 ms** (fflate
+purkaa vain `stops.txt`:n, ei 100 Mt:n `stop_times.txt`ia). Lambdalla on oma
+varattu concurrency **2**, erillään query-Lambdasta (5) ja ajoneuvoista (2).
+Kontin muistiksi asetettiin 512 Mt (purku on raskaampi kuin pelkkä HTTP-haku).
+
+### Testit ja verifiointi
+
+`apps/stops/src/*.test.ts` (64 testiä): CSV-jäsennys, koordinaattien
+uskottavuus, zip-purku, SM-pyynnön muoto, SM-vastauksen jäsennys, lähtölistan
+järjestys ja armoväli, avainkohtainen välimuisti (TTL, in-flight de-dupe, stale,
+peek, muistin raja), tunnisteen validointi. Lisäksi
+`apps/web/src/lib/stops.test.ts` (12) ja `infra/test/config.test.ts` (+7).
+Koko sarja **298 testiä** ✅, ESLint ✅, `npm run build:web` ✅.
+
+Selainverifiointi (headless Chrome + CDP, **puhdas sivulataus** dev-julkaisusta;
+karttaolio haettiin React-fiberistä, jotta tarkistukset tehtiin MapLibren omilla
+API:lla `querySourceFeatures` / `queryRenderedFeatures` / `project`):
+
+| Vaihe | Tulos |
+|---|---|
+| Oletus | `Näytä pysäkit` **ei** valittu, klustereita ruudulla 0 ✅ |
+| Valinta päälle | `Näytä pysäkit (3423)`, `GET /v1/stops` **200** ✅ |
+| Klusterointi zoomilla 11 | 223 featurea joista **216 klusteria**, 27 klusteriympyrää ruudulla ✅ |
+| Klusterien lukumäärät | glyph-pyyntö `fonts/Noto%20Sans%20Bold/0-255.pbf` → **200**, ei CSP-rikkomusta ✅ |
+| Klusterin klikkaus | zoom 11,00 → **12,20**, paneelia **ei** avattu ✅ |
+| Zoom 16 | 21 featurea, **0 klusteria**, 4 yksittäistä pysäkkiä renderöity ✅ |
+| Pysäkin klikkaus | `🚏 Lielahden koulu` / `Pysäkki 1409`, lähdöt `21 Ryydynpohja 7 min` + `≈ 36 min`, päivitysaika ✅ |
+| Reaaliaikakysely | `GET /v1/stops/1409/departures` **200** (vain valitulle pysäkille) ✅ |
+| Sulkeminen | sulkunappi (`elementFromPoint` = `stop-panel__close`) ja **Esc** toimivat, korostus poistui ✅ |
+| Konsoli / CSP | **0 konsolivirhettä**, **0 CSP-rikkomusta** ✅ |
+| Regressio `/kartta` | 3 tilannemarkerit, popup aukesi, kontrollit vasemmalla, 0 virhettä ✅ |
+
+### Selainverifioinnissa löydetty ja korjattu vika: sulkunappi ei toiminut
+
+**Oire:** pysäkin klikkaus avasi sidepanelin oikein, mutta sulkunapin klikkaus
+ei sulkenut sitä — eikä konsolissa ollut mitään.
+
+**Juurisyy:** MapLibren kontrollisäiliöllä (`.maplibregl-ctrl-top-right`) on
+`z-index: 2`, ja `.stop-panel` oli `z-index: auto`. Kartan zoom-painikkeet
+sijaitsivat oikeassa yläreunassa eli **täsmälleen paneelin sulkunapin päällä**,
+ja koska kontrolli piirrettiin myöhemmin (z-index 2 > auto), klikkaus osui
+zoom-painikkeeseen. Todennus:
+`document.elementFromPoint(closeBtn.x, closeBtn.y).className` palautti
+`"maplibregl-ctrl-group button"` eikä `"stop-panel__close"`.
+
+**Korjaus:** karttakontrollit siirrettiin vasempaan reunaan
+(`NavigationControl` → `top-left`, `AttributionControl` → `bottom-left`), koska
+paneeli on oikealla. Päällekkäisyys poistui kokonaan — sama korjaus koskee
+`/kartta`-sivua (kontrollien sijainti on yhteinen `MapView`-komponentissa).
+
+**Miksi tämä oli helppo jäädä huomaamatta:** vika ei näy konsolissa eikä
+screenshotissa, jos ei osaa etsiä sitä — `--dump-dom` näyttää paneelin ja
+napit oikein. Vasta `elementFromPoint` tai oikea klikkaus paljastaa
+päällekkäisyyden.
+
+### Bugikorjaus 27.9.2026: "Lähtötietojen haku epäonnistui: API-virhe 502"
+
+**Oire (käyttäjän havainto):** osalla pysäkeistä (esim. 6154) pysäkkimonitori
+näytti virheen `Lähtötietojen haku epäonnistui: API-virhe 502
+(/v1/stops/6154/departures)`. Yksittäinen curl samaan pysäkkiin onnistui →
+vika oli satunnainen tai pysäkkikohtainen, ei reitityksessä.
+
+**Mittaus — kaksi eri syytä, jotka Waltti esittää samannäköisinä:**
+
+| Syy | Näyttö |
+|---|---|
+| Tilapäinen lähdevirhe | Lokissa 11:21–11:24 virheet pysäkeille 6155 (10), 1027 (8) ja 6154 (2); sama pysäkkikohtainen testi myöhemmin **200 kolmella peräkkäisellä yrityksellä** |
+| Pysäkki puuttuu Walttin reaaliaikarekisteristä | **2 / 60** satunnaisotoksen pysäkkiä (6833, 6837) → 500 myös **24 h `PreviewInterval`illa**; samoin muotoon sopimattomat `9999`, `HQ:1` |
+
+Rajattu pois: kuormitusrajausta ei ole (20 peräkkäistä + 10 rinnakkaista → 200);
+`StopPointsDiscovery`-pysäkkirekisteriä ei ole käytettävissä (500). Waltti vastaa
+500:lla runkonaan `Something went wrong` kummassakin tapauksessa, joten syy on
+**opittava** virheistä.
+
+**Korjaus:**
+
+| Osa | Muutos |
+|---|---|
+| `apps/stops/src/retry.ts` (uusi) | `withRetry`: yksi uusinta 250 ms viiveellä **vain 5xx- ja verkkovirheille**; 4xx = oma pyyntö väärä, ei uusita. `SiriUpstreamError` (uusi `siri-sm.ts`:ssä) kuljettaa statuskoodin + rungon. |
+| `apps/stops/src/coverage.ts` (uusi) | Toistuvista virheistä opittu "ei reaaliaikapeittoa" -merkintä: 3 peräkkäistä virhettä 2 min sisällä **ja jokin toinen pysäkki vastasi samana aikana** → 30 min merkintä, jonka ajan upstream-kutsua ei tehdä. Merkintä vanhenee itsestään (itsestään korjautuva). |
+| `apps/stops/src/handler.ts` | `realtimeCoverage` vastaukseen; peitoton pysäkki → **200** `realtimeCoverage: false`; ennen merkintää **503 + `Retry-After: 15`** (aiemmin 502). Myös välimuistin `stale`-varavastaus lasketaan epäonnistumiseksi. |
+| `apps/web/src/api/client.ts` | `ApiError` kuljettaa HTTP-tilakoodin; `apiErrorStatus()` lukee sen (tekstivarmistus varalla) |
+| `apps/web/src/lib/stops.ts` | `stopDeparturesNotice()` ja `NO_REALTIME_COVERAGE_TEXT` |
+| `apps/web/src/components/StopPanel.tsx` | Ei enää teknistä `API-virhe 502` -tekstiä: rauhallinen huomautus + **"Yritä uudelleen"**-painike; `realtimeCoverage === false` → tiedoksi-tyylinen huomautus |
+
+**Miksi 503 eikä 502 ja miksi "ei reaaliaikapeittoa" on 200:** teknisen
+virhekoodin näyttäminen käyttäjälle ei auta häntä mitenkään; 5xx kertoo
+selaimelle "yritä myöhemmin uudelleen" ja frontend kääntää sen luettavaksi
+huomautukseksi. Peitoton pysäkki taas on **tieto** (pysäkki on olemassa, sen
+lähtöjä ei vain ole tarjolla) eikä virhe — uusi yritys ei muuta tilannetta.
+
+**Testit:** `retry.test.ts` (11), `coverage.test.ts` (11),
+`apps/web/src/lib/stops.test.ts` (+5, sisältää regressiosuojan sille, ettei
+`API-virhe 5xx` -teksti enää näy), `apps/web/src/api/client.test.ts` (4).
+Koko sarja **329 testiä** ✅, ESLint ✅, `npm run build:web` ✅.
+
+### Rajaukset ja tunnetut puutteet
+
+- **Deploy vain deviin** (`tampere360-dev-api`, `-monitoring`, `-frontend`);
+  prodia ei muutettu tässä vaiheessa.
+- `GET /v1/stops` palautetaan pakkaamattomana (~430 kt), koska API Gatewayn
+  HTTP API ei tue vastauksen pakkausta. CloudFront pakkaisi, jos API olisi
+  jakelun takana; toistaiseksi vastaus on selaimen välimuistissa 30 min ja
+  TanStack Queryn muistissa 24 h, joten se haetaan käytännössä kerran
+  istunnossa.
+- Lähdöt näytetään vain **valitulle** pysäkille; pysäkkikohtaista
+  aikatauluhistoriaa, suosikkeja tai ajoneuvon seurantaa ei toteutettu.
+- Peruutus-/poikkeustietoja (esim. peruttu vuoro) ei erikseen korosteta —
+  SIRI antaa ne `DepartureStatus`-kentässä, jos niitä halutaan myöhemmin.
+

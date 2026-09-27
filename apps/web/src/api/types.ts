@@ -174,6 +174,77 @@ export interface CategoriesResponse {
   categories: Category[];
 }
 
+/**
+ * Pysäkit ja pysäkkimonitori (§28).
+ *
+ * Pysäkkirekisteri tulee valmiina GeoJSONina (`GET /v1/stops`), koska kartalla
+ * on **yksi lähde** — samalla periaatteella kuin ajoneuvot (§27). Pysäkin
+ * lähdöt haetaan erikseen vain valitulle pysäkille (`GET
+ * /v1/stops/{stopId}/departures`).
+ */
+export interface StopProperties {
+  id: string;
+  /** Pysäkin nimi, esim. `Keskustori D`. */
+  name: string;
+}
+
+export interface StopFeature {
+  type: 'Feature';
+  geometry: { type: 'Point'; coordinates: [number, number] };
+  properties: StopProperties;
+}
+
+export interface StopFeatureCollection {
+  type: 'FeatureCollection';
+  source: string;
+  /** Milloin pysäkkirekisteri haettiin (tekninen aikaleima). */
+  fetchedAt: string;
+  /** true = upstream-haku epäonnistui, rekisteri voi olla vanhentunut. */
+  stale: boolean;
+  count: number;
+  features: StopFeature[];
+}
+
+/** Pysäkki sidepanelissa. Koordinaatit voivat puuttua (ks. §28). */
+export interface Stop {
+  id: string;
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+/** Yksittäinen lähtö pysäkin lähtölistassa. */
+export interface StopDeparture {
+  /** Linjan numero, esim. `3`, `8A`. */
+  routeShortName: string;
+  /** Määränpää, esim. `Hervanta`. */
+  destination: string | null;
+  /** Aikataulun mukainen lähtöaika (ISO 8601 UTC) tai null. */
+  scheduledTime: string | null;
+  /** Ennustettu lähtöaika (ISO 8601 UTC) tai null. */
+  expectedTime: string | null;
+  /** Poikkeama aikataulusta sekunteina (positiivinen = myöhässä) tai null. */
+  delaySeconds: number | null;
+  /** true = vuoro on reaaliaikaisen seurannan piirissä. */
+  realtime: boolean;
+}
+
+export interface StopDeparturesResponse {
+  stop: Stop | null;
+  departures: StopDeparture[];
+  /** Lähteen tuotantoaika (ISO 8601 UTC) tai null. */
+  generatedAt: string | null;
+  /** Milloin Tampere 247 haki tiedot. */
+  fetchedAt: string;
+  stale: boolean;
+  /**
+   * `false` = Waltti ei palauta tälle pysäkille aikatauluja lainkaan
+   * (pysäkki puuttuu sen reaaliaikarekisteristä). Tällöin näytetään
+   * huomautus eikä virhettä, eikä uusia yrityksiä tehdä heti perään.
+   */
+  realtimeCoverage: boolean;
+}
+
 /** Kategorioiden suomenkieliset nimet ja värit. */
 export const CATEGORY_LABELS: Record<Category, string> = {
   TRAFFIC: 'Liikenne',

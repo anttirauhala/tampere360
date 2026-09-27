@@ -12,6 +12,8 @@
  *   GET /v1/sources
  *   GET /v1/health/sources
  *   GET /v1/vehicles?mode=TRAM|BUS  (oma Lambda, ks. §27)
+ *   GET /v1/stops                   (pysäkkirekisteri, oma Lambda, ks. §28)
+ *   GET /v1/stops/{stopId}/departures
  */
 
 import * as path from 'path';
@@ -31,7 +33,18 @@ import { Construct } from 'constructs';
 import type { AppContext, DomainConfig } from './config';
 import {
   API_THROTTLE,
+  GTFS_STOPS_CACHE_MS,
+  GTFS_STOPS_STALE_MAX_MS,
+  GTFS_STOPS_TIMEOUT_MS,
+  GTFS_STOPS_URL,
   QUERY_RESERVED_CONCURRENCY,
+  STOP_CACHE_MAX_ENTRIES,
+  STOP_CACHE_MS,
+  STOP_DEPARTURE_LIMIT,
+  STOP_PREVIEW_MINUTES,
+  STOP_RESERVED_CONCURRENCY,
+  STOP_STALE_MAX_MS,
+  STOP_UPSTREAM_TIMEOUT_MS,
   VEHICLE_CACHE_MS,
   VEHICLE_MAX_AGE_MINUTES,
   VEHICLE_RESERVED_CONCURRENCY,
@@ -65,6 +78,14 @@ const API_ROUTES = [
  */
 const VEHICLE_ROUTES = ['/v1/vehicles'];
 
+/**
+ * Pysäkkireitit (§28): staattinen pysäkkirekisteri ja yhden pysäkin
+ * reaaliaikaiset lähdöt. Sama Lambda palvelee molempia, koska niillä on sama
+ * konfiguraatio (SSM-avain) ja ne liittyvät samaan domain-käsitteeseen —
+ * välimuistit ovat silti erilliset (ks. apps/stops/src/handler.ts).
+ */
+const STOP_ROUTES = ['/v1/stops', '/v1/stops/{stopId}/departures'];
+
 export class ApiStack extends cdk.Stack {
   /** HTTP API (url-ominaisuus) frontendin ja testausta varten. */
   public readonly httpApi: apigwv2.HttpApi;
@@ -74,6 +95,8 @@ export class ApiStack extends cdk.Stack {
   public readonly queryFunction: lambdaNodejs.NodejsFunction;
   /** Ajoneuvosijainnit-Lambda valvontaa varten (§27). */
   public readonly vehiclesFunction: lambdaNodejs.NodejsFunction;
+  /** Pysäkit ja pysäkkimonitori -Lambda valvontaa varten (§28). */
+  public readonly stopsFunction: lambdaNodejs.NodejsFunction;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -129,19 +152,62 @@ export class ApiStack extends cdk.Stack {
     });
 
     // Lukuoikeus vain Nyssen API-avaimeen (sama parametri kuin ingest-nysse
-    // lukee — ks. ingestion-stack.ts). Ei laajempia SSM-oikeuksia.
+    // lukee — ks. ingestion-stack.ts). Ei laajempia SSM-oikeuksia. Sama
+    // parametri tarvitaan myös pysäkkimonitoriin (§28), joten ARN on yhteinen.
+    const nysseApiKeyArn =
+      `arn:aws:ssm:${this.region}:${this.account}:parameter` +
+      `/tampere360/${appContext.envName}/sources/nysse/api-key`;
+
     this.vehiclesFunction.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['ssm:GetParameter'],
-        resources: [
-          `arn:aws:ssm:${this.region}:${this.account}:parameter/tampere360/${appContext.envName}/sources/nysse/api-key`,
-        ],
-      }),
+      new iam.PolicyStatement({ actions: ['ssm:GetParameter'], resources: [nysseApiKeyArn] }),
     );
 
     const vehicleIntegration = new apigwv2Integrations.HttpLambdaIntegration(
       'VehiclesIntegration',
       this.vehiclesFunction,
+    );
+
+    // --- Pysäkit ja pysäkkimonitori (§28) ---------------------------------------
+    // Hakee GTFS-static-pysäkit (ITS Factory, ~17 Mt zip, cache 6 h) ja yhden
+    // pysäkin reaaliaikaiset lähdöt Waltti SIRI StopMonitoringista (cache 15 s).
+    // Ei DynamoDB-käyttöä: pysäkit ovat staattista dataa ja lähdöt hetkellisiä.
+    this.stopsFunction = new lambdaNodejs.NodejsFunction(this, 'StopsFunction', {
+      entry: path.join(__dirname, '../../apps/stops/src/handler.ts'),
+      handler: 'handler',
+      functionName: resourceName(appContext.envName, 'stops'),
+      description: 'Tampere360: Nysse-pysäkit ja pysäkkimonitori (GTFS static + Waltti SIRI SM)',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      // GTFS-paketin purku (17 Mt zip → stops.txt) on selvästi raskaampi
+      // operaatio kuin pelkkä HTTP-haku, joten muistia on enemmän kuin
+      // ajoneuvo- ja query-Lambdoilla (256 Mt).
+      memorySize: 512,
+      timeout: cdk.Duration.seconds(25),
+      // Kustannuskatto: ks. config.ts STOP_RESERVED_CONCURRENCY.
+      reservedConcurrentExecutions: STOP_RESERVED_CONCURRENCY,
+      environment: {
+        ENVIRONMENT: appContext.envName,
+        SSM_API_KEY_PATH: `/tampere360/${appContext.envName}/sources/nysse/api-key`,
+        GTFS_STOPS_URL,
+        GTFS_STOPS_CACHE_MS: String(GTFS_STOPS_CACHE_MS),
+        GTFS_STOPS_STALE_MAX_MS: String(GTFS_STOPS_STALE_MAX_MS),
+        GTFS_STOPS_TIMEOUT_MS: String(GTFS_STOPS_TIMEOUT_MS),
+        STOP_CACHE_MS: String(STOP_CACHE_MS),
+        STOP_STALE_MAX_MS: String(STOP_STALE_MAX_MS),
+        STOP_CACHE_MAX_ENTRIES: String(STOP_CACHE_MAX_ENTRIES),
+        STOP_PREVIEW_MINUTES: String(STOP_PREVIEW_MINUTES),
+        STOP_DEPARTURE_LIMIT: String(STOP_DEPARTURE_LIMIT),
+        STOP_UPSTREAM_TIMEOUT_MS: String(STOP_UPSTREAM_TIMEOUT_MS),
+        LOG_LEVEL: 'INFO',
+      },
+    });
+
+    this.stopsFunction.addToRolePolicy(
+      new iam.PolicyStatement({ actions: ['ssm:GetParameter'], resources: [nysseApiKeyArn] }),
+    );
+
+    const stopsIntegration = new apigwv2Integrations.HttpLambdaIntegration(
+      'StopsIntegration',
+      this.stopsFunction,
     );
 
     const integration = new apigwv2Integrations.HttpLambdaIntegration(
@@ -186,6 +252,14 @@ export class ApiStack extends cdk.Stack {
         path: route,
         methods: [apigwv2.HttpMethod.GET],
         integration: vehicleIntegration,
+      });
+    }
+
+    for (const route of STOP_ROUTES) {
+      this.httpApi.addRoutes({
+        path: route,
+        methods: [apigwv2.HttpMethod.GET],
+        integration: stopsIntegration,
       });
     }
 

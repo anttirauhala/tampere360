@@ -6,7 +6,17 @@ import {
   API_THROTTLE,
   ENVIRONMENT_DOMAINS,
   EXPIRY_SWEEP_MINUTES,
+  GTFS_STOPS_CACHE_MS,
+  GTFS_STOPS_STALE_MAX_MS,
+  GTFS_STOPS_TIMEOUT_MS,
+  GTFS_STOPS_URL,
   QUERY_RESERVED_CONCURRENCY,
+  STOP_CACHE_MS,
+  STOP_DEPARTURE_LIMIT,
+  STOP_PREVIEW_MINUTES,
+  STOP_RESERVED_CONCURRENCY,
+  STOP_STALE_MAX_MS,
+  STOP_UPSTREAM_TIMEOUT_MS,
   VEHICLE_CACHE_MS,
   VEHICLE_MAX_AGE_MINUTES,
   VEHICLE_RESERVED_CONCURRENCY,
@@ -124,5 +134,52 @@ describe('ajoneuvosijaintien kustannussuojat', () => {
   it('upstream-timeout on selvästi Lambdan timeoutia lyhyempi', () => {
     expect(VEHICLE_UPSTREAM_TIMEOUT_MS).toBeGreaterThan(0);
     expect(VEHICLE_UPSTREAM_TIMEOUT_MS).toBeLessThan(10_000);
+  });
+});
+
+/**
+ * Pysäkit ja pysäkkimonitori (§28): kaksi hyvin erilaista välimuistia samassa
+ * Lambdassa. Nämä testit estävät sen, että reaaliaikainen TTL (15 s) ja
+ * staattinen TTL (tunteja) sekoittuisivat toisiinsa — tai että kustannuskatto
+ * poistettaisiin. Ilman välimuisteja jokainen avattu selain aiheuttaisi oman
+ * 17 Mt:n GTFS-latauksen ja oman Waltti StopMonitoring -kutsunsa.
+ */
+describe('pysäkkien kustannussuojat', () => {
+  it('reaaliaikainen lähtötieto on 15 sekunnin välimuistissa', () => {
+    expect(STOP_CACHE_MS).toBeGreaterThanOrEqual(5_000);
+    expect(STOP_CACHE_MS).toBeLessThanOrEqual(30_000);
+  });
+
+  it('vanhaa lähtölistaa ei tarjota loputtomiin virhetilanteessa', () => {
+    expect(STOP_STALE_MAX_MS).toBeGreaterThan(STOP_CACHE_MS);
+    expect(STOP_STALE_MAX_MS).toBeLessThanOrEqual(300_000);
+  });
+
+  it('staattinen pysäkkirekisteri on tunteja välimuistissa ja selvästi eri TTL:llä', () => {
+    expect(GTFS_STOPS_CACHE_MS).toBeGreaterThanOrEqual(3_600_000);
+    expect(GTFS_STOPS_CACHE_MS).toBeGreaterThan(STOP_CACHE_MS * 100);
+    expect(GTFS_STOPS_STALE_MAX_MS).toBeGreaterThan(GTFS_STOPS_CACHE_MS);
+  });
+
+  it('GTFS-lataus ja upstream-kutsu ehtivät valmistua ennen Lambdan timeoutia (25 s)', () => {
+    expect(GTFS_STOPS_TIMEOUT_MS).toBeLessThan(25_000);
+    expect(STOP_UPSTREAM_TIMEOUT_MS).toBeLessThan(GTFS_STOPS_TIMEOUT_MS);
+  });
+
+  it('Lambdan varattu concurrency on pieni', () => {
+    expect(STOP_RESERVED_CONCURRENCY).toBeGreaterThan(0);
+    expect(STOP_RESERVED_CONCURRENCY).toBeLessThanOrEqual(3);
+  });
+
+  it('lähtölista on rajattu ja esikatseluväli tunnin mittainen', () => {
+    expect(STOP_DEPARTURE_LIMIT).toBeGreaterThan(0);
+    expect(STOP_DEPARTURE_LIMIT).toBeLessThanOrEqual(50);
+    expect(STOP_PREVIEW_MINUTES).toBeGreaterThanOrEqual(15);
+    expect(STOP_PREVIEW_MINUTES).toBeLessThanOrEqual(120);
+  });
+
+  it('GTFS-lähde on Tampereen GTFS-static-paketti ja salattu yhteys', () => {
+    expect(GTFS_STOPS_URL.startsWith('https://')).toBe(true);
+    expect(GTFS_STOPS_URL).toContain('gtfs_tampere');
   });
 });

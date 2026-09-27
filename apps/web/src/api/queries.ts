@@ -4,6 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 
 import { fetchCameraData, fetchCameraStations } from './cameras';
 import { apiGet } from './client';
+import {
+  STOP_DEPARTURES_POLL_MS,
+  STOPS_STALE_TIME_MS,
+  fetchStopDepartures,
+  fetchStops,
+} from './stops';
 import { VEHICLE_POLL_MS, fetchVehicles } from './vehicles';
 import type {
   Category,
@@ -109,5 +115,44 @@ export function useVehicles(mode: VehicleMode) {
     refetchInterval: VEHICLE_POLL_MS,
     refetchIntervalInBackground: false,
     staleTime: VEHICLE_POLL_MS,
+  });
+}
+
+/**
+ * Pysäkkirekisteri kartalle (§28).
+ *
+ * Haetaan **vain kun käyttäjä valitsee "Näytä pysäkit"** (`enabled`): vastaus on
+ * ~430 kt GeoJSONia (3 423 pysäkkiä), joten sitä ei ladata turhaan. Rekisteri
+ * muuttuu käytännössä päivittäin, joten `staleTime` on 24 h eikä
+ * taustapollausta tehdä.
+ */
+export function useStops(enabled: boolean) {
+  return useQuery({
+    queryKey: ['stops'],
+    queryFn: fetchStops,
+    enabled,
+    staleTime: STOPS_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Yhden pysäkin reaaliaikaiset lähdöt (§28).
+ *
+ * Haku käynnistyy vasta kun pysäkki on valittu, ja pollaus on 15 s — sama kuin
+ * Lambdan välimuisti, eli useampi avoin selain ei lisää Waltti-kutsuja.
+ * Taustavälilehti ei pollaa.
+ */
+export function useStopDepartures(stopId: string | null) {
+  return useQuery({
+    queryKey: ['stop-departures', stopId],
+    queryFn: () => {
+      if (!stopId) throw new Error('Pysäkkiä ei ole valittu');
+      return fetchStopDepartures(stopId);
+    },
+    enabled: Boolean(stopId),
+    refetchInterval: STOP_DEPARTURES_POLL_MS,
+    refetchIntervalInBackground: false,
+    staleTime: STOP_DEPARTURES_POLL_MS,
   });
 }
