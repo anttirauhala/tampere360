@@ -11,6 +11,7 @@ import {
   fetchStops,
 } from './stops';
 import { VEHICLE_POLL_MS, fetchVehicles } from './vehicles';
+import { WEATHER_POLL_MS, fetchCurrentWeather } from './weather';
 import {
   TMS_HISTORY_STALE_TIME_MS,
   TMS_POLL_MS,
@@ -204,5 +205,22 @@ export function useTmsHistoryBundle(tmsNumber: number | null) {
     enabled: tmsNumber !== null,
     staleTime: TMS_HISTORY_STALE_TIME_MS,
     refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Tampereen nykyinen sää Nyt-sivun otsikkoriville (§31).
+ *
+ * Pollaus 5 min: FMI päivittää havainnot ~10 min välein ja Lambdan välimuisti
+ * on 5 min, joten tiuhempi pollaus ei toisi tuoreempaa tietoa mutta
+ * kertautuisi jokaisen avoimen selaimen myötä. Taustavälilehti ei pollaa.
+ */
+export function useCurrentWeather() {
+  return useQuery({
+    queryKey: ['weather', 'current'],
+    queryFn: fetchCurrentWeather,
+    refetchInterval: WEATHER_POLL_MS,
+    refetchIntervalInBackground: false,
+    staleTime: WEATHER_POLL_MS,
   });
 }

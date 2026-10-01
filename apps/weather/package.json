@@ -1,0 +1,15 @@
+{
+  "name": "@tampere360/weather",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tampere360 — Tampereen nykyinen sää (FMI avoin WFS: havainnot) API-reittiä /v1/weather/current varten",
+  "main": "dist/handler.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@tampere360/observability": "0.1.0",
+    "fast-xml-parser": "^5.0.0"
+  }
+}

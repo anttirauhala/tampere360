@@ -35,6 +35,11 @@ import {
   VEHICLE_RESERVED_CONCURRENCY,
   VEHICLE_STALE_MAX_MS,
   VEHICLE_UPSTREAM_TIMEOUT_MS,
+  WEATHER_CACHE_MS,
+  WEATHER_OBSERVATION_HOURS,
+  WEATHER_RESERVED_CONCURRENCY,
+  WEATHER_STALE_MAX_MS,
+  WEATHER_UPSTREAM_TIMEOUT_MS,
   frontendDomainNames,
   frontendOrigins,
 } from '../lib/config';
@@ -267,5 +272,36 @@ describe('mittausasemien kustannussuojat', () => {
   it('vuorokausisarjan oletusjakso on järkevä (1–31 päivää)', () => {
     expect(TMS_HISTORY_DAYS).toBeGreaterThanOrEqual(7);
     expect(TMS_HISTORY_DAYS).toBeLessThanOrEqual(31);
+  });
+});
+
+/**
+ * Sään kustannussuojat (§31): FMI:n avoimella WFS:llä on pyyntörajat
+ * (10 000/vrk, yhteensä 600 / 5 min), joten palvelimen välimuisti on pakollinen.
+ */
+describe('sään kustannussuojat', () => {
+  it('havainto on noin viiden minuutin välimuistissa (FMI päivittyy ~10 min)', () => {
+    expect(WEATHER_CACHE_MS).toBeGreaterThanOrEqual(60_000);
+    expect(WEATHER_CACHE_MS).toBeLessThanOrEqual(600_000);
+  });
+
+  it('vanhaa havaintoa ei tarjota loputtomiin virhetilanteessa', () => {
+    expect(WEATHER_STALE_MAX_MS).toBeGreaterThan(WEATHER_CACHE_MS);
+    expect(WEATHER_STALE_MAX_MS).toBeLessThanOrEqual(3_600_000);
+  });
+
+  it('upstream-timeout on selvästi Lambdan timeoutia (10 s) lyhyempi', () => {
+    expect(WEATHER_UPSTREAM_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(WEATHER_UPSTREAM_TIMEOUT_MS).toBeLessThan(10_000);
+  });
+
+  it('Lambdan varattu concurrency on pieni ja erillään muista reiteistä', () => {
+    expect(WEATHER_RESERVED_CONCURRENCY).toBeGreaterThan(0);
+    expect(WEATHER_RESERVED_CONCURRENCY).toBeLessThanOrEqual(3);
+  });
+
+  it('hakuväli kattaa useita havaintoja (viimeisin löytyy, vaikka tuore puuttuisi)', () => {
+    expect(WEATHER_OBSERVATION_HOURS).toBeGreaterThanOrEqual(1);
+    expect(WEATHER_OBSERVATION_HOURS).toBeLessThanOrEqual(12);
   });
 });

@@ -989,6 +989,97 @@ a {
   }
 }
 
+/* --- Nyt-sivun otsikkorivi ja sääkortti (§31) --- */
+
+/*
+ * Otsikkorivi: otsikko ja lead vasemmalla, nykyisen sään kortti oikeassa
+ * laidassa. Kapealla näytöllä kortti kiertyy otsikon alle (flex-wrap).
+ */
+.now-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  /* Väli otsikkorivin ja sisällön (koostekorttien) väliin: sääkortti on
+     tekstiä korkeampi, joten ilman tätä kortit tarttuvat siihen kiinni. */
+  margin-bottom: 24px;
+}
+
+.now-head__text {
+  min-width: 240px;
+}
+
+/* Leadin oma ala-marginaali pois: väli sisältöön tulee vain .now-headin
+   kautta, jotta se on sama riippumatta siitä, kumpi palsta on korkeampi. */
+.now-head .page__lead {
+  margin-bottom: 0;
+}
+
+.weather-card {
+  flex: 0 0 auto;
+  min-width: 210px;
+  max-width: 260px;
+  margin-left: auto;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(19, 28, 46, 0.85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.weather-card__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.weather-card__icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.weather-card__temp {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.weather-card__condition {
+  margin: 0;
+  font-size: 14px;
+}
+
+.weather-card__meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.weather-card__source {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weather-card--loading {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .weather-card {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+  }
+}
+
 /* --- Nyt-sivun koostelista --- */
 
 /* Rivit erotetaan viivalla -> esitys on enemmän lista kuin kortti. */

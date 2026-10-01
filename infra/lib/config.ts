@@ -295,6 +295,32 @@ export const TMS_HISTORY_RETRY_BACKOFF_MS = 400;
 export const TMS_HISTORY_DAYS = 14;
 
 /**
+ * Tampereen nykyinen sää (`/v1/weather/current`, arkkitehtuuri §31).
+ *
+ * FMI:n **avoin WFS**, ei API-avainta → ei SSM- eikä Secrets Manager
+ * -tarvetta. Havainnot päivittyvät noin 10 minuutin välein, joten 5 min TTL ei
+ * hävitä tuoreutta mutta pitää upstream-kutsut harvassa. Tämä on tärkeää, koska
+ * FMI:n WFS:llä on pyyntörajat (10 000/vrk, yhteensä 600 / 5 min) — ilman
+ * palvelimen välimuistia jokainen avoin selain tekisi oman kutsunsa.
+ *
+ * Asema on **Tampere-Pirkkala lentoasema (fmisid 101118)**: FMI:n täydellisin
+ * havaintoasema Tampereen alueella (lämpötila, tuuli, puuska, suunta, kosteus,
+ * paine, pilvisyys). Havaintoaikaa ei koskaan arvata — puuttuva arvo jää
+ * `null`iksi (§20).
+ *
+ * Varattu concurrency on pieni ja **erillään** query- (5), ajoneuvo- (2),
+ * pysäkki- (2) ja mittausasema-Lambdasta (3), jotta sääkortin pollaus ei syö
+ * muiden reittien kustannuskattoa.
+ */
+export const WEATHER_FMISID = '101118';
+export const WEATHER_STATION_NAME = 'Tampere-Pirkkala lentoasema';
+export const WEATHER_CACHE_MS = 300_000;
+export const WEATHER_STALE_MAX_MS = 1_800_000;
+export const WEATHER_UPSTREAM_TIMEOUT_MS = 6_000;
+export const WEATHER_OBSERVATION_HOURS = 3;
+export const WEATHER_RESERVED_CONCURRENCY = 2;
+
+/**
  * Kustannusvalvonnan hälytysrajat (MonitoringStack).
  * Normaali liikenne on murto-osa näistä — hälytys tarkoittaa väärinkäyttöä,
  * ei ruuhkaa.

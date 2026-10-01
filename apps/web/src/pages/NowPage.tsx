@@ -1,5 +1,6 @@
 import { useSituations } from '../api/queries';
 import { SummaryCard } from '../components/SummaryCard';
+import { WeatherCard } from '../components/WeatherCard';
 import { CATEGORY_ROUTES, groupByCategory } from '../lib/situations';
 
 /** Kuinka monta tapahtumaa koostekortilla näytetään. */
@@ -20,8 +21,15 @@ export function NowPage() {
       {/* Himmennetty taustakuva koko näkymän taakse (piilotetaan kapeilla näytöillä). */}
       <div className="now-backdrop" aria-hidden="true" />
 
-      <h1 className="page__title">Nyt</h1>
-      <p className="page__lead">Tiedot päivittyvät automaattisesti 30 sekunnin välein.</p>
+      {/* Otsikkorivi: otsikko vasemmalla, Tampereen nykyinen sää oikeassa
+          laidassa (§31). Kapealla näytöllä sääkortti kiertyy otsikon alle. */}
+      <div className="now-head">
+        <div className="now-head__text">
+          <h1 className="page__title">Nyt</h1>
+          <p className="page__lead">Tiedot päivittyvät automaattisesti 30 sekunnin välein.</p>
+        </div>
+        <WeatherCard />
+      </div>
 
       {isLoading && <p className="state state--loading">Ladataan tilannetietoja…</p>}
 

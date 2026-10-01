@@ -14,6 +14,7 @@
  *   GET /v1/vehicles?mode=TRAM|BUS  (oma Lambda, ks. §27)
  *   GET /v1/stops                   (pysäkkirekisteri, oma Lambda, ks. §28)
  *   GET /v1/stops/{stopId}/departures
+ *   GET /v1/weather/current         (Tampereen nykyinen sää, oma Lambda, ks. §31)
  */
 
 import * as path from 'path';
@@ -63,6 +64,13 @@ import {
   VEHICLE_RESERVED_CONCURRENCY,
   VEHICLE_STALE_MAX_MS,
   VEHICLE_UPSTREAM_TIMEOUT_MS,
+  WEATHER_CACHE_MS,
+  WEATHER_FMISID,
+  WEATHER_OBSERVATION_HOURS,
+  WEATHER_RESERVED_CONCURRENCY,
+  WEATHER_STALE_MAX_MS,
+  WEATHER_STATION_NAME,
+  WEATHER_UPSTREAM_TIMEOUT_MS,
   frontendOrigins,
   resourceName,
 } from './config';
@@ -107,6 +115,13 @@ const STOP_ROUTES = ['/v1/stops', '/v1/stops/{stopId}/departures'];
  */
 const TMS_ROUTES = ['/v1/tms/stations', '/v1/tms/stations/{tmsNumber}/history'];
 
+/**
+ * Sääreitti (§31): Tampereen nykyinen sää FMI:n avoimesta WFS:stä. Oma
+ * Lambda, koska data ei tule DynamoDB:stä ja FMI:n WFS:llä on pyyntörajat —
+ * palvelimen välimuisti pitää upstream-kutsut kurissa (ks. config.ts WEATHER_*).
+ */
+const WEATHER_ROUTES = ['/v1/weather/current'];
+
 export class ApiStack extends cdk.Stack {
   /** HTTP API (url-ominaisuus) frontendin ja testausta varten. */
   public readonly httpApi: apigwv2.HttpApi;
@@ -120,6 +135,8 @@ export class ApiStack extends cdk.Stack {
   public readonly stopsFunction: lambdaNodejs.NodejsFunction;
   /** Liikenteen mittausasemat -Lambda valvontaa varten (§30). */
   public readonly tmsFunction: lambdaNodejs.NodejsFunction;
+  /** Nykyinen sää -Lambda valvontaa varten (§31). */
+  public readonly weatherFunction: lambdaNodejs.NodejsFunction;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -273,6 +290,38 @@ export class ApiStack extends cdk.Stack {
       this.tmsFunction,
     );
 
+    // --- Nykyinen sää (§31) -----------------------------------------------------
+    // Hakee FMI:n avoimesta WFS:stä (WaterML 2.0) yhden aseman viimeisimmät
+    // havainnot ja palauttaa pienen JSONin. Ei DynamoDB- eikä SSM-käyttöä:
+    // FMI on avoin (CC BY 4.0) eikä vaadi API-avainta.
+    this.weatherFunction = new lambdaNodejs.NodejsFunction(this, 'WeatherFunction', {
+      entry: path.join(__dirname, '../../apps/weather/src/handler.ts'),
+      handler: 'handler',
+      functionName: resourceName(appContext.envName, 'weather'),
+      description: 'Tampere360: Tampereen nykyinen sää (FMI avoin WFS)',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: 256,
+      // Yksi WFS-kutsu (WaterML-jäsennys) ehtii hyvin 10 sekunnissa.
+      timeout: cdk.Duration.seconds(10),
+      // Kustannuskatto: ks. config.ts WEATHER_RESERVED_CONCURRENCY.
+      reservedConcurrentExecutions: WEATHER_RESERVED_CONCURRENCY,
+      environment: {
+        ENVIRONMENT: appContext.envName,
+        WEATHER_FMISID,
+        WEATHER_STATION_NAME,
+        WEATHER_CACHE_MS: String(WEATHER_CACHE_MS),
+        WEATHER_STALE_MAX_MS: String(WEATHER_STALE_MAX_MS),
+        WEATHER_UPSTREAM_TIMEOUT_MS: String(WEATHER_UPSTREAM_TIMEOUT_MS),
+        WEATHER_OBSERVATION_HOURS: String(WEATHER_OBSERVATION_HOURS),
+        LOG_LEVEL: 'INFO',
+      },
+    });
+
+    const weatherIntegration = new apigwv2Integrations.HttpLambdaIntegration(
+      'WeatherIntegration',
+      this.weatherFunction,
+    );
+
     const integration = new apigwv2Integrations.HttpLambdaIntegration(
       'QueryIntegration',
       this.queryFunction,
@@ -331,6 +380,14 @@ export class ApiStack extends cdk.Stack {
         path: route,
         methods: [apigwv2.HttpMethod.GET],
         integration: tmsIntegration,
+      });
+    }
+
+    for (const route of WEATHER_ROUTES) {
+      this.httpApi.addRoutes({
+        path: route,
+        methods: [apigwv2.HttpMethod.GET],
+        integration: weatherIntegration,
       });
     }
 

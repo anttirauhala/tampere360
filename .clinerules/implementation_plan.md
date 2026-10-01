@@ -1876,3 +1876,88 @@ korjaus, regressiosuojat ja toistettavat verifiointikomennot.
   `BucketDeployment`.
 
 tuoreen dokumentin; avoin välilehti korjautuu automaattisesti).
+
+
+## 32. Tampereen nykyinen sää Nyt-sivulla (1.10.2026)
+
+Nyt-sivun otsikkotasolle, **oikeaan laitaan**, lisättiin pieni sääkortti:
+Tampereen nykyinen sää (lämpötila, tuuli, kosteus, havaintoaika). Data tulee
+**FMI:n avoimesta WFS-rajapinnasta** (CC BY 4.0, ei API-avainta). Uusi API-reitti
+`GET /v1/weather/current`. **Sää-välilehteä ei vielä lisätty** — Lambda on
+rakennettu niin, että sama API palvelee myöhemmin kokonaista Sää-sivua.
+
+### Arkkitehtuuri: oma Lambda, ei selainta suoraan
+
+| Ratkaisu | Perustelu |
+|---|---|
+| Oma Lambda `apps/weather` (kuten §27/§28/§30) | sää ei tule DynamoDB:stä; oma varattu concurrency (2) erottaa reitin query- (5), ajoneuvo- (2), pysäkki- (2) ja mittausasema-Lambdasta (3) |
+| Muistivälimuisti **5 min** + stale-fallback **30 min** | FMI:n WFS:llä on pyyntörajat (10 000/vrk, yhteensä 600 / 5 min); N selainta → 1 upstream-kutsu / TTL / lämmin kontti |
+| **Ei** CSP-muutosta | data tulee oman API:n kautta; selain saa pienen JSONin eikä WaterML-XML:ää |
+| **Ei** SSM/Secrets | FMI on avoin; ei API-avainta |
+
+Vaihtoehto (ei valittu): selain hakisi suoraan FMI:ltä (CORS `*`) kuten
+kelikamerat Digitrafficilta — mutta vastaus on WaterML 2.0 -XML:ää
+(~28 kt / parametri), joten jäsennys kuuluu palvelimelle.
+
+### FMI-rajapinta (verifioitu 1.10.2026)
+
+```
+GET https://opendata.fmi.fi/wfs
+  ?service=WFS&version=2.0.0&request=getFeature
+  &storedquery_id=fmi::observations::weather::timevaluepair
+  &fmisid=101118
+  &parameters=temperature,windspeedms,windgust,winddirection,humidity,pressure,precipitation1h,n_man
+  &starttime=<now-3h>
+```
+
+- **Asema:** `101118` **Tampere-Pirkkala lentoasema** — FMI:n täydellisin
+  havaintoasema Tampereen alueella. (Härmälä 101124 antaa lämpötilan mutta **ei
+  tuulta**; Siilinkari 101311 tuulen mutta ei luotettavaa lämpöä.)
+- **Muoto:** WaterML 2.0; jokainen parametri on oma `wfs:member`. Puuttuva arvo
+  on `<wml2:value>NaN</wml2:value>` → tulkitaan `null`iksi (§20: ei arvausta).
+- Valitaan **viimeisin ei-puuttuva** havainto per parametri; `observedAt` =
+  viimeisin kelvollinen aikaleima.
+
+### Tiedostot
+
+| Osa | Muutos |
+|---|---|
+| `apps/weather/` (uusi) | `fmi.ts` (WFS-URL, haku, ExceptionReport→virhe), `parse.ts` (WaterML→arvot), `cache.ts`, `handler.ts`, `types.ts` + testit |
+| `infra/lib/config.ts` | `WEATHER_*`-vakiot (TTL, stale, timeout, asema, concurrency 2) |
+| `infra/lib/api-stack.ts` | `WeatherFunction` + `WEATHER_ROUTES = ['/v1/weather/current']` |
+| `infra/bin/app.ts` | `weather` mukaan valvontalistaan (`LambdaErrorsAlarm-weather`) |
+| `apps/web/src/api/weather.ts` | tyypit + `fetchCurrentWeather` + `WEATHER_POLL_MS = 300_000` |
+| `apps/web/src/api/queries.ts` | `useCurrentWeather()` (pollaus 5 min, ei taustalla) |
+| `apps/web/src/lib/weather.ts` | puhtaat muotoilijat + `describeCondition` |
+| `apps/web/src/components/WeatherCard.tsx` | pieni kortti |
+| `apps/web/src/pages/NowPage.tsx` | otsikkorivi `.now-head` (otsikko vasen, sää oikea) |
+| `apps/web/src/styles.css` | `.now-head`, `.weather-card*` (≤760 px kortti koko leveydelle) |
+| `apps/web/src/components/Layout.tsx` | footteri: "Säävaroitukset ja -havainnot: Ilmatieteen laitos" + huomautus kuvauksen tulkinnasta |
+
+### UI ja rehellisyys
+
+- Iso lämpötila + lyhyt kuvaus (emoji) + rivi `Tuuli … · Kosteus …` +
+  `Havainto <aika> sitten · <asema>`.
+- **Puuttuva arvo jää pois** — ei nollaa eikä arvausta. Hakuvirhe ei näytä
+  virhettä eikä riko sivua: sääkortti vain jää pois (täydentävä tieto).
+- Lyhyt kuvaus ("Puolipilvistä" tms.) on **oma tulkintamme** pilvisyydestä
+  (`n_man` oktat) ja sateesta → kerrotaan kortin `title`-tekstissä ja footterissa
+  (sama periaate kuin vakavuusluokittelu §24).
+
+### Testit ja verifiointi
+
+`apps/weather/src/*.test.ts` (24) — WaterML-jäsennys (viimeisin ei-NaN, NaN→null,
+puuttuva parametri, asematiedot, tyhjä/rikkinäinen vastaus), WFS-URL ja
+ExceptionReport, välimuisti (TTL, in-flight, stale) ja handler (404/200/503).
+`apps/web/src/lib/weather.test.ts` (11) ja `infra/test/config.test.ts` (+5).
+ESLint ✅, Prettier ✅ (omat tiedostot), `npm run build:web` ✅, `cdk synth` ✅
+(route `GET /v1/weather/current`). Deploy vain deviin (`tampere360-dev-*`);
+prodia ei muutettu.
+
+### Myöhempi Sää-välilehti
+
+API laajenee muotoon `GET /v1/weather/forecast` (FMI Harmonie). Reittinimitys:
+nykyinen **`/saa` = Säävaroitukset** (CategoryPage WEATHER) — uusi sää-välilehti
+vaatii reittipäätöksen (esim. varoitukset → `/saavaroitukset`, `/saa` = sää).
+Tehdään omana muutoksenaan.
+

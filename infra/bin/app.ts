@@ -163,6 +163,7 @@ new MonitoringStack(app, `${prefix}-monitoring`, {
     { name: 'vehicle-positions', fn: api.vehiclesFunction },
     { name: 'stops', fn: api.stopsFunction },
     { name: 'tms-stations', fn: api.tmsFunction },
+    { name: 'weather', fn: api.weatherFunction },
   ],
   httpApi: api.httpApi,
 });
