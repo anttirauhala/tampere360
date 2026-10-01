@@ -14,6 +14,7 @@ export const NAV = [
   { to: '/nysse-kartta', label: 'Nysse kartalla', end: false },
   { to: '/kamerat', label: 'Kamerat', end: false },
   { to: '/liikennemaarat', label: 'Liikennemäärät', end: false },
+  { to: '/saunat', label: 'Saunat', end: false },
   { to: '/lahteet', label: 'Lähteiden tila', end: false },
 ];
 
@@ -57,10 +58,10 @@ export function Layout() {
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
             OpenStreetMap contributors
           </a>
-          . Säävaroitukset ja -havainnot: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet, kelikamerat ja
-          liikennemittaukset: Fintraffic / Digitraffic. Poliisitiedotteet: Sisä-Suomen
-          poliisilaitos. Joukkoliikenteen häiriötiedotteet ja ajoneuvosijainnit: Nysse / Waltti (CC
-          BY 4.0).
+          . Säävaroitukset ja -havainnot: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet,
+          kelikamerat ja liikennemittaukset: Fintraffic / Digitraffic. Poliisitiedotteet:
+          Sisä-Suomen poliisilaitos. Joukkoliikenteen häiriötiedotteet ja ajoneuvosijainnit: Nysse /
+          Waltti (CC BY 4.0). Saunatiedot: saunahaku.fi. Veden lämpötila: SYKE (CC BY 4.0).
         </p>
         {/*
           Vakavuusluokittelu on oma arviomme (otsikon ja lähdetietojen
@@ -73,8 +74,8 @@ export function Layout() {
           Vakavuusluokittelu (tiedote, vähäinen, merkittävä, kriittinen) on Tampere 247:n
           automaattisesti tekemä arvio otsikon ja lähdetietojen perusteella — ei viranomaisen antama
           luokitus. Poikkeus: säävaroitusten vakavuus tulee suoraan Ilmatieteen laitoksen
-          varoitusluokasta. Myös sääkortin lyhyt kuvaus (esim. "Puolipilvistä") on oma
-          tulkintamme Ilmatieteen laitoksen havainnosta.
+          varoitusluokasta. Myös sääkortin lyhyt kuvaus (esim. "Puolipilvistä") on oma tulkintamme
+          Ilmatieteen laitoksen havainnosta.
         </p>
         <p className="footer__note">
           Palvelu kokoaa julkiset tiedotteet yhteen näkymään. Tarkista virallinen tieto aina

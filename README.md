@@ -152,6 +152,7 @@ curl https://api.tampere247.online/v1/health/sources
 
 Datalähteet ovat avoimia (CC BY 4.0 tai vastaava). Jokaisen tapahtuman
 `attribution`-kenttä kertoo lähteen, ja käyttöliittymä näyttää pakolliset
-attribuoinnit (esim. `© OpenStreetMap contributors` karttatiilille,
-Ilmatieteen laitos säävaroituksille, Fintraffic / Digitraffic
-liikennetiedotteille ja kelikameroille).
+attribuoinnit (esim. `© OpenStreetMap contributors` karttatiileille,
+Ilmatieteen laitos säävaroituksille ja -havainnoille, Fintraffic / Digitraffic
+liikennetiedotteille, kelikameroille ja liikennemittauksille, Nysse / Waltti
+joukkoliikenteelle sekä saunahaku.fi saunatiedoille).

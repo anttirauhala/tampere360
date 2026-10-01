@@ -295,6 +295,59 @@ export const TMS_HISTORY_RETRY_BACKOFF_MS = 400;
 export const TMS_HISTORY_DAYS = 14;
 
 /**
+ * Saunat (`/v1/saunas`, arkkitehtuuri §33).
+ *
+ * Saunahaku.fi-rajapinta on julkinen API (ei avainta, `access-control-allow-origin: *`).
+ * Reitti on kevyt, mutta oma Lambda pitää upstream-kutsut kurissa välimuistilla:
+ * aukioloajat ja hinnat muuttuvat harvoin, joten 15 minuutin TTL riittää — N
+ * avointa selainta aiheuttaa enintään yhden upstream-kutsun per TTL per lämmin
+ * kontti. Varafallback on viikkoja, jotta hetkellinen lähdekatkos ei tyhjennä
+ * sivua.
+ *
+ * Varattu concurrency on pieni ja **erillään** query-Lambdasta (5) sekä
+ * ajoneuvo- (2), pysäkki- (2) ja mittausasema-Lambdasta (3), jotta mikään
+ * reitti ei syö toisen kustannuskattoa.
+ */
+export const SAUNA_LIST_URL =
+  'https://08aapg0u7e.execute-api.eu-west-1.amazonaws.com/prod/sauna-list';
+export const SAUNA_CACHE_MS = 15 * 60_000;
+export const SAUNA_STALE_MAX_MS = 7 * 86_400_000;
+export const SAUNA_RESERVED_CONCURRENCY = 2;
+/** Upstream-vastaus on pieni (~55 kt); 4 s on selvästi Lambdan timeoutia (10 s) lyhyempi. */
+export const SAUNA_UPSTREAM_TIMEOUT_MS = 4_000;
+/** Yksi uusintayritys hetkellisen upstream-virheen varalle (ks. apps/saunas/src/retry.ts). */
+export const SAUNA_RETRY_ATTEMPTS = 2;
+export const SAUNA_RETRY_BACKOFF_MS = 300;
+
+/**
+ * Pintaveden lämpötila (`/v1/water/temperature`, arkkitehtuuri §34).
+ *
+ * Lähde: **SYKE Hydrologiarajapinta** (OData 3.0), CC BY 4.0, ei API-avainta.
+ * Suure `LampoPintavesi` = "Pintaveden lämpötila" (T, °C).
+ *
+ * Asema on **Näsijärvi, Kyrönlahti** (`Paikka_Id` 1694): Tampereen kaupungin
+ * kunnassa ei ole yhtään pintaveden lämpötilaa mittaavaa asemaa, joka
+ * raportoisi säännöllisesti, mutta Näsijärvi on Tampereen järvi ja Kyrönlahti
+ * sen pohjoispää (Ylöjärvi). Havainto on päivittäinen.
+ *
+ * **5 minuutin välimuisti** (vaatimus): N selainta → 1 SYKE-kutsu / 5 min /
+ * lämmin kontti. Varafallback on viikkoja, jotta hetkellinen lähdekatkos ei
+ * tyhjennä lukemaa.
+ */
+export const WATER_TEMPERATURE_URL =
+  'https://rajapinnat.ymparisto.fi/api/Hydrologiarajapinta/1.2/odata';
+export const WATER_TEMPERATURE_PAIKKA_ID = 1694;
+export const WATER_TEMPERATURE_STATION_NAME = 'Näsijärvi, Kyrönlahti';
+export const WATER_TEMPERATURE_LAKE_NAME = 'Näsijärvi';
+export const WATER_TEMPERATURE_MUNICIPALITY = 'Ylöjärvi';
+export const WATER_TEMPERATURE_LATITUDE = 61.7117;
+export const WATER_TEMPERATURE_LONGITUDE = 23.5547;
+export const WATER_TEMPERATURE_CACHE_MS = 5 * 60_000;
+export const WATER_TEMPERATURE_STALE_MAX_MS = 7 * 86_400_000;
+export const WATER_TEMPERATURE_RESERVED_CONCURRENCY = 2;
+export const WATER_TEMPERATURE_UPSTREAM_TIMEOUT_MS = 5_000;
+
+/**
  * Tampereen nykyinen sää (`/v1/weather/current`, arkkitehtuuri §31).
  *
  * FMI:n **avoin WFS**, ei API-avainta → ei SSM- eikä Secrets Manager

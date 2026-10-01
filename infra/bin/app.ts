@@ -164,6 +164,8 @@ new MonitoringStack(app, `${prefix}-monitoring`, {
     { name: 'stops', fn: api.stopsFunction },
     { name: 'tms-stations', fn: api.tmsFunction },
     { name: 'weather', fn: api.weatherFunction },
+    { name: 'saunas', fn: api.saunasFunction },
+    { name: 'water-temperature', fn: api.waterTemperatureFunction },
   ],
   httpApi: api.httpApi,
 });

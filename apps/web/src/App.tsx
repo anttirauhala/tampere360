@@ -7,6 +7,7 @@ import { lazyPage } from './lib/lazy-page';
 import { CamerasPage } from './pages/CamerasPage';
 import { CategoryPage } from './pages/CategoryPage';
 import { NowPage } from './pages/NowPage';
+import { SaunasPage } from './pages/SaunasPage';
 import { SourcesPage } from './pages/SourcesPage';
 import { TmsPage } from './pages/TmsPage';
 
@@ -71,6 +72,7 @@ export function App() {
             />
             <Route path="kamerat" element={<CamerasPage />} />
             <Route path="liikennemaarat" element={<TmsPage />} />
+            <Route path="saunat" element={<SaunasPage />} />
             <Route path="saa" element={<CategoryPage category="WEATHER" />} />
             <Route path="poliisi" element={<CategoryPage category="POLICE" />} />
             <Route path="joukkoliikenne" element={<CategoryPage category="PUBLIC_TRANSPORT" />} />

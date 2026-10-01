@@ -15,6 +15,8 @@
  *   GET /v1/stops                   (pysäkkirekisteri, oma Lambda, ks. §28)
  *   GET /v1/stops/{stopId}/departures
  *   GET /v1/weather/current         (Tampereen nykyinen sää, oma Lambda, ks. §31)
+ *   GET /v1/saunas                  (saunat, oma Lambda, ks. §33)
+ *   GET /v1/water/temperature       (Näsijärven pintaveden lämpötila, oma Lambda, ks. §34)
  */
 
 import * as path from 'path';
@@ -39,6 +41,13 @@ import {
   GTFS_STOPS_TIMEOUT_MS,
   GTFS_STOPS_URL,
   QUERY_RESERVED_CONCURRENCY,
+  SAUNA_CACHE_MS,
+  SAUNA_LIST_URL,
+  SAUNA_RESERVED_CONCURRENCY,
+  SAUNA_RETRY_ATTEMPTS,
+  SAUNA_RETRY_BACKOFF_MS,
+  SAUNA_STALE_MAX_MS,
+  SAUNA_UPSTREAM_TIMEOUT_MS,
   STOP_CACHE_MAX_ENTRIES,
   STOP_CACHE_MS,
   STOP_DEPARTURE_LIMIT,
@@ -64,6 +73,17 @@ import {
   VEHICLE_RESERVED_CONCURRENCY,
   VEHICLE_STALE_MAX_MS,
   VEHICLE_UPSTREAM_TIMEOUT_MS,
+  WATER_TEMPERATURE_CACHE_MS,
+  WATER_TEMPERATURE_LATITUDE,
+  WATER_TEMPERATURE_LONGITUDE,
+  WATER_TEMPERATURE_MUNICIPALITY,
+  WATER_TEMPERATURE_PAIKKA_ID,
+  WATER_TEMPERATURE_RESERVED_CONCURRENCY,
+  WATER_TEMPERATURE_STALE_MAX_MS,
+  WATER_TEMPERATURE_STATION_NAME,
+  WATER_TEMPERATURE_LAKE_NAME,
+  WATER_TEMPERATURE_UPSTREAM_TIMEOUT_MS,
+  WATER_TEMPERATURE_URL,
   WEATHER_CACHE_MS,
   WEATHER_FMISID,
   WEATHER_OBSERVATION_HOURS,
@@ -116,11 +136,26 @@ const STOP_ROUTES = ['/v1/stops', '/v1/stops/{stopId}/departures'];
 const TMS_ROUTES = ['/v1/tms/stations', '/v1/tms/stations/{tmsNumber}/history'];
 
 /**
+ * Saunareitit (§33): saunahaku.fi-rajapinnan saunaluettelo. Oma Lambda pitää
+ * upstream-kutsut kurissa välimuistilla ja antaa yhden paikan virheenkäsittelylle
+ * (ks. apps/saunas/src/handler.ts).
+ */
+const SAUNA_ROUTES = ['/v1/saunas'];
+
+/**
  * Sääreitti (§31): Tampereen nykyinen sää FMI:n avoimesta WFS:stä. Oma
  * Lambda, koska data ei tule DynamoDB:stä ja FMI:n WFS:llä on pyyntörajat —
  * palvelimen välimuisti pitää upstream-kutsut kurissa (ks. config.ts WEATHER_*).
  */
 const WEATHER_ROUTES = ['/v1/weather/current'];
+
+/**
+ * Veden lämpötilan reitti (§34): Näsijärven pintaveden lämpötila SYKE:n
+ * Hydrologiarajapinnasta (OData). Oma Lambda, koska data ei tule DynamoDB:stä ja
+ * 5 minuutin välimuisti pitää upstream-kutsut kurissa (ks. config.ts
+ * WATER_TEMPERATURE_*).
+ */
+const WATER_TEMPERATURE_ROUTES = ['/v1/water/temperature'];
 
 export class ApiStack extends cdk.Stack {
   /** HTTP API (url-ominaisuus) frontendin ja testausta varten. */
@@ -135,8 +170,12 @@ export class ApiStack extends cdk.Stack {
   public readonly stopsFunction: lambdaNodejs.NodejsFunction;
   /** Liikenteen mittausasemat -Lambda valvontaa varten (§30). */
   public readonly tmsFunction: lambdaNodejs.NodejsFunction;
+  /** Saunat-Lambda valvontaa varten (§33). */
+  public readonly saunasFunction: lambdaNodejs.NodejsFunction;
   /** Nykyinen sää -Lambda valvontaa varten (§31). */
   public readonly weatherFunction: lambdaNodejs.NodejsFunction;
+  /** Veden lämpötila -Lambda valvontaa varten (§34). */
+  public readonly waterTemperatureFunction: lambdaNodejs.NodejsFunction;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -322,6 +361,80 @@ export class ApiStack extends cdk.Stack {
       this.weatherFunction,
     );
 
+    // --- Saunat (§33) -----------------------------------------------------------
+    // Hakee saunahaku.fi-rajapinnan saunaluettelon (~22 saunaa) ja palauttaa
+    // kevyen JSONin. Ei DynamoDB- eikä SSM-käyttöä: rajapinta on julkinen eikä
+    // vaadi API-avainta. Välimuisti pitää upstream-kutsut kurissa (N selainta →
+    // 1 kutsu / TTL / lämmin kontti).
+    this.saunasFunction = new lambdaNodejs.NodejsFunction(this, 'SaunasFunction', {
+      entry: path.join(__dirname, '../../apps/saunas/src/handler.ts'),
+      handler: 'handler',
+      functionName: resourceName(appContext.envName, 'saunas'),
+      description: 'Tampere360: saunat (saunahaku.fi)',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: 256,
+      // Yksi pieni JSON-kutsu (~55 kt) ehtii hyvin 10 sekunnissa.
+      timeout: cdk.Duration.seconds(10),
+      // Kustannuskatto: ks. config.ts SAUNA_RESERVED_CONCURRENCY.
+      reservedConcurrentExecutions: SAUNA_RESERVED_CONCURRENCY,
+      environment: {
+        ENVIRONMENT: appContext.envName,
+        SAUNA_LIST_URL,
+        SAUNA_CACHE_MS: String(SAUNA_CACHE_MS),
+        SAUNA_STALE_MAX_MS: String(SAUNA_STALE_MAX_MS),
+        SAUNA_UPSTREAM_TIMEOUT_MS: String(SAUNA_UPSTREAM_TIMEOUT_MS),
+        SAUNA_RETRY_ATTEMPTS: String(SAUNA_RETRY_ATTEMPTS),
+        SAUNA_RETRY_BACKOFF_MS: String(SAUNA_RETRY_BACKOFF_MS),
+        LOG_LEVEL: 'INFO',
+      },
+    });
+
+    const saunasIntegration = new apigwv2Integrations.HttpLambdaIntegration(
+      'SaunasIntegration',
+      this.saunasFunction,
+    );
+
+    // --- Veden lämpötila (§34) --------------------------------------------------
+    // Hakee Näsijärven pintaveden lämpötilan SYKE:n Hydrologiarajapinnasta
+    // (OData 3.0, CC BY 4.0, ei avainta) ja palauttaa pienen JSONin. Ei
+    // DynamoDB- eikä SSM-käyttöä. Muistivälimuisti 5 min pitää upstream-kutsut
+    // kurissa (N selainta → 1 SYKE-kutsu / TTL / lämmin kontti).
+    this.waterTemperatureFunction = new lambdaNodejs.NodejsFunction(
+      this,
+      'WaterTemperatureFunction',
+      {
+        entry: path.join(__dirname, '../../apps/water-temperature/src/handler.ts'),
+        handler: 'handler',
+        functionName: resourceName(appContext.envName, 'water-temperature'),
+        description: 'Tampere360: Näsijärven pintaveden lämpötila (SYKE Hydrologiarajapinta)',
+        runtime: lambda.Runtime.NODEJS_22_X,
+        memorySize: 256,
+        // Yksi pieni OData-kutsu ehtii hyvin 10 sekunnissa.
+        timeout: cdk.Duration.seconds(10),
+        // Kustannuskatto: ks. config.ts WATER_TEMPERATURE_RESERVED_CONCURRENCY.
+        reservedConcurrentExecutions: WATER_TEMPERATURE_RESERVED_CONCURRENCY,
+        environment: {
+          ENVIRONMENT: appContext.envName,
+          SYKE_HYDRO_URL: WATER_TEMPERATURE_URL,
+          WATER_PAIKKA_ID: String(WATER_TEMPERATURE_PAIKKA_ID),
+          WATER_STATION_NAME: WATER_TEMPERATURE_STATION_NAME,
+          WATER_LAKE_NAME: WATER_TEMPERATURE_LAKE_NAME,
+          WATER_MUNICIPALITY: WATER_TEMPERATURE_MUNICIPALITY,
+          WATER_STATION_LAT: String(WATER_TEMPERATURE_LATITUDE),
+          WATER_STATION_LON: String(WATER_TEMPERATURE_LONGITUDE),
+          WATER_CACHE_MS: String(WATER_TEMPERATURE_CACHE_MS),
+          WATER_STALE_MAX_MS: String(WATER_TEMPERATURE_STALE_MAX_MS),
+          WATER_UPSTREAM_TIMEOUT_MS: String(WATER_TEMPERATURE_UPSTREAM_TIMEOUT_MS),
+          LOG_LEVEL: 'INFO',
+        },
+      },
+    );
+
+    const waterTemperatureIntegration = new apigwv2Integrations.HttpLambdaIntegration(
+      'WaterTemperatureIntegration',
+      this.waterTemperatureFunction,
+    );
+
     const integration = new apigwv2Integrations.HttpLambdaIntegration(
       'QueryIntegration',
       this.queryFunction,
@@ -388,6 +501,22 @@ export class ApiStack extends cdk.Stack {
         path: route,
         methods: [apigwv2.HttpMethod.GET],
         integration: weatherIntegration,
+      });
+    }
+
+    for (const route of SAUNA_ROUTES) {
+      this.httpApi.addRoutes({
+        path: route,
+        methods: [apigwv2.HttpMethod.GET],
+        integration: saunasIntegration,
+      });
+    }
+
+    for (const route of WATER_TEMPERATURE_ROUTES) {
+      this.httpApi.addRoutes({
+        path: route,
+        methods: [apigwv2.HttpMethod.GET],
+        integration: waterTemperatureIntegration,
       });
     }
 

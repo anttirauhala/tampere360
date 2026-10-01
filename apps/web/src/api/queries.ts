@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { fetchCameraData, fetchCameraStations } from './cameras';
 import { apiGet } from './client';
+import { SAUNAS_STALE_TIME_MS, fetchSaunas } from './saunas';
 import {
   STOP_DEPARTURES_POLL_MS,
   STOPS_STALE_TIME_MS,
@@ -11,6 +12,7 @@ import {
   fetchStops,
 } from './stops';
 import { VEHICLE_POLL_MS, fetchVehicles } from './vehicles';
+import { WATER_TEMPERATURE_POLL_MS, fetchWaterTemperature } from './water';
 import { WEATHER_POLL_MS, fetchCurrentWeather } from './weather';
 import {
   TMS_HISTORY_STALE_TIME_MS,
@@ -222,5 +224,38 @@ export function useCurrentWeather() {
     refetchInterval: WEATHER_POLL_MS,
     refetchIntervalInBackground: false,
     staleTime: WEATHER_POLL_MS,
+  });
+}
+
+/**
+ * Saunat (§33).
+ *
+ * Ei automaattipollausta: aukioloajat ja hinnat muuttuvat harvoin, joten tieto
+ * haetaan kerran istunnossa ja päivitetään käyttäjän "Päivitä tiedot"
+ * -painikkeella. `refetchOnWindowFocus: false`, jotta välilehdelle palaaminen ei
+ * tee turhaa hakua; Lambdan välimuisti pitää upstream-kutsut kurissa.
+ */
+export function useSaunas() {
+  return useQuery({
+    queryKey: ['saunas'],
+    queryFn: fetchSaunas,
+    staleTime: SAUNAS_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Näsijärven pintaveden lämpötila (§34), Saunat-sivun leadin alle.
+ *
+ * Pollaus 5 min (sama kuin Lambdan välimuisti). Havainto on päivittäinen, joten
+ * tiuhempi pollaus ei toisi tuoreempaa tietoa. Taustavälilehti ei pollaa.
+ */
+export function useWaterTemperature() {
+  return useQuery({
+    queryKey: ['water-temperature'],
+    queryFn: fetchWaterTemperature,
+    refetchInterval: WATER_TEMPERATURE_POLL_MS,
+    refetchIntervalInBackground: false,
+    staleTime: WATER_TEMPERATURE_POLL_MS,
   });
 }

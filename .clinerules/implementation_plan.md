@@ -1961,3 +1961,133 @@ nykyinen **`/saa` = Säävaroitukset** (CategoryPage WEATHER) — uusi sää-vä
 vaatii reittipäätöksen (esim. varoitukset → `/saavaroitukset`, `/saa` = sää).
 Tehdään omana muutoksenaan.
 
+## 33. Saunat-välilehti (1.10.2026)
+
+Uusi välilehti `/saunat` näyttää Tampereen seudun saunat listana. Jokaisesta
+saunasta näytetään **nimi, osoite, lisätiedot, aukioloaika tänään sekä hinnat**.
+Uusi API-reitti `GET /v1/saunas`. Tarkempi kuvaus:
+[`docs/architecture/saunas.md`](../docs/architecture/saunas.md).
+
+### Tietolähde: saunahaku.fi (selvitettiin SPA-bundlesta)
+
+| Asia | Arvo |
+|---|---|
+| Rajapinta | `GET https://08aapg0u7e.execute-api.eu-west-1.amazonaws.com/prod/sauna-list` |
+| Vastaus | 200 `application/json`, ei avainta, `access-control-allow-origin: *` |
+| Sisältö | taulukko saunoja (~22, ~55 kt): `id, name, streetAddress, postalCode, city, openingHours[], phone, webPage, info, kiosk, restaurant, isNew` |
+| Aukiolo | `openingHours[] = { weekday: 'MONDAY'…'SUNDAY', openingTime: 'HH:MM:SS', closingTime: 'HH:MM:SS', prices: [{ priceType, price }] }` |
+| Hintaluokat | `ADULT, CHILD, STUDENT, PENSIONER, UNEMPLOYED, CONSRIPT` (CONSRIPT on lähteen kirjoitusasu) |
+
+Rajapinnalla ei ole dokumentoitua skeemaa → normalisointi on **puolustava**:
+tuntematon kenttätyyppi ei kaada vastausta, ja `id`/`name`-tön tietue pudotetaan.
+
+### Arkkitehtuuri: oma Lambda (kuten §27–32)
+
+```
+Selain → GET /v1/saunas → apps/saunas-Lambda → muistivälimuisti → saunahaku.fi → JSON
+```
+
+| Ratkaisu | Perustelu |
+|---|---|
+| Oma Lambda `apps/saunas`, varattu concurrency **2** | Ei DynamoDB:tä, ei SSM-avainta; concurrency erottaa reitin query- (5) ja muiden reittien katosta |
+| Välimuisti **15 min** + stale-fallback **7 vrk** | Aukioloajat/hinnat muuttuvat harvoin; N selainta → 1 upstream-kutsu / TTL |
+| Yksi uusintayritys (5xx/verkko) | Sama malli kuin §28/§30; 4xx **ja** muotovirhe (status 0) eivät uusi |
+| Upstream-timeout **4 s**, Lambdan timeout 10 s | 2 × 4 s + 0,3 s < 10 s (regressiotesti valvoo) |
+| **Ei CSP-muutosta** | data tulee oman API:n kautta (sama origin) |
+
+### Frontend
+
+| Osa | Muutos |
+|---|---|
+| `apps/web/src/api/saunas.ts` | tyypit + `fetchSaunas()` + `SAUNAS_STALE_TIME_MS` (30 min) |
+| `apps/web/src/api/queries.ts` | `useSaunas()` — ei automaattipollausta, `refetchOnWindowFocus: false` |
+| `apps/web/src/lib/saunas.ts` | puhtaat funktiot: `todayWeekday` (Suomen aika), `todaysSessions`, `saunaTodayStatus`, `saunaPrices`, `priceTypeLabel`, `formatPrice`, `formatAddress`, `sortSaunas` |
+| `apps/web/src/pages/SaunasPage.tsx` | otsikko "Saunat", työkalurivi + "Päivitä tiedot", korttiruudukko |
+| `apps/web/src/components/SaunaCard.tsx` | nimi (+Uusi) · osoite · aukiolo tänään · hinnat · lisätiedot · puhelin · verkkosivu |
+| `apps/web/src/App.tsx` | reitti `/saunat` |
+| `apps/web/src/components/Layout.tsx` | NAV: `Saunat` ennen Lähteiden tilaa + footer "Saunatiedot: saunahaku.fi" |
+| `apps/web/src/styles.css` | `.sauna-grid`, `.sauna-card*`, `.sauna-badge*` |
+
+**Tulkinta vaatimuksesta:** *Aukiolo tänään* = päivän jaksot Suomen ajassa
+(useampi jakso pilkulla, esim. `08.00–12.00, 16.00–22.00`); `Ei aukioloa tänään`,
+jos muita päiviä on, ja `Ei aukioloaikoja`, jos lähde ei anna yhtään (remontti).
+*Hinnat* = päivän jaksot deduplikoituna; jos tänään ei ole aukioloa, koko viikon
+hinnat, jotta hinta ei katoa. Puuttuvaa ei arvata (§20).
+
+### Testit ja verifiointi
+
+`apps/saunas/src/*.test.ts` (23: jäsennys, normalisointi, välimuisti, uusinta),
+`apps/web/src/lib/saunas.test.ts` (21, sis. aikavyöhykeregression) ja
+`infra/test/config.test.ts` (+5, sis. uusinnan aikabudjetti). Koko sarja
+**566 testiä** ✅, ESLint ✅, `npm run build:web` ✅, `cdk synth` ✅
+(reitti `GET /v1/saunas`, hälytys `tampere360-dev-errors-saunas`).
+Deploy vain deviin (`tampere360-dev-*`); prodia ei muutettu.
+
+### Rajaukset
+
+Ei karttakerrosta, ei tallennusta DynamoDB:hen eikä kaupunkikohtaista
+suodatinta. Lista järjestetään **tänään auki olevat ensin**, kummankin ryhmän
+sisällä nimen mukaan aakkosissa; aukiolo näytetään vihreällä ja "ei auki tänään"
+punaisella. Saunahaku.fi:n lisenssiä ei ole vahvistettu, joten footer kertoo
+vain lähteen nimen ("Saunatiedot: saunahaku.fi").
+
+## 34. Veden lämpötila Saunat-sivulle (1.10.2026)
+
+Saunat-sivun (`/saunat`) leadin alle lisättiin **Näsijärven pintaveden
+lämpötila**. Uusi API-reitti `GET /v1/water/temperature`, oma Lambda
+**5 minuutin välimuistilla**. Tarkempi kuvaus:
+[`docs/architecture/saunas.md`](../docs/architecture/saunas.md#veden-lämpötila).
+
+### Tietolähde: SYKE Hydrologiarajapinta
+
+| Asia | Arvo |
+|---|---|
+| Rajapinta | `GET https://rajapinnat.ymparisto.fi/api/Hydrologiarajapinta/1.2/odata` (OData 3.0) |
+| Suure | `LampoPintavesi` = "Pintaveden lämpötila" (T, °C) |
+| Asema | `Paikka_Id` **1694 — Näsijärvi, Kyrönlahti** (Ylöjärvi) |
+| Lisenssi | **CC BY 4.0** (Suomen ympäristökeskus); ei API-avainta |
+| Muoto | `Accept: application/json` — rajapinta hylkää `$format`-kyselyparametrin |
+
+**Miksi juuri tämä asema:** Tampereen kunnan alueella ei ole yhtään pintaveden
+lämpötilaa mittaavaa asemaa, joka raportoisi säännöllisesti — Näsijärvi on
+Tampereen järvi ja Kyrönlahti sen pohjoispää. Havainto on päivittäinen
+(30.9.2026: 11,9 °C). Kysely hakee uusimman rivin (`$orderby=Aika desc&$top=1`)
+ja paikkatiedot samalla kutsulla (`$expand=Paikka`).
+
+### Arkkitehtuuri: oma Lambda (kuten §27–33)
+
+```
+Selain → GET /v1/water/temperature → apps/water-temperature
+          → muistivälimuisti (5 min) → SYKE Hydrologiarajapinta (OData) → JSON
+```
+
+| Ratkaisu | Perustelu |
+|---|---|
+| Oma Lambda `apps/water-temperature`, varattu concurrency **2** | Ei DynamoDB:tä, ei SSM-avainta; concurrency erottaa reitin muiden kattosta |
+| **Välimuisti 5 min** (vaatimus) + stale-fallback **7 vrk** | Havainto on päivittäinen; N selainta → 1 SYKE-kutsu / 5 min / lämmin kontti |
+| **Ei CSP-muutosta** | Data tulee oman API:n kautta — OData jää palvelimelle |
+| **Ei** uusintayritystä | Sama malli kuin säässä (§32): yksi kutsu + 5 min välimuisti riittää |
+
+### Frontend
+
+| Osa | Muutos |
+|---|---|
+| `apps/web/src/api/water.ts` | tyypit + `fetchWaterTemperature()` + `WATER_TEMPERATURE_POLL_MS` (5 min) |
+| `apps/web/src/api/queries.ts` | `useWaterTemperature()` (pollaus 5 min, ei taustalla) |
+| `apps/web/src/lib/water.ts` | `formatWaterTemperature` (11,9 °C), `formatMeasurementDate` (30.9.2026) |
+| `apps/web/src/pages/SaunasPage.tsx` | `.sauna-water`-rivi leadin alla; jää pois, jos arvoa ei saada |
+| `apps/web/src/components/Layout.tsx` | footer: "Veden lämpötila: SYKE (CC BY 4.0)" |
+
+Havainnon päivä luetaan **merkkijonosta** eikä `new Date`illa, jotta
+aikavyöhykkeen tulkinta ei siirrä päivää yhdellä (§20).
+
+### Testit ja verifiointi
+
+`apps/water-temperature/src/*.test.ts` (14: URL, `parseDdmmss`, OData-jäsennys,
+välimuisti), `apps/web/src/lib/water.test.ts` (4) ja
+`infra/test/config.test.ts` (+5, sis. **5 min välimuistin** regressiosuoja).
+Koko sarja **592 testiä** ✅, ESLint ✅, `npm run build:web` ✅, `cdk synth` ✅
+(reitti `GET /v1/water/temperature`, hälytys
+`tampere360-dev-errors-water-temperature`). Deploy vain deviin
+(`tampere360-dev-*`); prodia ei muutettu.
+

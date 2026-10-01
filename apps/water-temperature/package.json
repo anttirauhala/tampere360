@@ -1,0 +1,14 @@
+{
+  "name": "@tampere360/water-temperature",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tampere360 — Näsijärven pintaveden lämpötila (SYKE Hydrologiarajapinta) API-reittiä /v1/water/temperature varten",
+  "main": "dist/handler.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@tampere360/observability": "0.1.0"
+  }
+}

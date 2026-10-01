@@ -11,6 +11,13 @@ import {
   GTFS_STOPS_TIMEOUT_MS,
   GTFS_STOPS_URL,
   QUERY_RESERVED_CONCURRENCY,
+  SAUNA_CACHE_MS,
+  SAUNA_LIST_URL,
+  SAUNA_RESERVED_CONCURRENCY,
+  SAUNA_RETRY_ATTEMPTS,
+  SAUNA_RETRY_BACKOFF_MS,
+  SAUNA_STALE_MAX_MS,
+  SAUNA_UPSTREAM_TIMEOUT_MS,
   STOP_CACHE_MS,
   STOP_DEPARTURE_LIMIT,
   STOP_PREVIEW_MINUTES,
@@ -35,6 +42,13 @@ import {
   VEHICLE_RESERVED_CONCURRENCY,
   VEHICLE_STALE_MAX_MS,
   VEHICLE_UPSTREAM_TIMEOUT_MS,
+  WATER_TEMPERATURE_CACHE_MS,
+  WATER_TEMPERATURE_PAIKKA_ID,
+  WATER_TEMPERATURE_RESERVED_CONCURRENCY,
+  WATER_TEMPERATURE_STALE_MAX_MS,
+  WATER_TEMPERATURE_STATION_NAME,
+  WATER_TEMPERATURE_UPSTREAM_TIMEOUT_MS,
+  WATER_TEMPERATURE_URL,
   WEATHER_CACHE_MS,
   WEATHER_OBSERVATION_HOURS,
   WEATHER_RESERVED_CONCURRENCY,
@@ -303,5 +317,71 @@ describe('sään kustannussuojat', () => {
   it('hakuväli kattaa useita havaintoja (viimeisin löytyy, vaikka tuore puuttuisi)', () => {
     expect(WEATHER_OBSERVATION_HOURS).toBeGreaterThanOrEqual(1);
     expect(WEATHER_OBSERVATION_HOURS).toBeLessThanOrEqual(12);
+  });
+});
+
+/**
+ * Saunojen kustannussuojat (§33): saunahaku.fi on julkinen rajapinta, mutta
+ * välimuisti on silti pakollinen — ilman sitä jokainen avattu Saunat-sivu
+ * aiheuttaisi oman upstream-kutsunsa. TTL on minuutteja (aukioloajat ja hinnat
+ * muuttuvat harvoin) ja varafallback selvästi sitä pidempi.
+ */
+describe('saunojen kustannussuojat', () => {
+  it('lähde on HTTPS-rajapinta (ei avainta)', () => {
+    expect(SAUNA_LIST_URL.startsWith('https://')).toBe(true);
+  });
+
+  it('saunalista on minuuttien välimuistissa', () => {
+    expect(SAUNA_CACHE_MS).toBeGreaterThanOrEqual(60_000);
+    expect(SAUNA_CACHE_MS).toBeLessThanOrEqual(3_600_000);
+  });
+
+  it('vanhaa listaa ei tarjota loputtomiin virhetilanteessa', () => {
+    expect(SAUNA_STALE_MAX_MS).toBeGreaterThan(SAUNA_CACHE_MS);
+    expect(SAUNA_STALE_MAX_MS).toBeLessThanOrEqual(30 * 86_400_000);
+  });
+
+  it('upstream-timeout ja uusinnat mahtuvat Lambdan timeoutiin (10 s)', () => {
+    expect(SAUNA_UPSTREAM_TIMEOUT_MS).toBeGreaterThan(0);
+    // 2 × timeout + tauko < Lambdan 10 s.
+    const budget = SAUNA_RETRY_ATTEMPTS * SAUNA_UPSTREAM_TIMEOUT_MS + SAUNA_RETRY_BACKOFF_MS;
+    expect(budget).toBeLessThan(10_000);
+  });
+
+  it('Lambdan varattu concurrency on pieni ja erillään muista reiteistä', () => {
+    expect(SAUNA_RESERVED_CONCURRENCY).toBeGreaterThan(0);
+    expect(SAUNA_RESERVED_CONCURRENCY).toBeLessThanOrEqual(3);
+  });
+});
+
+/**
+ * Veden lämpötilan kustannussuojat (§34): SYKE:n Hydrologiarajapinta on
+ * julkinen (CC BY 4.0), mutta **5 minuutin välimuisti on vaatimus** — ilman sitä
+ * jokainen avattu Saunat-sivu aiheuttaisi oman OData-kutsunsa.
+ */
+describe('veden lämpötilan kustannussuojat', () => {
+  it('lähde on HTTPS ja asemana Näsijärvi', () => {
+    expect(WATER_TEMPERATURE_URL.startsWith('https://')).toBe(true);
+    expect(WATER_TEMPERATURE_STATION_NAME).toContain('Näsijärvi');
+    expect(WATER_TEMPERATURE_PAIKKA_ID).toBeGreaterThan(0);
+  });
+
+  it('välimuisti on 5 minuuttia (vaatimus)', () => {
+    expect(WATER_TEMPERATURE_CACHE_MS).toBe(5 * 60_000);
+  });
+
+  it('vanhaa lukemaa tarjotaan selvästi TTL:ää pidempään virhetilanteessa', () => {
+    expect(WATER_TEMPERATURE_STALE_MAX_MS).toBeGreaterThan(WATER_TEMPERATURE_CACHE_MS);
+    expect(WATER_TEMPERATURE_STALE_MAX_MS).toBeLessThanOrEqual(30 * 86_400_000);
+  });
+
+  it('upstream-timeout mahtuu Lambdan timeoutiin (10 s)', () => {
+    expect(WATER_TEMPERATURE_UPSTREAM_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(WATER_TEMPERATURE_UPSTREAM_TIMEOUT_MS).toBeLessThan(10_000);
+  });
+
+  it('Lambdan varattu concurrency on pieni ja erillään muista reiteistä', () => {
+    expect(WATER_TEMPERATURE_RESERVED_CONCURRENCY).toBeGreaterThan(0);
+    expect(WATER_TEMPERATURE_RESERVED_CONCURRENCY).toBeLessThanOrEqual(3);
   });
 });

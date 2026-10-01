@@ -1589,3 +1589,154 @@ a {
   color: var(--text-muted);
   font-size: 12px;
 }
+
+/* --- Saunat (§33) --- */
+
+.sauna-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.sauna-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.sauna-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sauna-card__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sauna-card__address {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Päivän aukiolo ja hinnat omilla riveillään; dt/dd ilman oletusmarginaaleja. */
+.sauna-card__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.sauna-card__row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sauna-card__label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.sauna-card__value {
+  margin: 0;
+  font-size: 13px;
+}
+
+/*
+ * Aukiolo tänään: vihreä kun sauna on auki tänään, punainen kun ei.
+ * Sävy tulee `saunaTodayTone`-funktiosta, jotta väri ja teksti eivät voi
+ * eriytyä (sama logiikka kuin viiveen värissä §27.3).
+ */
+.sauna-card__value--open {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.sauna-card__value--closed {
+  color: var(--critical);
+  font-weight: 600;
+}
+
+.sauna-card__info {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sauna-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sauna-card__badges {
+  display: flex;
+  gap: 6px;
+}
+
+.sauna-card__link {
+  font-size: 12px;
+}
+
+.sauna-badge {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.sauna-badge--new {
+  border-color: var(--ok);
+  color: var(--ok);
+  font-weight: 700;
+}
+
+/* --- Saunat: veden lämpötila (§34) --- */
+
+/*
+ * Slimmi tietorivi leadin alla: "Veden lämpötila 11,9 °C · Näsijärvi,
+ * Kyrönlahti · mitattu 30.9.2026". Rivi jää pois, jos arvoa ei saada.
+ */
+.sauna-water {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin: 4px 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.sauna-water__label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sauna-water__value {
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.sauna-water__meta {
+  color: var(--text-muted);
+  font-size: 12px;
+}
