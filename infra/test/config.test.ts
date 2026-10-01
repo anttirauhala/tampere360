@@ -17,6 +17,19 @@ import {
   STOP_RESERVED_CONCURRENCY,
   STOP_STALE_MAX_MS,
   STOP_UPSTREAM_TIMEOUT_MS,
+  TMS_HISTORY_CACHE_MAX_ENTRIES,
+  TMS_HISTORY_CACHE_MS,
+  TMS_HISTORY_DAYS,
+  TMS_HISTORY_RETRY_ATTEMPTS,
+  TMS_HISTORY_RETRY_BACKOFF_MS,
+  TMS_HISTORY_STALE_MAX_MS,
+  TMS_HISTORY_TIMEOUT_MS,
+  TMS_METADATA_CACHE_MS,
+  TMS_METADATA_STALE_MAX_MS,
+  TMS_RESERVED_CONCURRENCY,
+  TMS_STATIONS_CACHE_MS,
+  TMS_STATIONS_STALE_MAX_MS,
+  TMS_UPSTREAM_TIMEOUT_MS,
   VEHICLE_CACHE_MS,
   VEHICLE_MAX_AGE_MINUTES,
   VEHICLE_RESERVED_CONCURRENCY,
@@ -181,5 +194,78 @@ describe('pysäkkien kustannussuojat', () => {
   it('GTFS-lähde on Tampereen GTFS-static-paketti ja salattu yhteys', () => {
     expect(GTFS_STOPS_URL.startsWith('https://')).toBe(true);
     expect(GTFS_STOPS_URL).toContain('gtfs_tampere');
+  });
+});
+
+/**
+ * Liikenteen mittausasemat (§30): kolme välimuistia samassa Lambdassa, koska
+ * data päivittyy kolmella eri nopeudella (reaaliaika ~1 min, metatiedot
+ * käytännössä harvoin, tilastot tunneittain). Nämä testit estävät sen, että
+ * reaaliaikainen TTL ja pitkä TTL sekoittuisivat keskenään — tai että
+ * kustannuskatto poistettaisiin. Ilman välimuistia jokainen avattu selain
+ * aiheuttaisi oman 3,4 Mt:n Digitraffic-vastauksen ja ~20 metatietopyyntöä.
+ */
+describe('mittausasemien kustannussuojat', () => {
+  it('reaaliaikasnapshot on minuutin välimuistissa', () => {
+    expect(TMS_STATIONS_CACHE_MS).toBeGreaterThanOrEqual(30_000);
+    expect(TMS_STATIONS_CACHE_MS).toBeLessThanOrEqual(180_000);
+  });
+
+  it('vanhaa snapshotia ei tarjota loputtomiin virhetilanteessa', () => {
+    expect(TMS_STATIONS_STALE_MAX_MS).toBeGreaterThan(TMS_STATIONS_CACHE_MS);
+    expect(TMS_STATIONS_STALE_MAX_MS).toBeLessThanOrEqual(900_000);
+  });
+
+  it('metatiedoilla on selvästi pidempi TTL kuin reaaliaikadatalle', () => {
+    expect(TMS_METADATA_CACHE_MS).toBeGreaterThanOrEqual(3_600_000);
+    expect(TMS_METADATA_CACHE_MS).toBeGreaterThan(TMS_STATIONS_CACHE_MS * 100);
+    expect(TMS_METADATA_STALE_MAX_MS).toBeGreaterThan(TMS_METADATA_CACHE_MS);
+  });
+
+  it('historia on tunteja välimuistissa ja selvästi eri TTL:llä', () => {
+    expect(TMS_HISTORY_CACHE_MS).toBeGreaterThanOrEqual(3_600_000);
+    expect(TMS_HISTORY_CACHE_MS).toBeGreaterThan(TMS_STATIONS_CACHE_MS * 10);
+    expect(TMS_HISTORY_STALE_MAX_MS).toBeGreaterThan(TMS_HISTORY_CACHE_MS);
+    // Historia-avaimia kertyy asema × tyyppi × jakso → muisti on rajattava.
+    expect(TMS_HISTORY_CACHE_MAX_ENTRIES).toBeGreaterThanOrEqual(50);
+    expect(TMS_HISTORY_CACHE_MAX_ENTRIES).toBeLessThanOrEqual(1000);
+  });
+
+  it('upstream-timeoutit ehtivät valmistua ennen Lambdan timeoutia (20 s)', () => {
+    expect(TMS_UPSTREAM_TIMEOUT_MS).toBeLessThan(20_000);
+    expect(TMS_HISTORY_TIMEOUT_MS).toBeLessThan(20_000);
+    expect(TMS_UPSTREAM_TIMEOUT_MS).toBeLessThan(TMS_HISTORY_TIMEOUT_MS);
+  });
+
+  it('uusintayrityksen kokonaisaika mahtuu Lambdan timeoutiin', () => {
+    // Pahin tapaus: attempts × timeout + tauot < Lambdan 20 s. Muuten Lambda
+    // ehtisi kuolla kesken uusinnan ja käyttäjä näkisi API Gatewayn 503:n.
+    const worstCaseMs =
+      TMS_HISTORY_RETRY_ATTEMPTS * TMS_HISTORY_TIMEOUT_MS +
+      (TMS_HISTORY_RETRY_ATTEMPTS - 1) * TMS_HISTORY_RETRY_BACKOFF_MS;
+    expect(worstCaseMs).toBeLessThan(20_000);
+    expect(TMS_HISTORY_RETRY_ATTEMPTS).toBeGreaterThanOrEqual(2);
+    expect(TMS_HISTORY_RETRY_ATTEMPTS).toBeLessThanOrEqual(3);
+    expect(TMS_HISTORY_RETRY_BACKOFF_MS).toBeGreaterThanOrEqual(100);
+    expect(TMS_HISTORY_RETRY_BACKOFF_MS).toBeLessThanOrEqual(2_000);
+  });
+
+  it('historia-timeout on mitatun hitaimman vastauksen (7,6 s) yläpuolella', () => {
+    // 27.9.2026: sama kutsu 45 ms … 7 597 ms. Tämän alle jäävä timeout tuottaisi
+    // käyttäjälle näkyviä virheitä satunnaisesti (siksi myös uusintayritys).
+    expect(TMS_HISTORY_TIMEOUT_MS).toBeGreaterThan(7_600);
+  });
+
+  it('Lambdan varattu concurrency on pieni ja erillään muista reiteistä', () => {
+    // 3 eikä 2: sivun ensimmäinen lataus tekee enimmillään neljä rinnakkaista
+    // kutsua, ja kahden kontin katto tuotti käyttäjälle 503:n kylmänä (ks.
+    // docs/architecture/tms-stations.md). Katto pysyy silti pienenä.
+    expect(TMS_RESERVED_CONCURRENCY).toBeGreaterThan(0);
+    expect(TMS_RESERVED_CONCURRENCY).toBeLessThanOrEqual(3);
+  });
+
+  it('vuorokausisarjan oletusjakso on järkevä (1–31 päivää)', () => {
+    expect(TMS_HISTORY_DAYS).toBeGreaterThanOrEqual(7);
+    expect(TMS_HISTORY_DAYS).toBeLessThanOrEqual(31);
   });
 });

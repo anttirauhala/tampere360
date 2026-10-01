@@ -158,6 +158,8 @@ export class DataStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'RawBucketName', { value: this.rawBucket.bucketName });
     new cdk.CfnOutput(this, 'SituationsTableName', { value: this.situationsTable.tableName });
     new cdk.CfnOutput(this, 'SourceEventsTableName', { value: this.sourceEventsTable.tableName });
-    new cdk.CfnOutput(this, 'IngestionStateTableName', { value: this.ingestionStateTable.tableName });
+    new cdk.CfnOutput(this, 'IngestionStateTableName', {
+      value: this.ingestionStateTable.tableName,
+    });
   }
 }

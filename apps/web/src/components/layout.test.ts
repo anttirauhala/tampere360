@@ -3,23 +3,22 @@ import { describe, expect, it } from 'vitest';
 import { NAV } from './Layout';
 
 /**
- * Päänavigaation regressiosuoja (§29).
+ * Päänavigaation regressiosuoja.
  *
- * Järjestys ja nimet muutettiin käyttäjän pyynnöstä 27.9.2026: "Nysse kartalla"
- * → "Nysse", "Liikennekamerat" → "Kamerat", ja "Joukkoliikenne
- * poikkeustilanteet" -välilehti poistettiin (sisältö on Nysse-välilehden
- * sivupaneelissa). Testi varmistaa, ettei järjestys tai nimet muutu vahingossa.
+ * Järjestys ja nimet ovat muuttuneet käyttäjän pyynnöstä useasti:
+ * §29 lyhensi nimet ja poisti "Joukkoliikenne poikkeustilanteet" -välilehden
+ * (sisältö on Nysse-välilehden sivupaneelissa), commit 808d50e tarkensi nimiä
+ * ja §30 lisäsi Liikennemäärät-välilehden. Testi varmistaa, ettei järjestys,
+ * nimet tai reitit muutu vahingossa.
  */
 describe('NAV', () => {
   it('on pyydetyssä järjestyksessä ja nimillä', () => {
     expect(NAV.map((item) => item.label)).toEqual([
-      'Nyt',
-      'Kartta',
-      'Nysse',
+      'Etusivu',
+      'Tapahtumat kartalla',
+      'Nysse kartalla',
       'Kamerat',
-      'Poliisi',
-      'Liikenne',
-      'Säävaroitukset',
+      'Liikennemäärät',
       'Lähteiden tila',
     ]);
   });
@@ -29,9 +28,10 @@ describe('NAV', () => {
     expect(NAV.some((item) => /poikkeustilanteet/i.test(item.label))).toBe(false);
   });
 
-  it('osoittaa Nysse- ja Kamerat-välilehdet olemassa oleviin reitteihin', () => {
-    expect(NAV.find((item) => item.label === 'Nysse')?.to).toBe('/nysse-kartta');
+  it('osoittaa välilehdet olemassa oleviin reitteihin', () => {
+    expect(NAV.find((item) => item.label === 'Nysse kartalla')?.to).toBe('/nysse-kartta');
     expect(NAV.find((item) => item.label === 'Kamerat')?.to).toBe('/kamerat');
+    expect(NAV.find((item) => item.label === 'Liikennemäärät')?.to).toBe('/liikennemaarat');
   });
 
   it('merkitsee vain etusivun tarkaksi osumaksi (`end`)', () => {

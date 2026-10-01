@@ -1,13 +1,19 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 /**
- * Päänavigaation järjestys ja nimet (§29).
+ * Päänavigaation järjestys ja nimet.
+ *
+ * Historia: §29 lyhensi nimet ja siirsi joukkoliikenteen poikkeustilanteet
+ * Nysse-välilehden sivupaneeliin; commit 808d50e tarkensi nimiä edelleen
+ * ("Etusivu", "Tapahtumat kartalla", "Nysse kartalla"). §30 lisäsi
+ * Liikennemäärät-välilehden (mittausasemat) Kameroiden jälkeen.
  */
 export const NAV = [
   { to: '/', label: 'Etusivu', end: true },
   { to: '/kartta', label: 'Tapahtumat kartalla', end: false },
-  { to: '/nysse-kartta', label: 'Nysse', end: false },
+  { to: '/nysse-kartta', label: 'Nysse kartalla', end: false },
   { to: '/kamerat', label: 'Kamerat', end: false },
+  { to: '/liikennemaarat', label: 'Liikennemäärät', end: false },
   { to: '/lahteet', label: 'Lähteiden tila', end: false },
 ];
 
@@ -51,9 +57,10 @@ export function Layout() {
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
             OpenStreetMap contributors
           </a>
-          . Säävaroitukset: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet ja kelikamerat:
-          Fintraffic / Digitraffic. Poliisitiedotteet: Sisä-Suomen poliisilaitos. Joukkoliikenteen
-          häiriötiedotteet ja ajoneuvosijainnit: Nysse / Waltti (CC BY 4.0).
+          . Säävaroitukset: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet, kelikamerat ja
+          liikennemittaukset: Fintraffic / Digitraffic. Poliisitiedotteet: Sisä-Suomen
+          poliisilaitos. Joukkoliikenteen häiriötiedotteet ja ajoneuvosijainnit: Nysse / Waltti (CC
+          BY 4.0).
         </p>
         {/*
           Vakavuusluokittelu on oma arviomme (otsikon ja lähdetietojen

@@ -11,6 +11,12 @@ import {
   fetchStops,
 } from './stops';
 import { VEHICLE_POLL_MS, fetchVehicles } from './vehicles';
+import {
+  TMS_HISTORY_STALE_TIME_MS,
+  TMS_POLL_MS,
+  fetchTmsHistoryBundle,
+  fetchTmsStations,
+} from './tms';
 import type {
   Category,
   MapResponse,
@@ -154,5 +160,49 @@ export function useStopDepartures(stopId: string | null) {
     refetchInterval: STOP_DEPARTURES_POLL_MS,
     refetchIntervalInBackground: false,
     staleTime: STOP_DEPARTURES_POLL_MS,
+  });
+}
+
+/**
+ * Liikenteen mittausasemat (§30).
+ *
+ * Pollaus 60 s: lähde päivittyy minuutin välein ja Lambdan välimuisti on 60 s,
+ * joten tiuhempi pollaus ei toisi tuoreempaa tietoa mutta kertautuisi jokaisen
+ * avoimen selaimen myötä. Taustavälilehti ei pollaa.
+ */
+export function useTmsStations() {
+  return useQuery({
+    queryKey: ['tms-stations'],
+    queryFn: fetchTmsStations,
+    refetchInterval: TMS_POLL_MS,
+    refetchIntervalInBackground: false,
+    staleTime: TMS_POLL_MS,
+  });
+}
+
+/**
+ * Yhden mittausaseman historia: vuorokausivolyymit, tuntijakauma JA
+ * kuukausikeskinopeudet **yhdellä pyynnöllä** (`type=all`).
+ *
+ * Yksi pyyntö kolmen sijaan on tarkoituksellinen: sivun avaus tekisi muuten
+ * neljä rinnakkaista kutsua (1 tilannekuva + 3 historiaa), ja kylmällä
+ * Lambdalla kolme niistä ehti throttlautua (käyttäjä näki 503:n, havaittu
+ * 27.9.2026). Lambdassa rinnakkaisuus on sisäistä, joten se ei kuluta
+ * varattua concurrencya.
+ *
+ * Haetaan vain valitulle asemalle, ja koska tilastot muuttuvat tunneittain,
+ * `staleTime` on 30 min eikä taustapollausta tehdä. Lambda pitää oman 6 tunnin
+ * välimuistinsa, joten aseman vaihtelu ei aiheuta uusia Digitraffic-kutsuja.
+ */
+export function useTmsHistoryBundle(tmsNumber: number | null) {
+  return useQuery({
+    queryKey: ['tms-history', tmsNumber],
+    queryFn: () => {
+      if (tmsNumber === null) throw new Error('Asemaa ei ole valittu');
+      return fetchTmsHistoryBundle(tmsNumber);
+    },
+    enabled: tmsNumber !== null,
+    staleTime: TMS_HISTORY_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
   });
 }

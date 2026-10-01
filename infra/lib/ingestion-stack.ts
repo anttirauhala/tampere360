@@ -185,18 +185,23 @@ export class IngestionStack extends cdk.Stack {
     });
     // Lähdekohtaiset ympäristömuuttujat
     if (source.id === 'nysse') {
-      fn.addEnvironment('NYSSE_BASE_URL', 'https://data.waltti.fi/tampere/api/gtfsrealtime/v1.0/feed/servicealerts');
+      fn.addEnvironment(
+        'NYSSE_BASE_URL',
+        'https://data.waltti.fi/tampere/api/gtfsrealtime/v1.0/feed/servicealerts',
+      );
       // Aseta NYSSE_API_KEY joko SSM-parametrillä tai ympäristömuuttujalla
       // /tampere360/{env}/sources/nysse/api-key (String tai SecureString)
-if (source.id === 'nysse') {
-      fn.addToRolePolicy(new iam.PolicyStatement({
-        actions: ['ssm:GetParameter'],
-        resources: [
-          `arn:aws:ssm:${this.region}:${this.account}:parameter/tampere360/${env}/sources/nysse/api-key`,
-        ],
-      }));
-      fn.addEnvironment('SSM_API_KEY_PATH', `/tampere360/${env}/sources/${source.id}/api-key`);
-    }
+      if (source.id === 'nysse') {
+        fn.addToRolePolicy(
+          new iam.PolicyStatement({
+            actions: ['ssm:GetParameter'],
+            resources: [
+              `arn:aws:ssm:${this.region}:${this.account}:parameter/tampere360/${env}/sources/nysse/api-key`,
+            ],
+          }),
+        );
+        fn.addEnvironment('SSM_API_KEY_PATH', `/tampere360/${env}/sources/${source.id}/api-key`);
+      }
     }
 
     // Oikeudet: raakadata S3:een, viestit jonoon, checkpoint-taulu, SSM-konffit.
@@ -209,7 +214,7 @@ if (source.id === 'nysse') {
     const baseUrlBySource: Record<string, string> = {
       'fmi-cap': 'https://alerts.fmi.fi/cap/feed/rss_fi-FI.rss',
       'tampere-traffic': 'https://traffic-incidents.tampere.fi/api/v1',
-      'police': 'https://poliisi.fi/sisa-suomen-poliisilaitos/-/asset_publisher/ZtAEeHB39Lxr/rss',
+      police: 'https://poliisi.fi/sisa-suomen-poliisilaitos/-/asset_publisher/ZtAEeHB39Lxr/rss',
     };
     const enabledParam = new ssm.StringParameter(this, `${name}EnabledParam`, {
       parameterName: `${paramPrefix}/enabled`,

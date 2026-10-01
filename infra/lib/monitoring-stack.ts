@@ -180,12 +180,8 @@ export class MonitoringStack extends cdk.Stack {
       }),
       new cloudwatch.GraphWidget({
         title: 'Ingestion-jono (pituus + vanhin viesti)',
-        left: [
-          ingestionQueue.metricApproximateNumberOfMessagesVisible({ label: 'viestejä' }),
-        ],
-        right: [
-          ingestionQueue.metricApproximateAgeOfOldestMessage({ label: 'vanhin (s)' }),
-        ],
+        left: [ingestionQueue.metricApproximateNumberOfMessagesVisible({ label: 'viestejä' })],
+        right: [ingestionQueue.metricApproximateAgeOfOldestMessage({ label: 'vanhin (s)' })],
         width: 12,
       }),
     );

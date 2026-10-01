@@ -7,6 +7,7 @@ import { CamerasPage } from './pages/CamerasPage';
 import { CategoryPage } from './pages/CategoryPage';
 import { NowPage } from './pages/NowPage';
 import { SourcesPage } from './pages/SourcesPage';
+import { TmsPage } from './pages/TmsPage';
 
 // MapLibre GL JS on raskas (~1,3 MB) → ladataan vain kun karttasivu avataan.
 const MapPage = lazy(() =>
@@ -61,6 +62,7 @@ export function App() {
               }
             />
             <Route path="kamerat" element={<CamerasPage />} />
+            <Route path="liikennemaarat" element={<TmsPage />} />
             <Route path="saa" element={<CategoryPage category="WEATHER" />} />
             <Route path="poliisi" element={<CategoryPage category="POLICE" />} />
             <Route path="joukkoliikenne" element={<CategoryPage category="PUBLIC_TRANSPORT" />} />

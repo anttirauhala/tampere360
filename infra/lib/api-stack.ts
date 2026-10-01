@@ -45,6 +45,19 @@ import {
   STOP_RESERVED_CONCURRENCY,
   STOP_STALE_MAX_MS,
   STOP_UPSTREAM_TIMEOUT_MS,
+  TMS_HISTORY_CACHE_MAX_ENTRIES,
+  TMS_HISTORY_CACHE_MS,
+  TMS_HISTORY_DAYS,
+  TMS_HISTORY_RETRY_ATTEMPTS,
+  TMS_HISTORY_RETRY_BACKOFF_MS,
+  TMS_HISTORY_STALE_MAX_MS,
+  TMS_HISTORY_TIMEOUT_MS,
+  TMS_METADATA_CACHE_MS,
+  TMS_METADATA_STALE_MAX_MS,
+  TMS_RESERVED_CONCURRENCY,
+  TMS_STATIONS_CACHE_MS,
+  TMS_STATIONS_STALE_MAX_MS,
+  TMS_UPSTREAM_TIMEOUT_MS,
   VEHICLE_CACHE_MS,
   VEHICLE_MAX_AGE_MINUTES,
   VEHICLE_RESERVED_CONCURRENCY,
@@ -86,6 +99,14 @@ const VEHICLE_ROUTES = ['/v1/vehicles'];
  */
 const STOP_ROUTES = ['/v1/stops', '/v1/stops/{stopId}/departures'];
 
+/**
+ * Mittausasemareitit (§30): reaaliaikanäkymä ja historia. Sama Lambda
+ * palvelee molempia, koska niillä on yhteinen tietolähde (Digitraffic TMS) ja
+ * yhteinen konfiguraatio — välimuistit ovat silti erilliset ja eri TTL:llä
+ * (ks. apps/tms-stations/src/handler.ts).
+ */
+const TMS_ROUTES = ['/v1/tms/stations', '/v1/tms/stations/{tmsNumber}/history'];
+
 export class ApiStack extends cdk.Stack {
   /** HTTP API (url-ominaisuus) frontendin ja testausta varten. */
   public readonly httpApi: apigwv2.HttpApi;
@@ -97,6 +118,8 @@ export class ApiStack extends cdk.Stack {
   public readonly vehiclesFunction: lambdaNodejs.NodejsFunction;
   /** Pysäkit ja pysäkkimonitori -Lambda valvontaa varten (§28). */
   public readonly stopsFunction: lambdaNodejs.NodejsFunction;
+  /** Liikenteen mittausasemat -Lambda valvontaa varten (§30). */
+  public readonly tmsFunction: lambdaNodejs.NodejsFunction;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -210,6 +233,46 @@ export class ApiStack extends cdk.Stack {
       this.stopsFunction,
     );
 
+    // --- Liikenteen mittausasemat (§30) -----------------------------------------
+    // Hakee Digitrafficilta Tampereen seudun asemien reaaliaikaiset nopeudet ja
+    // liikennemäärät (yksi kutsu kaikille asemille) sekä tilastohistoriaa
+    // (CSV). Ei DynamoDB-käyttöä, ei API-avainta: Digitraffic on avoin
+    // (CC BY 4.0) ja tunnistaudutaan vain `Digitraffic-User`-otsikolla.
+    this.tmsFunction = new lambdaNodejs.NodejsFunction(this, 'TmsStationsFunction', {
+      entry: path.join(__dirname, '../../apps/tms-stations/src/handler.ts'),
+      handler: 'handler',
+      functionName: resourceName(appContext.envName, 'tms-stations'),
+      description: 'Tampere360: liikenteen mittausasemat (Digitraffic TMS)',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: 256,
+      // Kylmäkäynnistys hakee metatiedot (~20 asemaa) ja reaaliaikasnapshotin
+      // rinnakkain; historia-CSV ehtii hyvin mukaan 20 sekunnissa.
+      timeout: cdk.Duration.seconds(20),
+      // Kustannuskatto: ks. config.ts TMS_RESERVED_CONCURRENCY.
+      reservedConcurrentExecutions: TMS_RESERVED_CONCURRENCY,
+      environment: {
+        ENVIRONMENT: appContext.envName,
+        TMS_STATIONS_CACHE_MS: String(TMS_STATIONS_CACHE_MS),
+        TMS_STATIONS_STALE_MAX_MS: String(TMS_STATIONS_STALE_MAX_MS),
+        TMS_METADATA_CACHE_MS: String(TMS_METADATA_CACHE_MS),
+        TMS_METADATA_STALE_MAX_MS: String(TMS_METADATA_STALE_MAX_MS),
+        TMS_HISTORY_CACHE_MS: String(TMS_HISTORY_CACHE_MS),
+        TMS_HISTORY_STALE_MAX_MS: String(TMS_HISTORY_STALE_MAX_MS),
+        TMS_HISTORY_CACHE_MAX_ENTRIES: String(TMS_HISTORY_CACHE_MAX_ENTRIES),
+        TMS_UPSTREAM_TIMEOUT_MS: String(TMS_UPSTREAM_TIMEOUT_MS),
+        TMS_HISTORY_TIMEOUT_MS: String(TMS_HISTORY_TIMEOUT_MS),
+        TMS_HISTORY_RETRY_ATTEMPTS: String(TMS_HISTORY_RETRY_ATTEMPTS),
+        TMS_HISTORY_RETRY_BACKOFF_MS: String(TMS_HISTORY_RETRY_BACKOFF_MS),
+        TMS_HISTORY_DAYS: String(TMS_HISTORY_DAYS),
+        LOG_LEVEL: 'INFO',
+      },
+    });
+
+    const tmsIntegration = new apigwv2Integrations.HttpLambdaIntegration(
+      'TmsStationsIntegration',
+      this.tmsFunction,
+    );
+
     const integration = new apigwv2Integrations.HttpLambdaIntegration(
       'QueryIntegration',
       this.queryFunction,
@@ -260,6 +323,14 @@ export class ApiStack extends cdk.Stack {
         path: route,
         methods: [apigwv2.HttpMethod.GET],
         integration: stopsIntegration,
+      });
+    }
+
+    for (const route of TMS_ROUTES) {
+      this.httpApi.addRoutes({
+        path: route,
+        methods: [apigwv2.HttpMethod.GET],
+        integration: tmsIntegration,
       });
     }
 

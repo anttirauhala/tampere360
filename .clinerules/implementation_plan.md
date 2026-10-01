@@ -1615,3 +1615,131 @@ Prettier ✅ (omat tiedostot). Deploy vain deviin
 | `/kamerat` | otsikko `Kamerat`, 24 kamerakorttia ✅ |
 | Konsoli / CSP | 0 konsolivirhettä, 0 CSP-rikkomusta ✅ |
 
+## 30. Liikennemäärät: mittausasemat (Digitraffic TMS) (27.9.2026)
+
+Uusi välilehti `/liikennemaarat` näyttää Tampereen seudun **liikenteen
+mittausasemien** (TMS/LAM) reaaliaikaisen nopeuden ja liikennemäärän sekä
+asemakohtaisen historian (14 vrk volyymit, tuntijakauma, kuukauden
+keskinopeudet). Uudet API-reitit `GET /v1/tms/stations` ja
+`GET /v1/tms/stations/{tmsNumber}/history`. Tarkempi kuvaus:
+[`docs/architecture/tms-stations.md`](../docs/architecture/tms-stations.md).
+
+### Tausta: selvitettiin kolmannen osapuolen API, ei otettu käyttöön
+
+Käyttäjän pyynnöstä tutkittiin `anttirauhala/traffic-stations`
+(Digitraffic LAM -kerääjä: CDK + SQS + DynamoDB + API Gateway + React).
+Se todettiin toimivaksi mutta ei sopivaksi tuotantoriippuvuudeksi:
+
+| Havainto 27.9.2026 | Seuraus |
+|---|---|
+| `/api/traffic/station/{id}/daily` palauttaa aina 0 riviä (GSI:n partition key on koko ISO-aikaleima, kysely käyttää pelkkää päivää) | rajapinta on osin rikki |
+| `hourly-average` toimii, mutta on heidän laskelmansa kuukauden jaksolta | sama tieto + enemmän saadaan virallisesta lähteestä |
+| kerääjä ajaa kerran tunnissa, tallettaa vain `timeWindowStart`-arvoiset anturit | data on osajoukko |
+| ei API-avainta eikä usage plania CDK-stackissa | ei tunnettua kiintiötä eikä SLA:ta |
+| sivun teksti *"Kaikki oikeudet pidätetään"* | ristiriita oman CC BY -attribuutiomallin kanssa |
+
+**Ratkaisu:** sama data suoraan Digitrafficilta (alkuperäinen lähde, CC BY 4.0).
+
+### Tietolähteet ja kytkentä
+
+| Rajapinta | Käyttö |
+|---|---|
+| `/api/tms/v1/stations` | 518 aseman metatiedot → suodatus Tampereen seutuun (lat 61,3–61,7 / lon 23,5–24,0 → 21 asemaa, joista **19 keruussa**) |
+| `/api/tms/v1/stations/{id}` | kunnan nimi, `names.fi`, suuntien määränpäät ja **`freeFlowSpeed1/2`** (vapaan ajon nopeus) |
+| `/api/tms/v1/stations/data` | **kaikkien asemien** reaaliaika yhdellä kutsulla (144 kt gzip / 3,4 Mt purettuna, 0,25 s) |
+| `/api/tms/v1/history` | historia-CSV: `api=liikennemaara\|keskinopeus`, `tyyppi=h\|vrk\|kk`, `piste = tmsNumber` |
+
+**Kytkentä, joka oli helppo erehtyä:** historiassa `piste` on aseman
+**`tmsNumber`** (438), ei TMS-rajapintojen `id` (23438). Verifioitu 20/21
+asemalla nimen perusteella.
+
+**Aito esimerkkidata** (asema 438, 27.9.2026): vuorokausivolyymit
+13.–26.9. välillä 36 768 → 39 904 ajoneuvoa; tuntijakauman vilkkain tunti 14
+(3 527 ajoneuvoa); keskinopeudet suunnittain Lahti 65,1 km/h (rajoitus 70/70)
+ja Rauma 68,0 km/h (60/60).
+
+### Sujuvuusarvio on oma luokittelu
+
+```
+suhde = nopeus / vapaa ajon nopeus
+  ≥ 0,75 → SUJUVAA · ≥ 0,50 → HIDASTUNUT · < 0,50 → RUUHKAUTUNUT
+```
+
+Kolme rajausta: (1) alle 60 kpl/h → `TUNTEMATON`, koska yöllinen yksittäinen
+auto ei ole ruuhka; (2) puuttuva arvo on `TUNTEMATON`, ei nolla; (3) luokittelu
+kerrotaan käyttäjälle omana arvionamme sekä merkissä että sivun alaviitteessä.
+
+### Toteutuksen aikana havaitut ja korjatut viat
+
+1. **Hidas lähde aikakatkaisi Lambdan:** sama historia-kutsu mitattiin 45 ms …
+   **7 597 ms** (lähde muodostaa CSV:n pyynnössä). 10 s timeout petti ja
+   käyttäjä näki 503:n (`TimeoutError` lokissa, `loadSpeed`). Korjaus:
+   yrityskohtainen timeout **8 s** + **yksi uusintayritys** 400 ms tauolla
+   (`apps/tms-stations/src/retry.ts`, sama malli kuin Waltti-uusinnassa §28).
+2. **Yksi hidas osa kaatoi koko historian:** `Promise.all` → `allSettled`,
+   epäonnistunut osa tyhjäksi ja `partial: true` → käyttäjä näkee kaksi muuta
+   kuvaajaa ja huomautuksen.
+3. **Kylmän Lambdan throttle näkyi käyttäjälle 503:na:** sivun avaus teki
+   **neljä** rinnakkaista kutsua (1 tilannekuva + 3 historiaa) ja varattu
+   concurrency oli 2 → API Gateway vastasi `{"message":"Service Unavailable"}`.
+   Korjaus: selain tekee **yhden** historianhaun (`type=all`, rinnakkaisuus
+   Lambdan sisällä) ja `TMS_RESERVED_CONCURRENCY` nostettiin **3**:een.
+   Diagnoosimenetelmä: APIGW-muotoinen runko + 0,07 s vasteaika + lokissa
+   onnistunut invokaatio ilman virheriviä = throttlaus, ei sovellusvirhe.
+4. **Navigaatiotesti oli jäänyt jälkeen:** `layout.test.ts` odotti §29:n
+   kahdeksaa välilehteä, mutta commit 808d50e oli lyhentänyt nimen
+   ("Nysse kartalla") — 2 testiä punaisella ennen tätä työtä. Korjattu samalla
+   ja lisätty uusi välilehti.
+
+### Diagnostiikka, joka ratkaisi vian
+
+Vika näytti ensin Lambdan verkko-ongelmalta, koska sama kutsu `curl`illa kesti
+0,3 s. Eristävä mittaus tehtiin itsenäisellä Node-skriptillä, joka toisti
+täsmälleen Lambdan pyynnöt (`/tmp/hist-node.mjs`):
+
+| Ajo | Tulos |
+|---|---|
+| yksittäin, peräkkäin | `vrk` + `accept: text/csv` **7 597 ms**, `vrk` + `accept: application/json` 93 ms, `kk` 1 248 ms, `h` 1 017 ms |
+| kolme rinnakkain | 45/77/94 ms (yhteensä 98 ms) |
+| kolme rinnakkain ilman `accept`-otsikkoa | 45/62/64 ms (yhteensä 66 ms) |
+
+Johtopäätös: **viive vaihtelee lähteellä**, ei meidän koodissamme, eikä
+`accept`-otsikko tai rinnakkaisuus selitä sitä — siksi korjaus on uusintayritys
+eikä esimerkiksi otsikon poisto. Vastaava varmistus Lambdan lokista:
+`TimeoutError … at async loadSpeed … at async Promise.all (index 2)`, kun
+`vrk` ja `h` olivat jo onnistuneet.
+
+
+### Frontend
+
+`/liikennemaarat`: 19 asemakorttia (otsikko `names.fi`, tienumero, kunta,
+mittauksen ikä, molemmat suunnat, nopeus/vapaa nopeus/liikennemäärä,
+sujuvuusmerkki) + valitun aseman historia (palkit ja keskinopeustaulukko).
+Reaaliaika pollataan 60 s; historia haetaan vain valitulle asemalle
+(`staleTime` 30 min). Kaikki muotoilu on `lib/tms.ts`:ssä (puuttuva arvo `—`,
+palkit eivät koskaan keksi arvoa). **CSP ei muutu** — data tulee oman API:n
+kautta.
+
+### Testit ja verifiointi
+
+| Kohde | Tulos |
+|---|---|
+| `apps/tms-stations/src/*.test.ts` | 88 (CSV-jäsennys, anturivalinta, sujuvuus, rajaus, metatiedot, parametrit, välimuisti, uusinta) |
+| `apps/web/src/lib/tms.test.ts` | 17 |
+| `infra/test/config.test.ts` | 9 uutta (TTL:ien suhteet, concurrency, timeoutit, uusinnan aikabudjetti) |
+| Koko sarja | **452 testiä** ✅, ESLint ✅, Prettier ✅, `npm run build:web` ✅ |
+| API (dev) | `/v1/tms/stations` → 19 asemaa, 0 ruuhkautunutta; `?type=all` → `partial: false`, 14 vrk + 24 h + 2 suuntaa (5,8 s kylmänä, 0,16 s lämpimänä); virheelliset parametrit → 400 (`INVALID_TYPE`, `INVALID_TMS_NUMBER`, `INVALID_DAYS`) |
+| Selain (headless Chrome + CDP, 1440×900) | navigaatio sisältää `Liikennemäärät`, otsikko ja aktiivinen välilehti täsmäävät, **19 korttia** (35 × Sujuvaa, 3 × Ei tietoa suunnittain), työkalurivi `19 asemaa · 0 ruuhkautunutta · 1 ilman arviota · päivitetty … · päivittyy 60 s välein` ✅ |
+| Historia selaimessa | kortin napsautus avaa paneelin: **3 kuvaajaa** (Vuorokausivolyymit 14 palkkia, Tuntijakauma 24 palkkia, Keskinopeudet suunnittain), yhteensä 38 palkkia + yhteenvedot (`Keskimäärin 17 103 ajoneuvoa vuorokaudessa · 14 päivää`) ja 2 nopeusriviä (Lahti 89,6 km/h / Tampere 86 km/h, rajoitus 100/100) ✅; toisen aseman historia avautuu samoin ✅; sulkeminen ✅; **0 konsolivirhettä, 0 CSP-rikkomusta** ✅ |
+
+Deploy: `tampere360-dev-api`, `tampere360-dev-frontend` ja
+`tampere360-dev-monitoring` (hälytys `errors-tms-stations`), yhteensä 8 stackia
+ilman muutoksia muihin kuin edellä mainittuihin. **Prodia ei muutettu tässä
+vaiheessa.**
+
+### Rajaukset
+
+Ei karttakerrosta (omat muutoksensa §27/§28 tapaan), ei tallennusta
+DynamoDB:hen (ei omaa aikasarjaa), vain keruussa olevat asemat, kaksi suuntaa
+(kaistakohtaista dataa ei näytetä), ei liikennevalo- eikä kaupungin omaa dataa.
+

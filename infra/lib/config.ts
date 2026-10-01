@@ -125,7 +125,8 @@ export const SOURCE_DEFINITIONS: SourceDefinition[] = [
   {
     id: 'events',
     system: 'VISIT_TAMPERE',
-    description: 'Visit Tampere / Eventz -tapahtumakalenteri (API /api/v1/event palauttaa 404 — selvitys kesken)',
+    description:
+      'Visit Tampere / Eventz -tapahtumakalenteri (API /api/v1/event palauttaa 404 — selvitys kesken)',
     scheduleRateMinutes: 30,
     // Disabloitu: visittampere.fi/api/v1/event palauttaa WordPress-404:n (18.9.2026).
     // Selvitä korvaava rajapinta (Eventz.today / kaupungin kalenteri) ennen käyttöönottoa.
@@ -234,6 +235,64 @@ export const GTFS_STOPS_TIMEOUT_MS = 15_000;
 export const GTFS_STOPS_URL =
   'https://data.itsfactory.fi/journeys/files/gtfs/latest/gtfs_tampere.zip';
 
+/**
+ * Liikenteen mittausasemat (`/v1/tms/stations`, `/v1/tms/stations/{id}/history`,
+ * arkkitehtuuri §30).
+ *
+ * Kolme välimuistia samassa Lambdassa, koska data päivittyy kolmella eri
+ * nopeudella:
+ *
+ *  1. **Reaaliaikasnapshot** (`TMS_STATIONS_CACHE_MS`, 60 s): lähde päivittyy
+ *     minuutin välein. Yksi upstream-kutsu hakee kaikkien asemien arvot
+ *     (144 kt gzipattuna), joten ilman välimuistia jokainen avoin selain
+ *     aiheuttaisi oman 3,4 Mt:n purun ja oman Digitraffic-kutsunsa.
+ *  2. **Metatiedot** (`TMS_METADATA_CACHE_MS`, 24 h): nimet, kunnat ja vapaan
+ *     ajon nopeudet muuttuvat harvoin, mutta kokoaminen vaatii yhden pyynnön
+ *     per asema (~20). Siksi pitkä TTL.
+ *  3. **Historia** (`TMS_HISTORY_CACHE_MS`, 6 h): tilastot päivittyvät
+ *     tunneittain ja koskevat päättyneitä vuorokausia tai kuukausia.
+ *
+ * Varattu concurrency on pieni ja **erillään** query-Lambdasta (5) sekä
+ * ajoneuvo- (2) ja pysäkkilambdasta (2), jotta mikään reitti ei syö toisen
+ * kustannuskattoa.
+ */
+export const TMS_STATIONS_CACHE_MS = 60_000;
+export const TMS_STATIONS_STALE_MAX_MS = 5 * 60_000;
+export const TMS_METADATA_CACHE_MS = 24 * 3_600_000;
+export const TMS_METADATA_STALE_MAX_MS = 7 * 86_400_000;
+export const TMS_HISTORY_CACHE_MS = 6 * 3_600_000;
+export const TMS_HISTORY_STALE_MAX_MS = 7 * 86_400_000;
+export const TMS_HISTORY_CACHE_MAX_ENTRIES = 200;
+/**
+ * Varattu concurrency: **3**, vaikka reitti on kevyt.
+ *
+ * Miksi ei 2: sivun ensimmäinen lataus tekee enimmillään **neljä rinnakkaista
+ * kutsua** (1 × `/v1/tms/stations` + 3 × historia valitulle asemalle). Kylmällä
+ * kontilla jokainen kestää 1–3 s (metatietojen kokoaminen), joten kahden
+ * kontin katto aiheuttaisi uusille pyynnöille Lambda-throttlauksen, jonka
+ * API Gateway näyttää käyttäjälle **503 `{"message":"Service Unavailable"}`** —
+ * havaittu 27.9.2026 kuuden rinnakkaisen kutsun sarjassa. Kolme antaa
+ * pelivaraa ilman että kustannuskatto olennaisesti löystyy.
+ */
+export const TMS_RESERVED_CONCURRENCY = 3;
+/** Kaikkien asemien reaaliaikakutsun timeout (mitattu 0,25 s). */
+export const TMS_UPSTREAM_TIMEOUT_MS = 5_000;
+/**
+ * Historia-CSV:n **yrityskohtainen** timeout.
+ *
+ * 8 s eikä 10 s: sama kutsu mitattiin 27.9.2026 sekä 45 ms että 7 597 ms
+ * (lähde muodostaa CSV:n pyynnön yhteydessä). 8 s on mitatun hitaimman
+ * vastauksen yläpuolella, ja koska uusintayritys on käytössä, hidas vastaus
+ * korjautuu toisella yrityksellä (joka vastaa kymmenissä millisekunneissa).
+ *
+ * Yläraja tulee Lambdan 20 s timeoutista: 2 × 8 s + 0,4 s tauko = 16,4 s.
+ */
+export const TMS_HISTORY_TIMEOUT_MS = 8_000;
+/** Uusintayritys, kun CSV-haku aikakatkaisee tai lähde vastaa 5xx. */
+export const TMS_HISTORY_RETRY_ATTEMPTS = 2;
+export const TMS_HISTORY_RETRY_BACKOFF_MS = 400;
+/** Vuorokausisarjan oletuspituus (päivää). */
+export const TMS_HISTORY_DAYS = 14;
 
 /**
  * Kustannusvalvonnan hälytysrajat (MonitoringStack).

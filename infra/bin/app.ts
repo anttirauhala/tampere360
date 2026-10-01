@@ -162,6 +162,7 @@ new MonitoringStack(app, `${prefix}-monitoring`, {
     { name: 'api', fn: api.queryFunction },
     { name: 'vehicle-positions', fn: api.vehiclesFunction },
     { name: 'stops', fn: api.stopsFunction },
+    { name: 'tms-stations', fn: api.tmsFunction },
   ],
   httpApi: api.httpApi,
 });
