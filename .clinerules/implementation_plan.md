@@ -1743,3 +1743,136 @@ Ei karttakerrosta (omat muutoksensa §27/§28 tapaan), ei tallennusta
 DynamoDB:hen (ei omaa aikasarjaa), vain keruussa olevat asemat, kaksi suuntaa
 (kaistakohtaista dataa ei näytetä), ei liikennevalo- eikä kaupungin omaa dataa.
 
+
+## 31. SPA-deployn chunk-virhe "error loading dynamically imported module" (1.10.2026)
+
+**Käyttäjän havainto:** *"frontendistä tulee välillä virhe eikä sivu lataudu,
+erityisesti jos sivu on ollut kauan auki"*:
+
+```
+Uncaught TypeError: error loading dynamically imported module:
+https://d36ic5wsx4b9yl.cloudfront.net/assets/NysseMapPage-DyiIPu-z.js
+```
+
+Virhe koski dev-jakelua, mutta sama rakenne oli myös prodissa
+(`tampere247.online`) — kumpikin korjattiin.
+
+### Juurisyy: kolme osaa, jotka yhdessä muodostavat vian
+
+| # | Osa | Mittaus 1.10.2026 |
+|---|---|---|
+| 1 | Jokainen deploy tuottaa **uudet hash-nimet** ja `BucketDeployment` (`prune: true`) poistaa vanhat tiedostot + invalidoi CloudFrontin | bucketissa vain **12 tiedostoa** = yksi build; selaimen pyytämä `NysseMapPage-DyiIPu-z.js` oli edellisestä buildista |
+| 2 | Puuttuva polku ei palauta 404:ää vaan **SPA-fallbackin**: `errorResponses` 403/404 → `/index.html`, siis **HTTP 200 + `content-type: text/html`** → selain hylkää moduulin | `curl -I /assets/NysseMapPage-DyiIPu-z.js` → `200 text/html`, `x-cache: Error from cloudfront` |
+| 3 | Jakelun oletusbehavior oli `CACHING_OPTIMIZED`, eikä S3:ssa ole `Cache-Control`-otsaketta → `index.html` jäi CloudFrontin välimuistiin **oletus-TTL:llä (1 vrk)** | juuri `/` → `x-cache: Hit from cloudfront`, ei `cache-control`-otsaketta lainkaan |
+
+Yhdessä: **kauan auki ollut välilehti** käytti muistissaan (ja CloudFrontissa)
+vanhaa `index.html`:ää, jonka chunk-nimet oli jo poistettu → lazy-sivun avaus
+kaatui. Virhe on viivästynyt ja hiljainen: se ei näy heti deployn jälkeen vaan
+vasta kun käyttäjä avaa Kartta- tai Nysse-sivun vanhasta istunnosta.
+
+
+
+### Korjaus 1: CloudFront — dokumentti aina tuore, assetit pitkään välimuistiin
+
+`infra/lib/web-cache.ts` (uusi) + `infra/lib/frontend-stack.ts`:
+
+| Polkukuvio | Cache policy | Cache-Control (selaimelle) |
+|---|---|---|
+| oletus (`/`, `/kartta`, SPA-fallback) | `CACHING_DISABLED` (`4135ea2d-…`) | `no-cache, no-store, max-age=0, must-revalidate` |
+| `assets/*` | oma policy `tampere360-{env}-assets`, min/default/max = **31 536 000 s** | `public, max-age=31536000, immutable` |
+| `config.json` | `CACHING_DISABLED` | kuten dokumentti |
+
+**Sivuhavainto, joka olisi jäänyt helposti huomaamatta:** CloudFrontin managed
+`CachingDisabled` **ei lähetä `Cache-Control`-otsaketta lainkaan** (todettu:
+`config.json` on käyttänyt sitä alusta asti eikä otsaketta näy). Ilman
+eksplisiittistä otsaketta **selain** voi käyttää heuristista välimuistia —
+sama "vanha dokumentti + poistetut chunkit" -ongelma syntyisi siis selaimen
+puolella. Siksi `Cache-Control` lisättiin CloudFrontin response headers
+policyyn (`customHeadersBehavior`, `override: true`); AWS vahvistaa, että
+`Cache-Control` on sallittu custom header ja vaikuttaa **vain** selaimelle,
+ei CloudFrontin välimuistiin.
+
+Koska dokumentille ja asseteille tarvitaan eri `Cache-Control`, stackissa on
+nyt **kaksi** response headers policya (`…-security-headers` ja
+`…-asset-headers`) samalla suojausotsakejoukolla. Suojausotsakkeet rakennetaan
+`securityHeadersBehavior()`-funktiolla (uusi objekti per construct).
+
+### Korjaus 2: frontend — yksi uudelleenlataus chunk-virheen jälkeen
+
+| Osa | Tehtävä |
+|---|---|
+| `apps/web/src/lib/chunk-reload.ts` (uusi) | `recoverFromChunkError` (palautus **kerran**: URL-merkintä `?chunkRetry=1` + `localStorage`-aikaleima), `loadLazyModule` (uusintayritys → palautus → `ChunkLoadError`), `hardReload`, URL-apurit |
+| `apps/web/src/lib/lazy-page.tsx` (uusi) | `lazyPage(load, label)` = `lazy()` + edellä mainittu logiikka; kaatumisen jälkeen renderöi `ChunkLoadFailure`-ilmoituksen (ja nollaa merkinnät onnistuneesta latauksesta) |
+| `apps/web/src/components/ChunkLoadFailure.tsx` (uusi) | *"Sivun osaa ”Kartta” ei saatu ladattua…"* + **Lataa sivu uudelleen** -nappi (`role="alert"`) |
+| `apps/web/src/App.tsx` | `lazy(...)` → `lazyPage(..., 'Kartta' / 'Nysse')` |
+| `apps/web/src/main.tsx` | `vite:preloadError`-kuuntelija kattaa myös muut kuin `lazy()`-kääreen kautta kulkevat importit (esim. CSS) |
+
+Vuokaavio: import kaatuu → **toinen yritys** (hetkellinen verkkohäiriö) → yhä
+kaatuu → onko palautus jo yritetty (URL-merkintä **tai** tuore aikaleima)?
+**ei** → merkitse + `window.location.replace(url + ?chunkRetry=1)` (lupaus jää
+ratkeamatta, joten Suspense näyttää lataustilan eikä virhe välähdä) · **kyllä**
+→ ilmoitus + nappi. Onnistunut lataus nollaa merkinnät (myös URL:sta), joten
+seuraava deploy saa taas yhden automaattisen uudelleenlatauksen.
+
+**Miksi merkintä on URL:ssa eikä pelkässä `localStorage`issa** (löydetty
+selainverifioinnissa 1.10.2026): aikaleimaan nojautuva vartija petti kahdessa
+tilanteessa — kun kello hyppii (selaimen virtuaaliaika) tai kun tallennus on
+estetty (yksityinen tila), jolloin syntyi **2053 uudelleenlatauksen silmukka**.
+URL-parametri säilyy dokumentin vaihdon yli eikä riipu kellosta eikä
+tallennuksesta.
+
+**Miksi reload eikä chunkin uudelleenhaku:** vanha dokumentti osoittaa aina
+vanhoihin nimiin; vain uusi `index.html` sisältää nykyiset chunk-nimet.
+
+**Sivutuote: `event.preventDefault()` kaatoi koko sivun.** Viten
+preload-helper kääntää estetyn `vite:preloadError`-tapahtuman niin, että
+dynaaminen import ratkeaa `undefined`illa (ei hylkää) → Reactin `lazy` lukee
+`moduleObject.default` → `TypeError: … reading 'default'` → ilman error
+boundarya **koko sivu jäi tyhjäksi** (`#root` tyhjä). Korjaus: käsittelijä ei
+estä virhettä, ja `loadLazyModule` käsittelee tyhjän tuloksen
+epäonnistumisena.
+
+**Miksi `prune: true` pidetään:** vanhojen chunkkien säilytys kasvattaisi
+bucketia rajatta (~7 Mt/deploy), ja elinkaarisääntö poistaisi hiljaisen kauden
+aikana myös nykyisen buildin. Korjaukset 1 ja 2 riittävät (uusi kävijä saa
+tuoreen dokumentin; avoin välilehti korjautuu automaattisesti).
+
+### Testit
+
+| Kohde | Tulos |
+|---|---|
+| `apps/web/src/lib/chunk-reload.test.ts` (uusi, **20**) | uusintayritys ennen palautusta; palautus **kerran**; URL-merkintä estää silmukan **myös ilman `localStorage`ia**; vartijan ikkuna, `clear()`, rikkoutunut arvo; `ChunkLoadError` kuljettaa nimen ja syyn; lupaus jää odottamaan; **tyhjä moduulitulos = epäonnistuminen** (Viten preload-helper) |
+| `infra/test/frontend-cache.test.ts` (uusi, **5**) | oletusbehavior käyttää samaa no-store-policya kuin `config.json`; `assets/*` oma policy (min/default/max = 1 v, gzip+br); **Cache-Control-otsakkeet** dokumentille (`no-store`) ja asseteille (`immutable` + TTL); SPA-fallback 403/404 → 200 `/index.html` säilyy. Testi synteesoi `FrontendStack`in tilapäisellä build-hakemistolla (`webDistPath`-prop) — ei siis vaadi `npm run build:web`iä |
+| Koko sarja | **477 testiä** ✅, ESLint ✅, `npm run build:web` ✅, Prettier ✅ (omat tiedostot) |
+
+### Verifiointi
+
+| Tarkistus | Tulos |
+|---|---|
+| `cdk synth tampere360-dev-frontend` | `DefaultCacheBehavior.CachePolicyId = 4135ea2d-…` (CachingDisabled, sama kuin `config.json`); `assets/*` → `Ref: WebAssetsCachePolicy…`; `CachePolicyConfig` `Min/Default/MaxTTL: 31536000`, gzip+br |
+| Julkaistu `index.html` (dev + prod) | `cache-control: no-cache, no-store, max-age=0, must-revalidate`, `x-cache: Miss from cloudfront` (ei enää välimuistissa) |
+| Julkaistu asset | `cache-control: public, max-age=31536000, immutable`, `content-type: text/javascript` |
+| Puuttuva chunk | yhä `200 text/html` (SPA-fallback) — tarkoituksellista, frontend hoitaa sen uudelleenlatauksella |
+| **Selainsimulaatio** (paikallinen tuotantobuildi, `NysseMapPage`-chunk poistettu, headless Chrome `--dump-dom` + palvelimen loki) | dokumenttilataukset **2** (`/nysse-kartta/` + `?chunkRetry=1`) = tasan yksi automaattinen uudelleenlataus; `?chunkRetry=1`-osoitteella vain **1** lataus; DOM:issa `role="alert"`-ilmoitus *”Sivun osaa ”Nysse” ei saatu ladattua…"* + Lataa-nappi; `window.onerror`/`unhandledrejection`-koetin: **0 virhettä**; `#root` renderöi sovellusrungon (ei tyhjää sivua) |
+| Vertailu: vanha logiikka | pelkällä aikaleimalla **2053 reloadia** (silmukka); `preventDefault`illa `#root` jäi tyhjäksi virheeseen *reading 'default'* |
+| Deploy | dev `tampere360-dev-frontend` ✅; prod `tampere247.online` ✅ |
+
+### Dokumentaatio
+
+`docs/architecture/spa-chunk-reload.md` (uusi): oire, juurisyy mittauksineen,
+korjaus, regressiosuojat ja toistettavat verifiointikomennot.
+
+### Rajaukset ja tunnetut puutteet
+
+- Jos käyttäjän selaimessa on **ennen tätä korjausta** tallennettu vanha
+  `index.html`, se voi olla voimassa heuristisen välimuistin ajan; korjauksen
+  jälkeen uudet vastaukset eivät enää jää välimuistiin.
+- Ilmoitus (`ChunkLoadFailure`) näytetään lazy-ladatuille sivuille (Kartta,
+  Nysse). Muiden sivujen koodi on samassa `index-*.js`-tiedostossa, jonka
+  latausvirheestä selain näyttää oman virhesivunsa — `vite:preloadError`
+  kattaa silti CSS- ja modulepreload-virheet.
+- `prune: false` (vanhojen chunkkien säilytys) on dokumentoitu vaihtoehto,
+  jota **ei** otettu käyttöön; muutospiste on `frontend-stack.ts`in
+  `BucketDeployment`.
+
+tuoreen dokumentin; avoin välilehti korjautuu automaattisesti).

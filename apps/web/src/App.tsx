@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Suspense, lazy } from 'react';
+import { Suspense } from 'react';
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
 
 import { Layout } from './components/Layout';
+import { lazyPage } from './lib/lazy-page';
 import { CamerasPage } from './pages/CamerasPage';
 import { CategoryPage } from './pages/CategoryPage';
 import { NowPage } from './pages/NowPage';
@@ -10,11 +11,18 @@ import { SourcesPage } from './pages/SourcesPage';
 import { TmsPage } from './pages/TmsPage';
 
 // MapLibre GL JS on raskas (~1,3 MB) → ladataan vain kun karttasivu avataan.
-const MapPage = lazy(() =>
-  import('./pages/MapPage').then((module) => ({ default: module.MapPage })),
+//
+// lazyPage (eikä paljas lazy): deployn jälkeen käyttäjän selaimessa voi olla
+// vanha index.html, jonka chunk-nimiä ei enää ole olemassa. Silloin import
+// kaatuu ("error loading dynamically imported module") ja lazyPage lataa sivun
+// kerran uudelleen — ks. lib/chunk-reload.ts.
+const MapPage = lazyPage(
+  () => import('./pages/MapPage').then((module) => ({ default: module.MapPage })),
+  'Kartta',
 );
-const NysseMapPage = lazy(() =>
-  import('./pages/NysseMapPage').then((module) => ({ default: module.NysseMapPage })),
+const NysseMapPage = lazyPage(
+  () => import('./pages/NysseMapPage').then((module) => ({ default: module.NysseMapPage })),
+  'Nysse',
 );
 
 const queryClient = new QueryClient({

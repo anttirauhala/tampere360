@@ -26,6 +26,12 @@ import { Construct } from 'constructs';
 import type { AppContext, DomainConfig } from './config';
 import { frontendDomainNames, resourceName } from './config';
 import { buildContentSecurityPolicy } from './csp';
+import {
+  WEB_ASSETS_PATH_PATTERN,
+  assetCacheControlHeaders,
+  documentCacheControlHeaders,
+  webAssetsCachePolicyProps,
+} from './web-cache';
 
 /** Polku apps/web:n Vite-buildiin (repo-juuresta). */
 const WEB_DIST = path.join(__dirname, '..', '..', 'apps', 'web', 'dist');
@@ -38,6 +44,11 @@ export interface FrontendStackProps extends cdk.StackProps {
   domain?: DomainConfig;
   /** WAF WebACL:in ARN (WafStack, us-east-1) — asetetaan kun wafEnabled=true. */
   webAclArn?: string;
+  /**
+   * Polku Vite-buildiin. Oletus `apps/web/dist`. Testit voivat antaa oman
+   * hakemiston, jotta stack on synteesoitavissa ilman `npm run build:web`iä.
+   */
+  webDistPath?: string;
 }
 
 export class FrontendStack extends cdk.Stack {
@@ -50,6 +61,9 @@ export class FrontendStack extends cdk.Stack {
     super(scope, id, props);
 
     const { appContext, apiUrl, domain, webAclArn } = props;
+
+    /** Vite-buildin hakemisto (testeissä injektoitu). */
+    const webDist = props.webDistPath ?? WEB_DIST;
 
     if (appContext.wafEnabled && !webAclArn) {
       throw new Error(
@@ -69,9 +83,9 @@ export class FrontendStack extends cdk.Stack {
         )
       : undefined;
 
-    if (!fs.existsSync(path.join(WEB_DIST, 'index.html'))) {
+    if (!fs.existsSync(path.join(webDist, 'index.html'))) {
       throw new Error(
-        `Frontend-buildiä ei löytynyt: ${WEB_DIST}\n` +
+        `Frontend-buildiä ei löytynyt: ${webDist}\n` +
           'Aja ensin: npm run build:web (tai npm run build repo-juuresta).',
       );
     }
@@ -96,29 +110,46 @@ export class FrontendStack extends cdk.Stack {
     });
 
     // Suojausotsakkeet (§14: CSP ja selaimen suojausotsakkeet CloudFrontissa).
+    //
+    // Kaksi policya samalla suojausotsakejoukolla, koska Cache-Control on
+    // erilainen dokumentille ja hashatuille asseteille (ks. lib/web-cache.ts):
+    // uusi objekti per kutsu, jotta constructit eivät jaa samaa props-oliota.
+    const securityHeadersBehavior = (): cloudfront.ResponseSecurityHeadersBehavior => ({
+      contentTypeOptions: { override: true },
+      frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
+      referrerPolicy: {
+        referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN,
+        override: true,
+      },
+      strictTransportSecurity: {
+        accessControlMaxAge: cdk.Duration.days(365),
+        includeSubdomains: true,
+        override: true,
+      },
+      xssProtection: { protection: true, modeBlock: true, override: true },
+      contentSecurityPolicy: {
+        // CSP rakennetaan lib/csp.ts:ssä — ks. regressiosuoja
+        // infra/test/csp.test.ts (MapLibre hakee tiilet fetch:llä, joten
+        // tiilien origin tarvitaan myös connect-src:hen).
+        contentSecurityPolicy: buildContentSecurityPolicy({ apiOrigin }),
+        override: true,
+      },
+    });
+
+    // Dokumentti (index.html, SPA-fallback, config.json): ei selaimen välimuistiin.
     const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeaders', {
       responseHeadersPolicyName: resourceName(appContext.envName, 'security-headers'),
-      securityHeadersBehavior: {
-        contentTypeOptions: { override: true },
-        frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
-        referrerPolicy: {
-          referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN,
-          override: true,
-        },
-        strictTransportSecurity: {
-          accessControlMaxAge: cdk.Duration.days(365),
-          includeSubdomains: true,
-          override: true,
-        },
-        xssProtection: { protection: true, modeBlock: true, override: true },
-        contentSecurityPolicy: {
-          // CSP rakennetaan lib/csp.ts:ssä — ks. regressiosuoja
-          // infra/test/csp.test.ts (MapLibre hakee tiilet fetch:llä, joten
-          // tiilien origin tarvitaan myös connect-src:hen).
-          contentSecurityPolicy: buildContentSecurityPolicy({ apiOrigin }),
-          override: true,
-        },
-      },
+      comment: 'Turvaotsakkeet + Cache-Control: dokumenttia ei välimuistiteta selaimessa',
+      securityHeadersBehavior: securityHeadersBehavior(),
+      customHeadersBehavior: { customHeaders: documentCacheControlHeaders() },
+    });
+
+    // Vite-buildin assetit: hash-nimi → pitkä selainvälimuisti.
+    const assetHeaders = new cloudfront.ResponseHeadersPolicy(this, 'AssetHeaders', {
+      responseHeadersPolicyName: resourceName(appContext.envName, 'asset-headers'),
+      comment: 'Turvaotsakkeet + Cache-Control: hashatut assetit vuodeksi selaimen välimuistiin',
+      securityHeadersBehavior: securityHeadersBehavior(),
+      customHeadersBehavior: { customHeaders: assetCacheControlHeaders() },
     });
 
     this.distribution = new cloudfront.Distribution(this, 'Distribution', {
@@ -126,13 +157,30 @@ export class FrontendStack extends cdk.Stack {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(this.webBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        // Oletusbehavior palvelee dokumentin (`/`, `/kartta`, SPA-fallbackin
+        // kautta myös tuntemattomat polut). Sen on oltava AINA tuore, koska
+        // index.html sisältää build-kohtaiset chunk-nimet: vanha dokumentti +
+        // poistetut chunkit = "error loading dynamically imported module"
+        // (havaittu 27.9.2026). Ks. lib/web-cache.ts.
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
         responseHeadersPolicy: securityHeaders,
       },
       defaultRootObject: 'index.html',
-      // config.json ei saa jäädä CloudFrontin välimuistiin (API-osoite voi
-      // vaihtua deployn yhteydessä).
       additionalBehaviors: {
+        // Hashatut assetit saavat pitkän välimuistin: tiedostonimi sisältää
+        // sisällön hashin, joten sama nimi = sama sisältö.
+        [WEB_ASSETS_PATH_PATTERN]: {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(this.webBucket),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: new cloudfront.CachePolicy(
+            this,
+            'WebAssetsCachePolicy',
+            webAssetsCachePolicyProps(resourceName(appContext.envName, 'assets')),
+          ),
+          responseHeadersPolicy: assetHeaders,
+        },
+        // config.json ei saa jäädä CloudFrontin välimuistiin (API-osoite voi
+        // vaihtua deployn yhteydessä).
         'config.json': {
           origin: origins.S3BucketOrigin.withOriginAccessControl(this.webBucket),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -177,12 +225,17 @@ export class FrontendStack extends cdk.Stack {
     // Vite-buildi + ajonaikainen konfiguraatio (API-osoite).
     new s3deploy.BucketDeployment(this, 'WebDeployment', {
       sources: [
-        s3deploy.Source.asset(WEB_DIST),
+        s3deploy.Source.asset(webDist),
         s3deploy.Source.data('config.json', `${JSON.stringify({ apiBaseUrl: apiUrl }, null, 2)}\n`),
       ],
       destinationBucket: this.webBucket,
       distribution: this.distribution,
       distributionPaths: ['/*'],
+      // prune: vanhat hash-nimet poistuvat. Tämä on turvallista, koska
+      // dokumentti on aina tuore (oletusbehavior CACHING_DISABLED) ja jo
+      // avoinna olevat välilehdet korjautuvat yhdellä uudelleenlatauksella
+      // (apps/web/src/lib/chunk-reload.ts). Jos vanhat chunkit halutaan joskus
+      // säilyttää, tämä on se kohta jota muutetaan (prune: false + elinkaari).
       prune: true,
     });
 
