@@ -2278,14 +2278,21 @@ tyyli on `rgb(77, 163, 255)` (= `--accent`) + `underline`, ja klikkaus avasi
 renderöityy muodossa
 `Tampereen seudun saunat — aukiolo tänään, hinnat ja lisätiedot (saunahaku.fi ↗).`
 
-**Deploy vain deviin:** `tampere360-dev-frontend` (75,4 s). Prodia ei muutettu
-— ks. huomio alla.
+**Deploy:** dev `tampere360-dev-frontend` (75,4 s) ja **prod**
+`tampere360-prod-frontend` (`npm run deploy:prod` → `cdk deploy --all
+-c env=prod -c wafEnabled=false --region eu-north-1`, 84,8 s). `cdk diff --all`
+näytti ennen deployta **vain** frontendin uuden asset-versioinnin (muut stackit
+"no differences"), joten prodissa ei muuttunut mikään muu.
 
-**Huomio taustaprosessista:** deployn aikana oli käynnissä *aiempi, tästä
-työstä riippumaton* prod-deploy (`tampere360-prod-*`, alkanut klo 16.38). Se
-oli synsannut assetinsa ennen tätä buildia, ja staged-assetista tarkistettiin,
-ettei se sisällä `page__lead-link`iä → **prod sai vanhan bundlen eikä tätä
-muutosta**. Jos muutos halutaan myös prodiin, se tehdään erikseen
-(`npm run deploy:prod`).
+**Prod-verifiointi 3.10.2026 (`tampere247.online` + `www.`):** julkaistu
+`index.html` osoittaa samaan buildiin (`assets/index-DJfesDdp.js`), DOM:issa on
+**3** saunahaku-linkkiä (lead, alahuomautus, footteri), 22 saunakorttia ja veden
+lämpötila; CDP-klikkauskoe avasi uuden välilehden `https://saunahaku.fi/` ✅,
+0 konsolivirhettä.
+
+**Huomio taustaprosessista:** ennen tätä työtä käynnissä ollut aiempi prod-deploy
+(`tampere360-prod-*`, alkanut klo 16.38) oli synsannut assetinsa ennen tämän
+muutoksen buildia, joten se vei prodiin vielä vanhan bundlen. Tässä työssä tehty
+erillinen prod-deploy korjasi tilanteen (ks. yllä).
 
 
