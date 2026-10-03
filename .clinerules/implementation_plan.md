@@ -2419,7 +2419,8 @@ funktioon ja varsinainen näkyvyys on verifioitu selaimessa (yllä).
 
 ### Rajaukset ja tunnetut puutteet
 
-- **Vain dev-julkaisu.** Prodia ei muutettu.
+- **Julkaistu deviin ja prodiin 3.10.2026** (ks. tarkennus ja prod-luku luvun
+  lopusta).
 - Breakpoint on **480 px** (ks. tarkennus luvun lopussa) — kapea työpöytäikkuna
   ja tabletti pitävät painikkeet.
 - Valitsin sisältää vain päänavigaation kohteet, ei kategorioiden omia sivuja
@@ -2428,7 +2429,7 @@ funktioon ja varsinainen näkyvyys on verifioitu selaimessa (yllä).
   vielä ~16 px lisää; ei tehty tässä.
 - Ei muutoksia reititykseen, API:in, CSP:hen eikä infraan — muutos on kokonaan
   `apps/web`:ssä.
-- **Ei committoitu** (käyttäjän pyynnöstä).
+- **Committoitu ja pushaattu** (`4e7e867`) — ks. luvun lopun prod-luku.
 
 
 
@@ -2436,8 +2437,8 @@ funktioon ja varsinainen näkyvyys on verifioitu selaimessa (yllä).
 
 `npx cdk deploy tampere360-dev-frontend --require-approval never` (127 s).
 Deploy vaihtoi vain frontendin assetteja; muut stackit eivät ole riippuvaisia
-tästä muutoksesta. **Prodia ei muutettu** (käyttäjän pyyntö), eikä muutosta
-committoitu.
+tästä muutoksesta. **Prodia ei muutettu tässä vaiheessa** (ks. luvun lopun
+prod-luku, jossa muutos vietiin myös tuotantoon).
 
 Julkaistu build on täsmälleen sama kuin paikallinen:
 `index-BEoGmt0b.js` + `index-Dr3Mtx3L.css`. CSP-otsake (`default-src 'self'`,
@@ -2491,12 +2492,47 @@ verifiointi (headless Chrome + CDP): 390 px → valitsin `flex`, arvo `/`
 ("Etusivu"), valinnan vaihto `/kamerat` navigoi ja aktiivinen linkki päivittyi;
 **481 px → 7 painiketta, valitsin `display: none`**; 1440 px → 7 painiketta;
 **0 konsolivirhettä ja 0 CSP-rikkomusta**. Testit 625/625 ✅, web 179/179 ✅,
-ESLint ✅, Prettier ✅, `npm run build:web` ✅. Prodia ei muutettu eikä muutosta
-committoitu.
+ESLint ✅, Prettier ✅, `npm run build:web` ✅. Tässä vaiheessa vain dev
+(prod vietiin myöhemmin samana päivänä, ks. luvun loppu).
 
 > **Huomio julkaistun CSS:n tarkistuksesta:** buildin LightningCSS muuntaa
 > `@media (max-width: 480px)` muotoon `@media (width<=480px)`. Julkaistua
 > CSS:ää grepatessa kannattaa siis etsiä merkkijonoa `480px` tai `width<=480px`,
 > ei `max-width:480px` — muuten syntyy virheellinen vaikutelma, ettei sääntöä
 > ole julkaistu (näin kävi tässä verifioinnissa, ennen kuin asia tarkistettiin).
+
+
+### Commit ja prod-julkaisu 3.10.2026
+
+Muutos committoitiin ja pushaattiin repoon: **`4e7e867`**
+`feat(web): use a dropdown selector for navigation on narrow screens`
+(4 tiedostoa, +349/−2: `Layout.tsx`, `layout.test.ts`, `styles.css`,
+`implementation_plan.md`). Ei salaisuuksia.
+
+**Prod-diff ennen deployta** (`npx cdk diff --all -c env=prod -c wafEnabled=false
+--region eu-north-1`): **vain 1 stack erosi** — `tampere360-prod-frontend`
+(pelkästään `WebDeployment`-assetin `SourceObjectKeys`). Muut seitsemän stackia
+ilmoittivat `There were no differences`, eli backend oli jo ajan tasalla
+(§37:n `--all`-deploy oli vienyt aiemmat muutokset). Tämän vuoksi deploy
+kohdistettiin **täsmälleen muuttuneeseen stackiin**, jotta mikään muu ei voi
+muuttua vahingossa:
+
+```bash
+npx cdk deploy tampere360-prod-frontend \
+  -c env=prod -c wafEnabled=false --region eu-north-1 --require-approval never
+```
+
+Kesto **76,5 s**. WAF on edelleen pois päältä (`wafEnabled=false`), kuten
+§21:ssä on päätetty.
+
+| Tarkistus | Tulos |
+|---|---|
+| `tampere247.online` + `www.` | HTTP 200 ✅ |
+| Julkaistu build | `index-CESABh7N.js` + `index-DS0hhBo7.css` — **sama build kuin devissä** ✅ |
+| Assetin otsakkeet | `content-type: text/css`, `cache-control: public, max-age=31536000, immutable` ✅ |
+| 390 px / 480 px | valitsin `flex`, 0 painiketta, otsikko 121 px ✅ |
+| 481 / 600 / 768 px | 7 painiketta, valitsin `display: none`, otsikko 147 px ✅ |
+| 1440 px | 7 painiketta, otsikko 65 px ✅ |
+| Valitsimen vaihto (390 px) | `/saunat` → `location.pathname` vaihtui, valitsin `/saunat`, aktiivinen linkki "Saunat" ✅ |
+| Konsoli | **0 virhettä, 0 CSP-rikkomusta** ✅ |
 
