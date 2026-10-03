@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import type { ChangeEvent } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { SAUNA_SOURCE_URL } from '../lib/saunas';
 
@@ -20,8 +21,33 @@ export const NAV = [
   { to: '/lahteet', label: 'Lähteiden tila', end: false },
 ];
 
+/** Kapean näytön valinta: arvo, kun polku ei vastaa mitään NAV-kohtaa. */
+export const NAV_SELECT_PLACEHOLDER = '';
+
+/**
+ * Mikä päänavigaation kohde "omistaa" annetun polun. Kapean näytön
+ * valintaelementti näyttää tämän; tyhjä merkkijono tarkoittaa, ettei mikään
+ * kohta täsmää (esim. /liikenne, /saa, /poliisi ja /joukkoliikenne eivät ole
+ * päänavigaatiossa — ne avautuvat Nyt-sivun koostekorteista).
+ */
+export function activeNavPath(pathname: string): string {
+  const match = NAV.find((item) =>
+    item.end ? pathname === item.to : pathname === item.to || pathname.startsWith(`${item.to}/`),
+  );
+  return match?.to ?? NAV_SELECT_PLACEHOLDER;
+}
+
 /** Sovelluksen runko: otsikko, navigaatio, sisältö, attribuutiot. */
 export function Layout() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const currentNav = activeNavPath(location.pathname);
+
+  const handleNavSelect = (event: ChangeEvent<HTMLSelectElement>) => {
+    const to = event.target.value;
+    if (to) navigate(to);
+  };
+
   return (
     <div className="app">
       <header className="header">
@@ -46,6 +72,33 @@ export function Layout() {
                 {item.label}
               </NavLink>
             ))}
+
+            {/*
+              Alle 480px:n näytöllä välilehtipainikkeet korvataan
+              valintaelementillä, jotta sisällölle jää enemmän tilaa — ks.
+              styles.css @media. Vain toinen on kerrallaan näkyvissä, joten
+              ruudunlukija ei lue kohteita kahteen kertaan.
+            */}
+            <label className="nav__select">
+              <span className="nav__select-text">Osio</span>
+              <select
+                className="nav__select-input"
+                aria-label="Valitse osio"
+                value={currentNav}
+                onChange={handleNavSelect}
+              >
+                {currentNav === NAV_SELECT_PLACEHOLDER && (
+                  <option value={NAV_SELECT_PLACEHOLDER} disabled>
+                    Valitse osio…
+                  </option>
+                )}
+                {NAV.map((item) => (
+                  <option key={item.to} value={item.to}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </nav>
         </div>
       </header>

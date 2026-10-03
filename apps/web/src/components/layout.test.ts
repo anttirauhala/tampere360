@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { NAV } from './Layout';
+import { NAV, NAV_SELECT_PLACEHOLDER, activeNavPath } from './Layout';
 
 /**
  * Päänavigaation regressiosuoja.
@@ -38,5 +38,41 @@ describe('NAV', () => {
 
   it('merkitsee vain etusivun tarkaksi osumaksi (`end`)', () => {
     expect(NAV.filter((item) => item.end).map((item) => item.to)).toEqual(['/']);
+  });
+});
+
+/**
+ * Kapean näytön osiovalitsin (§38) näyttää `activeNavPath`-funktion tuloksen.
+ * Testi varmistaa, ettei valitsin näytä väärää osiota sivuilla, jotka eivät
+ * ole päänavigaatiossa (/liikenne, /saa, /poliisi, /joukkoliikenne).
+ */
+describe('activeNavPath', () => {
+  it('tunnistaa jokaisen navigaatiokohdan omaksi polukseen', () => {
+    for (const item of NAV) {
+      expect(activeNavPath(item.to)).toBe(item.to);
+    }
+  });
+
+  it('ei sekoita /liikenne- ja /liikennemaarat-reittejä keskenään', () => {
+    expect(activeNavPath('/liikenne')).toBe(NAV_SELECT_PLACEHOLDER);
+    expect(activeNavPath('/liikennemaarat')).toBe('/liikennemaarat');
+  });
+
+  it('palauttaa paikanvaraajan, kun polku ei ole päänavigaatiossa', () => {
+    for (const path of ['/liikenne', '/saa', '/poliisi', '/joukkoliikenne', '/tuntematon']) {
+      expect(activeNavPath(path)).toBe(NAV_SELECT_PLACEHOLDER);
+    }
+  });
+
+  it('tunnistaa alipolut ja päätösvinon vain ei-tarkoille kohteille', () => {
+    expect(activeNavPath('/kartta/123')).toBe('/kartta');
+    expect(activeNavPath('/nysse-kartta/x')).toBe('/nysse-kartta');
+    expect(activeNavPath('/kartta/')).toBe('/kartta');
+    /* Etusivu on tarkka (`end`), joten se ei nappaa alipolkuja. */
+    expect(activeNavPath('/kartta')).not.toBe('/');
+  });
+
+  it('paikanvaraaja ei osu mihinkään navigaatiokohtaan', () => {
+    expect(NAV.some((item) => item.to === NAV_SELECT_PLACEHOLDER)).toBe(false);
   });
 });

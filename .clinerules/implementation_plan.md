@@ -2296,3 +2296,207 @@ muutoksen buildia, joten se vei prodiin vielä vanhan bundlen. Tässä työssä 
 erillinen prod-deploy korjasi tilanteen (ks. yllä).
 
 
+
+## 38. Kapean näytön osiovalitsin navigaatiossa (3.10.2026)
+
+**Käyttäjän havainto:** *"kun sovellus avataan mobiilissa, menu vie liikaa tilaa:
+valinnat ovat alekkain. Muuta: kun ollaan kapealla näytöllä, osio valitaan
+dropdown-tyylisellä valinnalla eikä buttonilla."*
+
+### Oire ja mittaus
+
+Päänavigaatiossa oli 7 `NavLink`-painiketta (`.nav`, `flex-wrap: wrap`), jotka
+rivittyivät kapealla näytöllä neljälle riville. Mitattu dev-buildista
+(headless Chrome, 390×844):
+
+| | Otsikon korkeus 390 px |
+|---|---|
+| Ennen (painikkeet) | **184 px** |
+| Jälkeen (valitsin) | **121 px** |
+
+→ **63 px (34 %) vähemmän**, ja sisällölle jää vastaava määrä enemmän tilaa
+ensimmäisellä ruudulla.
+
+### Ratkaisu: natiivi `<select>` + CSS-breakpoint
+
+| Osa | Muutos |
+|---|---|
+| `apps/web/src/components/Layout.tsx` | `<nav>`-elementtiin painikkeiden lisäksi `<label class="nav__select">` + `<span class="nav__select-text">Osio</span>` + natiivi `<select class="nav__select-input">`; `useLocation` + `useNavigate` ja `onChange` → `navigate(to)` |
+| `apps/web/src/styles.css` | `.nav__select` on oletuksena `display: none`; `@media (max-width: 480px)` piilottaa painikkeet (`.nav > .nav__link`) ja näyttää valitsimen (`display: flex`), ja asettaa `.nav { width: 100% }` |
+| uusi `activeNavPath(pathname)` + `NAV_SELECT_PLACEHOLDER` | Valitsimen arvo: mikä `NAV`-kohde "omistaa" nykyisen polun; tyhjä merkkijono = ei mikään |
+| `apps/web/src/components/layout.test.ts` | +5 testiä `activeNavPath`ille |
+
+**Miksi natiivi `<select>` eikä oma pudotusvalikko:** mobiilissa avautuu
+käyttöjärjestelmän oma valitsin (isot kosketuskohteet, tuttu vuorovaikutus),
+näppäimistö ja ruudunlukija toimivat ilman lisätyötä, eikä uutta komponenttia,
+tilaa (avoin/kiinni) eikä ulkoaklikkauksen käsittelyä tarvita. Ulkoasua **ei**
+riisuta (`appearance` säilyy), joten nuoli ja tumma teema (`color-scheme: dark`)
+tulevat ilmaiseksi.
+
+**Miksi CSS-mediaquery eikä `matchMedia`:** repossa ei ole yhtään JS-pohjaista
+mediaqueryä — kaikki responsiivisuus on CSS:ssä. Valitsimen breakpoint on
+**480 px** (ks. tarkennus luvun lopussa): sitä kapeammalla painikkeet eivät
+enää mahdu järkevästi, mutta kapea työpöytäikkuna ja tabletti pitävät
+painikkeet.
+
+**Miksi vain toinen näkyy kerrallaan:** piilotus tehdään `display: none`illä,
+joka poistaa elementin myös saavutettavuuspuusta → ruudunlukija ei lue
+navigaatiokohteita kahteen kertaan eikä piilotettuihin linkkeihin voi tabata.
+Valitsimessa on `aria-label="Valitse osio"` ja näkyvä "Osio"-etiketti
+(`<label>` kääre), joten kentällä on nimensä.
+
+### Reunatapaus: sivut, jotka eivät ole päänavigaatiossa
+
+`/liikenne`, `/saa`, `/poliisi` ja `/joukkoliikenne` ovat olemassa olevia
+reittejä (`App.tsx`), mutta **eivät** `NAV`-listassa — ne avautuvat Nyt-sivun
+koostekorteista ja joukkoliikenteen sivupaneelista. Ilman käsittelyä valitsin
+näyttäisi niillä virheellisesti "Etusivua". Siksi `activeNavPath` palauttaa
+näillä poluilla `NAV_SELECT_PLACEHOLDER`in ja valitsimeen lisätään **vain
+silloin** `<option value="" disabled>Valitse osio…</option>`. Valinta ei siis
+koskaan näytä väärää osiota, ja käyttäjä näkee yhdellä silmäyksellä, ettei sivu
+ole päänavigaatiossa.
+
+### Mittaukset (headless Chrome + CDP, paikallinen tuotantobuildi)
+
+Emulointi asetetaan **navigoinnin jälkeen** — ennen navigointia asetettu
+`Emulation.setDeviceMetricsOverride` ei päde uuteen dokumenttiin, mikä näkyi
+aluksi ristiriitaisina tuloksina (mittaus kertoi aina edellisen ajon leveyden).
+Siksi jokainen mittaus tarkistaa myös `window.innerWidth`in ja
+`matchMedia('(max-width: 480px)')`-tuloksen.
+
+Lopullinen raja (480 px) mitattiin yhdellä sivulatauksella, jossa viewport
+vaihdettiin lennossa (`Emulation.setDeviceMetricsOverride` + 0,6 s odotus):
+
+| Leveys | `mq480` | Näkyvät painikkeet | Valitsin | Otsikon korkeus |
+|---|---|---|---|---|
+| 390 px | `true` | 0 | `flex` | **121 px** |
+| 480 px | `true` | 0 | `flex` | **121 px** |
+| 481 px | `false` | 7 | `none` | 147 px |
+| 600 px | `false` | 7 | `none` | 147 px |
+| 768 px | `false` | 7 | `none` | 147 px |
+| 900 px | `false` | 7 | `none` | 110 px |
+| 1440 px | `false` | 7 | `none` | 65 px |
+
+Eli raja on tarkalleen **≤ 480 px**, eikä työpöytänäkymä (1440 px) muutu
+millään tavalla. Välillä 481–~880 px painikkeet vievät 3 riviä (147 px), mikä
+on käyttäjän nimenomainen valinta: valitsin halutaan vain puhelinlevyisille
+näytöille.
+
+Toiminnallinen verifiointi samalla menetelmällä:
+
+| Tarkistus | Tulos |
+|---|---|
+| 390 px `/` | 0 painiketta näkyvissä, valitsin `display: flex`, arvo `/` → "Etusivu" ✅ |
+| Valitsimen vaihto → `/saunat` | `location.pathname` vaihtui, valitsimen arvo `/saunat`, aktiivinen `NavLink` "Saunat", `aria-current="page"` säilyi ✅ |
+| `/liikenne` | valitsimen arvo `''` ja teksti "Valitse osio…" (disabled), 8 optiota (7 + paikanvaraaja), 0 painiketta ✅ |
+| 1440 px `/` | 7 painiketta näkyvissä, valitsin `display: none`, otsikko 65 px (ennallaan) ✅ |
+| Optiot | `/ | Etusivu`, `/kartta | Tapahtumat kartalla`, `/nysse-kartta | Nysse kartalla`, `/kamerat | Kamerat`, `/liikennemaarat | Liikennemäärät`, `/saunat | Saunat`, `/lahteet | Lähteiden tila` — sama järjestys ja nimet kuin painikkeissa ✅ |
+| Konsoli | ei React- eikä CSP-virheitä; ainoat virheet ovat paikallisen preview'n `/v1/...` 404:t (config.json puuttuu lokaalisti → API-osoite on suhteellinen) ✅ |
+
+
+### Testit
+
+`apps/web/src/components/layout.test.ts` (+5, uusi `describe('activeNavPath')`):
+
+| Testi | Suojaa |
+|---|---|
+| "tunnistaa jokaisen navigaatiokohdan omaksi polukseen" | kaikki 7 `NAV`-polkua palautuvat sellaisenaan |
+| "ei sekoita /liikenne- ja /liikennemaarat-reittejä keskenään" | `/liikenne` → paikanvaraaja, `/liikennemaarat` → itsensä (etuliitesekoittuminen) |
+| "palauttaa paikanvaraajan, kun polku ei ole päänavigaatiossa" | `/liikenne`, `/saa`, `/poliisi`, `/joukkoliikenne`, `/tuntematon` |
+| "tunnistaa alipolut ja päätösvinon vain ei-tarkoille kohteille" | `/kartta/123` ja `/kartta/` → `/kartta`; etusivu on tarkka (`end`) |
+| "paikanvaraaja ei osu mihinkään navigaatiokohtaan" | `NAV_SELECT_PLACEHOLDER` ei voi osua vahingossa |
+
+Koska vitest ajetaan `environment: 'node'`issa ilman jsdomia, itse `<select>`in
+renderöintiä ei testata yksikkötestillä — siksi logiikka on eristetty puhtaaseen
+funktioon ja varsinainen näkyvyys on verifioitu selaimessa (yllä).
+
+| Tarkistus | Tulos |
+|---|---|
+| `npx vitest run apps/web/src/components/layout.test.ts` | **9 testiä** ✅ (4 ennestään + 5 uutta) |
+| `npx eslint apps/web/src` | ✅ |
+| `npx prettier --check` (muokatut tiedostot) | ✅ |
+| `npm run build:web` | ✅ (`tsc --noEmit` + vite) |
+
+### Rajaukset ja tunnetut puutteet
+
+- **Vain dev-julkaisu.** Prodia ei muutettu.
+- Breakpoint on **480 px** (ks. tarkennus luvun lopussa) — kapea työpöytäikkuna
+  ja tabletti pitävät painikkeet.
+- Valitsin sisältää vain päänavigaation kohteet, ei kategorioiden omia sivuja
+  (`/liikenne`, `/saa`, `/poliisi`, `/joukkoliikenne`) — ks. reunatapaus yllä.
+- Bränditekstin pienentäminen mobiilissa (esim. `small`-rivin piilotus) toisi
+  vielä ~16 px lisää; ei tehty tässä.
+- Ei muutoksia reititykseen, API:in, CSP:hen eikä infraan — muutos on kokonaan
+  `apps/web`:ssä.
+- **Ei committoitu** (käyttäjän pyynnöstä).
+
+
+
+### Julkaisu (vain dev)
+
+`npx cdk deploy tampere360-dev-frontend --require-approval never` (127 s).
+Deploy vaihtoi vain frontendin assetteja; muut stackit eivät ole riippuvaisia
+tästä muutoksesta. **Prodia ei muutettu** (käyttäjän pyyntö), eikä muutosta
+committoitu.
+
+Julkaistu build on täsmälleen sama kuin paikallinen:
+`index-BEoGmt0b.js` + `index-Dr3Mtx3L.css`. CSP-otsake (`default-src 'self'`,
+`script-src 'self'`, `connect-src` API + tiilet) **ei vaatinut muutosta** —
+ulkoinen `<select>` ei aiheuta uusia origineja.
+
+**Julkaistun dev-sivuston verifiointi** (headless Chrome + CDP,
+`https://d36ic5wsx4b9yl.cloudfront.net`):
+
+| Tarkistus | Tulos |
+|---|---|
+| 390 px `/` | `innerWidth 390`, `mediaMatches true`, otsikko **121 px** (painikkeilla 184 px), näkyviä painikkeita **0**, valitsin `display: flex`, arvo `/` → "Etusivu", 7 optiota ✅ |
+| Valitsimen vaihto | → `/saunat`: `location.pathname` vaihtui, valitsin `/saunat` / "Saunat", aktiivinen linkki "Saunat" ✅ |
+| `/liikenne` | valitsin `''` / "Valitse osio…" (disabled) ✅ |
+| 1440 px `/` | 7 painiketta, valitsin `display: none`, otsikko 65 px ✅ |
+| Verkkopyynnöt | **0 epäonnistunutta pyyntöä** (paikallisessa preview'ssä 404:äävät `/v1/...` toimivat julkaistuna) ✅ |
+| Konsoli | **0 virhettä, 0 CSP-rikkomusta** ✅ |
+| Kuvakaappaus 390×844 | Otsikko: brändi + "Osio \| Etusivu" -valitsin; sisältö (Nyt-otsikko, sääkortti) alkaa heti valitsimen alta ✅ |
+
+### Tarkennus (3.10.2026): breakpoint 760 → 480 px
+
+**Käyttäjän havainto:** *"nyt valikko typistyy myös kapealla desktopilla, typistä
+vasta esim. alle 480?"* — 760 px oli liian leveä raja: valitsin korvasi
+painikkeet jo kapeassa työpöytäikkunassa.
+
+| Osa | Muutos |
+|---|---|
+| `apps/web/src/styles.css` | navigaation `@media (max-width: 760px)` → `@media (max-width: 480px)` |
+| `apps/web/src/components/Layout.tsx` | kommentti päivitetty vastaamaan uutta rajaa |
+
+**Muut 760 px -säännöt jäivät ennalleen** (Nyt-sivun taustakuva, sääkortti,
+koostekortin infoteksti) — ne koskevat sisältöä, eivät navigaatiota, eikä
+käyttäjän havainto kohdistunut niihin.
+
+| Leveys | Valitsin | Otsikon korkeus | Huom |
+|---|---|---|---|
+| 390 px | näkyy | **121 px** | puhelin |
+| 480 px | näkyy | **121 px** | raja |
+| 481 px | ei (painikkeet) | 147 px | 3 painikeriviä |
+| 768 px | ei | 147 px | tabletti |
+| 1440 px | ei | 65 px | työpöytä |
+
+Eli välillä 481–~880 px painikkeet vievät 3 riviä (147 px) — tämä on käyttäjän
+nimenomainen valinta: valitsin halutaan vain puhelinlevyisille näytöille.
+Kapea työpöytäikkuna ja tabletti pitävät tutut painikkeet.
+
+**Julkaisu (vain dev):** `npx cdk deploy tampere360-dev-frontend
+--require-approval never` (90 s) → uudet assetit
+`index-CESABh7N.js` + `index-DS0hhBo7.css`. Julkaistun dev-sivuston
+verifiointi (headless Chrome + CDP): 390 px → valitsin `flex`, arvo `/`
+("Etusivu"), valinnan vaihto `/kamerat` navigoi ja aktiivinen linkki päivittyi;
+**481 px → 7 painiketta, valitsin `display: none`**; 1440 px → 7 painiketta;
+**0 konsolivirhettä ja 0 CSP-rikkomusta**. Testit 625/625 ✅, web 179/179 ✅,
+ESLint ✅, Prettier ✅, `npm run build:web` ✅. Prodia ei muutettu eikä muutosta
+committoitu.
+
+> **Huomio julkaistun CSS:n tarkistuksesta:** buildin LightningCSS muuntaa
+> `@media (max-width: 480px)` muotoon `@media (width<=480px)`. Julkaistua
+> CSS:ää grepatessa kannattaa siis etsiä merkkijonoa `480px` tai `width<=480px`,
+> ei `max-width:480px` — muuten syntyy virheellinen vaikutelma, ettei sääntöä
+> ole julkaistu (näin kävi tässä verifioinnissa, ennen kuin asia tarkistettiin).
+
