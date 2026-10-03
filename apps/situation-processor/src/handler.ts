@@ -5,17 +5,20 @@
  * 1. validointi (isTampere360Event)
  * 2. aluesuodatus (Tampere/Pirkanmaa, §5)
  * 3. tekninen idempotenssi (attribute_not_exists(processingKey), §4.1)
- * 4. kanonisen Situation-kirjoitus DynamoDB:hen (§4.2)
+ * 4. kanonisen Situation-rivin **upsert** DynamoDB:hen (§4.2): tunniste
+ *    johdetaan `canonicalKey`stä, joten saman tapahtuman päivitykset osuvat
+ *    samaan riviin eivätkä luo uutta (ks. situation.ts)
  * 5. (myöhemmin) Situation* domain-eventin julkaisu muille prosessoreille
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { createLogger } from '@tampere360/observability';
-import { ulid } from '@tampere360/source-adapter-sdk';
 import { isTampere360Event } from '@tampere360/event-contracts';
 import type { EventBridgeEvent } from 'aws-lambda';
 import type { SourceEventNormalizedDetail, Tampere360Event } from '@tampere360/event-contracts';
+
+import { buildSituationUpsert } from './situation';
 
 const logger = createLogger({
   service: 'situation-processor',
@@ -75,49 +78,21 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
     return;
   }
 
-  // Kanoninen Situation
-  const situationId = ulid();
-  // Rivin `startsAt` on GSI1–GSI4:n lajitteluavain, ja DynamoDB vaatii sille
-  // aina arvon → siihen kirjoitetaan JÄRJESTYSAIKA (tapahtuman oma aika →
-  // lähdeaika → havaintoaika). Tämä EI ole tapahtuman alkuaika: oikea alkuaika
-  // on event.validity.startsAt, joka on null kun lähde ei kerro sitä (§5).
-  const sortTime = e.validity?.startsAt ?? e.publishedAt ?? e.firstSeenAt;
-
-  // DynamoDB ei hyväksy NULL-arvoa GSI-avaimelle (gsi3/municipality, gsi4/geohash).
-  // GSI:t ovat sparse-indeksejä: avain jätetään pois, jos arvoa ei ole.
-  const situationItem: Record<string, unknown> = {
-    situationId,
-    processingKey: e.processingKey,
-    canonicalKey: e.canonicalKey,
-    event: e,
-    status: e.status,
-    category: e.category,
-    severity: e.severity,
-    startsAt: sortTime,
-    publishedAt: e.publishedAt,
-    firstSeenAt: e.firstSeenAt,
-    createdAt: now,
-    updatedAt: now,
-  };
-  if (e.location?.municipality) situationItem.municipality = e.location.municipality;
-  if (e.location?.geohash) situationItem.geohash = e.location.geohash;
-  if (e.status === 'ENDED' || e.status === 'CANCELLED') {
-    situationItem.expiresAt = Math.floor(Date.now() / 1000) + 30 * 86400;
-  }
+  // Kanoninen Situation: upsert deterministisellä tunnisteella, jotta saman
+  // tapahtuman päivitykset (esim. FMI:n Update-viestit) päivittävät **samaa**
+  // riviä eivätkä luo uutta. Ensimmäinen havainto säilyy (createdAt/firstSeenAt
+  // if_not_exists) — ks. situation.ts.
+  const upsert = buildSituationUpsert(e, now, Math.floor(Date.now() / 1000));
 
   try {
-    await doc.send(new PutCommand({
-      TableName: tables.situations,
-      Item: situationItem,
-      ConditionExpression: 'attribute_not_exists(situationId)',
-    }));
-    logger.info('Situation luotu', {
-      situationId, canonicalKey: e.canonicalKey, category: e.category, status: e.status,
+    await doc.send(new UpdateCommand({ TableName: tables.situations, ...upsert }));
+    logger.info('Situation päivitetty', {
+      situationId: upsert.Key.situationId,
+      canonicalKey: e.canonicalKey,
+      category: e.category,
+      status: e.status,
     });
   } catch (err: unknown) {
-    const aerr = err as { name?: string };
-    if (aerr.name !== 'ConditionalCheckFailedException') {
-      logger.error('Situation-virhe', { error: String(err) });
-    }
+    logger.error('Situation-virhe', { error: String(err) });
   }
 }

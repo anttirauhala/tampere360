@@ -12,7 +12,7 @@ import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { createLogger } from '@tampere360/observability';
 import { fetchWithRetry, saveIngestionCheckpoint, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
 
-import { type ParsedCapAlert, parseCapXml, parseRssFeed } from './cap-parser';
+import { type ParsedCapAlert, parseCapXml, parseRssFeed, warningIdentity } from './cap-parser';
 
 const logger = createLogger({
   service: 'ingest-fmi',
@@ -31,6 +31,10 @@ const RSS_URL = 'https://alerts.fmi.fi/cap/feed/rss_fi-FI.rss';
  * peruutus viitattuun tunnisteeseen, jotta se osuu samaan canonicalKeyhin
  * (= samaan tilanteeseen) kuin alkuperäinen varoitus — muuten peruutuksesta
  * syntyisi irrallinen tapahtuma eikä vanha varoitus koskaan päättyisi.
+ *
+ * Lähteetunnisteesta otetaan lisäksi **vakaa häntä** (`warningIdentity`), koska
+ * FMI antaa jokaiselle päivitykselle uuden identifierin mutta pitää hännän
+ * samana. Ilman tätä jokainen `Update` loi uuden tilanteen.
  */
 function cancelTargetId(parsed: ParsedCapAlert): string {
   const referenced = parsed.referencedIdentifiers[0];
@@ -106,7 +110,7 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
       continue;
     }
 
-    const sourceId = cancelTargetId(parsed);
+    const sourceId = warningIdentity(cancelTargetId(parsed));
     const contentHash = sha256Hex(capXml);
     const processingKey = `FMI_CAP:${sourceId}:${contentHash.slice(0, 16)}`;
 

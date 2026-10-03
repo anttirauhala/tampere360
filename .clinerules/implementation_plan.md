@@ -2091,3 +2091,104 @@ Koko sarja **592 testiä** ✅, ESLint ✅, `npm run build:web` ✅, `cdk synth`
 `tampere360-dev-errors-water-temperature`). Deploy vain deviin
 (`tampere360-dev-*`); prodia ei muutettu.
 
+## 35. Sama säävaroitus toistui monta kertaa — juurisyy ja upsert-korjaus (3.10.2026)
+
+**Käyttäjän havainto:** Säävaroitukset-sivulla (`/saa`) näkyi monta riviä, jotka
+olivat kuitenkin sama varoitus.
+
+**Mittaus (dev, 3.10.2026):** `GET /v1/situations?category=WEATHER&status=ACTIVE`
+palautti **12 riviä**, jotka kaikki olivat sama "Tuulivaroitus maa-alueille"
+(eri julkaisuajat, osin eri `startsAt`). FMI:n RSS-syötteessä oli 9 voimassa
+olevaa varoitusta, joista **täsmälleen yksi** osui Pirkanmaalle → sivulla olisi
+pitänyt näkyä **1 rivi**.
+
+### Juurisyy (kolme osaa)
+
+1. **FMI lähettää saman varoituksen CAP-viestisarjana** (alkuperäinen `Alert` +
+   toistuvat `Update`-viestit ~1–5 min välein). Jokaisella viestillä on **uusi
+   `<identifier>`**, mutta tunnisteen **viimeinen '.'-osuus pysyy samana** koko
+   varoituksen ajan — sama häntä toistuu myös `<references>`-ketjussa
+   (verifioitu: 14–22 referenssitunnistetta jakoi hännän).
+2. **Adapteri käytti koko identifieriä `sourceId`:nä** →
+   `canonicalKey = FMI_CAP:<koko identifier>` ja
+   `processingKey = FMI_CAP:<identifier>:<contentHash>` **muuttuivat joka
+   päivityksellä** (myös sisältö muuttui: `sent`, probabiliteetti 30 %→60 %,
+   `onset` 22:00→21:00).
+3. **Prosessori loi aina uuden `situationId`-ULIDin** `PutCommand`illa → jokainen
+   FMI-päivitys synnytti **uuden Situation-rivin**.
+
+Sama rakenne oli jättänyt duplikaatteja myös muille lähteille: dev-taulussa oli
+**34 ylimääräistä riviä** (TRAFFIC 30, NYSSE 4), koska myös Digitraffic/Nysse
+lähettävät päivityksiä samalla `canonicalKey`lla.
+
+### Korjaus
+
+| Osa | Muutos |
+|---|---|
+| `apps/ingest-fmi/src/cap-parser.ts` | uusi `warningIdentity(identifier)` = tunnisteen **vakaa häntä** (vain `urn:oid:`-muotoiset; muut sellaisenaan) |
+| `apps/ingest-fmi/src/handler.ts` | `sourceId = warningIdentity(cancelTargetId(parsed))` → `canonicalKey`/`processingKey` pysyvät vakaina koko elinkaaren ajan. Koko identifier säilyy raakadatassa (`raw.identifier`) ja S3:ssa |
+| `apps/situation-processor/src/situation.ts` (uusi) | `deriveSituationId(canonicalKey)` = `sha256(canonicalKey)[0..26]` (deterministinen, URL-turvallinen hex → **ei uutta GSI:tä**, kiertää §20:n GSI-rajoituksen) ja `buildSituationUpsert(event, now, epoch)` → `UpdateCommand`-parametrit |
+| `apps/situation-processor/src/handler.ts` | `PutCommand` + uusi ULID → `UpdateCommand` deterministisellä id:llä. `SourceEvents`-idempotenssi (`attribute_not_exists(processingKey)`) säilyy: identtinen uudelleentoimitus ohitetaan, aidot päivitykset **päivittävät samaa riviä** |
+
+**Ensimmäinen havainto säilyy:** `createdAt` ja `firstSeenAt` asetetaan
+`if_not_exists`-ehdolla, joten päivitys ei nollaa rivin luontia eikä tapahtuman
+ensihavaintoa. Terminaalille asetetaan `expiresAt`-TTL, aktiiviselta se
+`REMOVE`taan. `municipality`/`geohash` ovat sparse-GSI:iden avaimia: asetetaan
+vain jos arvo on, muuten poistetaan.
+
+**Sivuhyöty:** §22:n tunnettu rajoitus ("peruutus luo uuden rivin samalla
+canonicalKeylla, vanha suljetaan siivouksella") poistuu — peruutus päivittää nyt
+saman rivin `CANCELLED`-tilaan.
+
+### Datan siivous (vain dev)
+
+Vanhat rivit säilyttivät vanhan avaimen eivätkä korjaantuisi itsestään. Tehtiin
+yksinkertainen migraatio: `scan` → jokaiselle `canonicalKey`lle jätettiin
+**uusin** rivi (järjestys `updatedAt → firstSeenAt → createdAt`) ja se
+uudelleenavaimistettiin `deriveSituationId`-tunnisteeseen; muut rivit poistettiin.
+
+| Vaihe | Tulos |
+|---|---|
+| Vanhan FMI-muodon rivit (`FMI_CAP:urn:oid:…`) | 13 kpl poistettu (12 ACTIVE-duplikaattia + 1 ENDED) |
+| Koko taulun uudelleenavaimistus | **puts 103, deletes 137, errors 0** |
+
+> Prod-dataa **ei** muutettu. Sama migraatio toistetaan prodissa, kun muutos
+> viedään tuotantoon.
+
+### Verifiointi (dev)
+
+| Tarkistus | Tulos |
+|---|---|
+| Säävaroitukset API | **1 rivi** (oli 12) — "Tuulivaroitus maa-alueille" ✅ |
+| Taulun eheys | 104 riviä, 104 uniikkia `canonicalKey`ta, **0 duplikaattia**, 0 ei-determinististä id:tä ✅ |
+| Adapterin toisto (sama sisältö) | ei uutta riviä — `SourceEvents`-idempotenssi ohittaa ✅ |
+| **Päivityspolku (selftest)** | sama `canonicalKey`, eri `processingKey` + muuttunut `title`/`startsAt` → **sama `situationId`**, sisältö päivittyi, **`firstSeenAt` säilyi** ✅ (selftest-data poistettiin ajon jälkeen) |
+| Muut kategoriat API:ssa | TRAFFIC 3, POLICE 38, PUBLIC_TRANSPORT 10; kaikki uniikkeja ✅ |
+| Lähteet | TAMPERE_TRAFFIC, FMI_CAP, NYSSE_ALERTS, POLICE_RSS = `OK` ✅ |
+
+### Testit ja dokumentaatio
+
+`apps/ingest-fmi/src/cap-parser.test.ts` (+5: hännän poiminta, Alert vs Update
+→ sama identiteetti, eri varoitukset → eri, ei-`urn:oid`, tyhjä) ja
+`apps/situation-processor/src/situation.test.ts` (uusi, 13: determinismi,
+`if_not_exists`, lajitteluajan putoaminen, TTL SET/REMOVE, sparse municipality).
+Koko sarja **610 testiä** ✅, ESLint ✅, tyyppitarkistus ✅, `npm run build` ✅,
+Prettier ✅ (uudet tiedostot; olemassa olevat `ingest-fmi/handler.ts`,
+`cap-parser.test.ts` ja `situation-processor/handler.ts` olivat jo ennestään
+§16:n korjauslistalla, joten niitä ei muotoiltu diffin säilyttämiseksi).
+
+**Deploy vain deviin:** `tampere360-dev-ingestion` ja
+`tampere360-dev-event-processing` (kaksi Lambda-koodimuutosta, 88,9 s).
+`cdk diff` näytti vain `FmiCapAdapterFunction`- ja
+`SituationProcessorFunction`-koodimuutokset — ei muita resursseja.
+**Prodia ei muutettu, eikä muutoksia committoitu.**
+
+### Rajaukset
+
+- Vain dev. Prod toistetaan samana muutoksena (`npm run deploy:prod` +
+  migraatio prod-taululle), kun dev on vahvistettu.
+- `situationId` vaihtuu ULID:sta hashiksi — sitä käytetään vain läpinäkymättömänä
+  avaimena (detail-reitti, React-avain, kartan property), ei järjestys- tai
+  ULID-oletuksia (tarkistettu).
+- `situation-expiry`-logiikka säilyy ennallaan; sivusisar-sulku on nyt FMI:llä
+  harmitonta (peruutus päivittää saman rivin).

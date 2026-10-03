@@ -6,6 +6,7 @@ import {
   capStatusToInternal,
   parseCapXml,
   parseReferences,
+  warningIdentity,
 } from './cap-parser';
 
 /** FMI:n todellinen rakenne: status/msgType/references ovat **alert-tasolla**. */
@@ -122,5 +123,41 @@ describe('parseReferences', () => {
   it('tyhjä tai puuttuva references → []', () => {
     expect(parseReferences(undefined)).toEqual([]);
     expect(parseReferences('')).toEqual([]);
+  });
+});
+
+/**
+ * Varoituksen vakaa identiteetti — regressiosuoja sille, ettei sama varoitus
+ * enää muutu uudeksi tilanteeksi jokaisella FMI:n `Update`-viestillä.
+ * Tunnisteet ovat FMI:n todellisia muotoja (dev 3.10.2026).
+ */
+describe('warningIdentity', () => {
+  const ALERT_ID =
+    'urn:oid:2.49.0.1.246.0.0.2026.23693788.304779733920130434618294129618267851721';
+  const UPDATE_ID =
+    'urn:oid:2.49.0.1.246.0.0.2026.23791817.304779733920130434618294129618267851721';
+  const TAIL = '304779733920130434618294129618267851721';
+
+  it('poimii identifierin vakaan hännän', () => {
+    expect(warningIdentity(UPDATE_ID)).toBe(TAIL);
+  });
+
+  it('sama varoitus eri viesteillä (Alert vs Update) → sama identiteetti', () => {
+    expect(warningIdentity(ALERT_ID)).toBe(warningIdentity(UPDATE_ID));
+  });
+
+  it('eri varoitukset → eri identiteetit', () => {
+    const other = 'urn:oid:2.49.0.1.246.0.0.2026.23791817.289061126666539274056361374866128949649';
+    expect(warningIdentity(other)).not.toBe(TAIL);
+  });
+
+  it('ei-urn:oid-tunniste palautetaan sellaisenaan', () => {
+    expect(warningIdentity('incident-12345')).toBe('incident-12345');
+  });
+
+  it('puuttuva tai tyhjä → tyhjä merkkijono', () => {
+    expect(warningIdentity(undefined)).toBe('');
+    expect(warningIdentity('')).toBe('');
+    expect(warningIdentity('  ')).toBe('');
   });
 });

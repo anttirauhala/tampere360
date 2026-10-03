@@ -219,3 +219,30 @@ export function parseReferences(references?: string): string[] {
   const sender = tokens[0];
   return tokens.filter((token) => token.startsWith('urn:oid:') && token !== sender);
 }
+
+/**
+ * Varoituksen **vakaa identiteetti** CAP-identifieristä.
+ *
+ * FMI lähettää saman varoituksen elinkaaren aikana monta CAP-viestiä
+ * (alkuperäinen `Alert` + toistuvat `Update`-viestit, esim. 1–5 min välein).
+ * Jokaisella viestillä on **uusi** `<identifier>`, mutta FMI pitää tunnisteen
+ * **viimeisen '.'-osuuden** samana koko varoituksen ajan — sama häntä toistuu
+ * myös `<references>`-ketjussa:
+ *
+ * ```
+ * urn:oid:2.49.0.1.246.0.0.2026.23791817.30477973392013043461829412961…
+ *                                └─────────── vakaa häntä ───────────┘
+ * ```
+ *
+ * Ilman tätä jokainen päivitys nähtiin uutena tapahtumana ja loi uuden
+ * tilannerivin (dev 3.10.2026: sama "Tuulivaroitus maa-alueille" 12 kertaa).
+ *
+ * Vain `urn:oid:`-muotoiset tunnisteet lyhennetään; muut palautetaan
+ * sellaisenaan, jotta funktio ei riko odottamatonta muotoa.
+ */
+export function warningIdentity(identifier: string | undefined): string {
+  const value = (identifier ?? '').trim();
+  if (!value.startsWith('urn:oid:')) return value;
+  const tail = value.split('.').pop() ?? value;
+  return tail.length > 0 ? tail : value;
+}
