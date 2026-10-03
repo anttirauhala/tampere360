@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
+import { SAUNA_SOURCE_URL } from '../lib/saunas';
+
 /**
  * Päänavigaation järjestys ja nimet.
  *
@@ -61,7 +63,11 @@ export function Layout() {
           . Säävaroitukset ja -havainnot: Ilmatieteen laitos (CC BY 4.0). Liikennetiedotteet,
           kelikamerat ja liikennemittaukset: Fintraffic / Digitraffic. Poliisitiedotteet:
           Sisä-Suomen poliisilaitos. Joukkoliikenteen häiriötiedotteet ja ajoneuvosijainnit: Nysse /
-          Waltti (CC BY 4.0). Saunatiedot: saunahaku.fi. Veden lämpötila: SYKE (CC BY 4.0).
+          Waltti (CC BY 4.0). Saunatiedot:{' '}
+          <a href={SAUNA_SOURCE_URL} target="_blank" rel="noopener noreferrer">
+            saunahaku.fi
+          </a>
+          . Veden lämpötila: SYKE (CC BY 4.0).
         </p>
         {/*
           Vakavuusluokittelu on oma arviomme (otsikon ja lähdetietojen

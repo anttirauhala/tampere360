@@ -93,6 +93,19 @@ isoiksi kirjaimiksi, ja tietue pudotetaan, jos `id` tai `name` puuttuu.
 `info` sanitoidaan (`sanitizeText`) ennen renderöintiä, ja verkkolinkki
 renderöidään vain http(s)-osoitteesta (`sourceLink`).
 
+### Lähdelinkki (saunahaku.fi)
+
+Lähde mainitaan sivulla kolmessa paikassa — otsikon alla (lead-teksti), sivun
+alahuomautuksessa ja footterissa — ja **kaikki kolme ovat klikattavia linkkejä**,
+jotka avautuvat uuteen välilehteen (`target="_blank" rel="noopener noreferrer"`).
+
+Osoite on yhdessä paikassa: `SAUNA_SOURCE_URL`
+(`apps/web/src/lib/saunas.ts`). Sivun linkki rakennetaan `sourceLink`-apurilla,
+joka hyväksyy vain http(s)-osoitteet ja johtaa otsikon verkkotunnuksesta
+(`saunahaku.fi`) — sama turvallisuuslinja kuin muissa ulkoisissa linkeissä
+(§14, §23). Lead-tekstin linkki on alleviivattu (`.page__lead-link`,
+`apps/web/src/styles.css`), jotta se ei erotu pelkällä värillä (WCAG 1.4.1).
+
 ## 4. Konfiguraatio
 
 `infra/lib/config.ts`:

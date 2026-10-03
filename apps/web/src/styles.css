@@ -148,6 +148,14 @@ a {
   font-weight: bold;
 }
 
+/* Ulkoinen lähdelinkki lead-tekstissä (esim. saunahaku.fi): alleviivaus, jotta
+   linkki ei erotu pelkällä värillä (WCAG 1.4.1). Väri tulee globaalista a:sta. */
+.page__lead-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .page__note {
   margin-top: 24px;
   color: var(--text-muted);

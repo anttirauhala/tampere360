@@ -14,6 +14,16 @@
 import type { Sauna, SaunaOpeningHours } from '../api/saunas';
 import { HELSINKI_TIME_ZONE } from './format';
 
+/**
+ * Saunahaku.fi:n julkinen sivusto — lähdeattribuution linkkiosoite (§33).
+ *
+ * Yksi paikka, jotta sivun lead-teksti, alahuomautus ja footteri osoittavat aina
+ * samaan osoitteeseen. Linkki renderöidään `sourceLink`-apurilla (`lib/format.ts`),
+ * joka hyväksyy vain http(s)-osoitteet — tätä vakiota ei koskaan käytetä
+ * `dangerouslySetInnerHTML`in kanssa.
+ */
+export const SAUNA_SOURCE_URL = 'https://saunahaku.fi';
+
 /** Viikonpäivät lähteen enumina, maanantaista. */
 export const SAUNA_WEEKDAYS = [
   'MONDAY',

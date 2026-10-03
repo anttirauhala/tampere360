@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 
 import { useSaunas, useWaterTemperature } from '../api/queries';
 import { SaunaCard } from '../components/SaunaCard';
-import { formatTime } from '../lib/format';
-import { sortSaunas, todayWeekday } from '../lib/saunas';
+import { formatTime, sourceLink } from '../lib/format';
+import { SAUNA_SOURCE_URL, sortSaunas, todayWeekday } from '../lib/saunas';
 import { formatMeasurementDate, formatWaterTemperature } from '../lib/water';
 
 /**
@@ -29,12 +29,25 @@ export function SaunasPage() {
   const weekday = todayWeekday();
   const saunas = useMemo(() => sortSaunas(data?.saunas ?? [], weekday), [data, weekday]);
   const measured = water ? formatMeasurementDate(water.measuredAt) : '';
+  // Lähdelinkki rakennetaan `sourceLink`-apurilla: se hyväksyy vain http(s)-osoitteet.
+  const source = sourceLink(SAUNA_SOURCE_URL);
 
   return (
     <section className="page">
       <h1 className="page__title">Saunat</h1>
       <p className="page__lead">
-        Tampereen seudun saunat — aukiolo tänään, hinnat ja lisätiedot (saunahaku.fi).
+        Tampereen seudun saunat — aukiolo tänään, hinnat ja lisätiedot (
+        {source && (
+          <a
+            className="page__lead-link"
+            href={source.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {source.label} ↗
+          </a>
+        )}
+        ).
       </p>
 
       {water && water.temperatureC !== null && (
@@ -93,8 +106,14 @@ export function SaunasPage() {
       )}
 
       <p className="page__note">
-        Tiedot: saunahaku.fi. Aukioloajat ja hinnat ovat lähteen ilmoittamia — tarkista poikkeukset
-        saunan omilta sivuilta.
+        Tiedot:{' '}
+        {source && (
+          <a href={source.href} target="_blank" rel="noopener noreferrer">
+            {source.label}
+          </a>
+        )}
+        . Aukioloajat ja hinnat ovat lähteen ilmoittamia — tarkista poikkeukset saunan omilta
+        sivuilta.
         {data?.stale
           ? ' Lista on viimeisin onnistunut haku, lähde ei vastannut viimeisimpään.'
           : ''}

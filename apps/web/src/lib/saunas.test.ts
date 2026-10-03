@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Sauna, SaunaOpeningHours } from '../api/saunas';
+import { sourceLink } from './format';
 import {
+  SAUNA_SOURCE_URL,
   formatAddress,
   formatClock,
   formatPrice,
@@ -272,5 +274,21 @@ describe('sortSaunas', () => {
     const sorted = sortSaunas(list, 'MONDAY');
     expect(list[0]?.id).toBe('b');
     expect(sorted[0]?.id).toBe('a');
+  });
+});
+
+describe('SAUNA_SOURCE_URL', () => {
+  it('osoittaa saunahaku.fi-palveluun https:nä ja antaa otsikoksi verkkotunnuksen', () => {
+    // Regressiosuoja: sivun lead-teksti, alahuomautus ja footteri käyttävät
+    // samaa vakiota. `sourceLink` hyväksyy vain http(s)-osoitteet, joten sen
+    // tulos on turvallinen renderöidä sellaisenaan (§14).
+    const link = sourceLink(SAUNA_SOURCE_URL);
+    expect(link).not.toBeNull();
+    expect(link?.href).toBe('https://saunahaku.fi/');
+    expect(link?.label).toBe('saunahaku.fi');
+  });
+
+  it('on https-osoite (ei http, ei javascript)', () => {
+    expect(SAUNA_SOURCE_URL.startsWith('https://')).toBe(true);
   });
 });

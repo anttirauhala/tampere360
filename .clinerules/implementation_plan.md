@@ -2228,5 +2228,64 @@ klo 18.41` ja `Alkoi ma 1.6.2026 klo 07.00` — viikonpäivä pienellä ja oikea
 muoto tulevalle ajalle ✅. Julkaistu bundle sisältää `` `Alkaa`:`Alkoi` `` ja
 `weekday?{weekday:`short`}`.
 
-**Deploy vain deviin:** `tampere360-dev-frontend` (74,9 s). **Prodia ei
-muutettu, eikä muutoksia committoitu.**
+## 37. Saunat-sivun lähdelinkki saunahaku.fi (3.10.2026)
+
+Saunat-sivulla lähde mainittiin kolmessa paikassa pelkkänä tekstinä. Ne
+muutettiin klikattaviksi linkeiksi, jotka avaavat **https://saunahaku.fi**
+uuteen välilehteen.
+
+| Osa | Muutos |
+|---|---|
+| `apps/web/src/lib/saunas.ts` | uusi vakio `SAUNA_SOURCE_URL = 'https://saunahaku.fi'` — yksi paikka, jota lead, alahuomautus ja footteri käyttävät |
+| `apps/web/src/pages/SaunasPage.tsx` | lead `…lisätiedot (saunahaku.fi ↗)` ja alahuomautus `Tiedot: saunahaku.fi.` linkeiksi (`sourceLink`-apurilla) |
+| `apps/web/src/components/Layout.tsx` | footterin `Saunatiedot: saunahaku.fi.` linkiksi |
+| `apps/web/src/styles.css` | `.page__lead-link` = accent-väri + alleviivaus (WCAG 1.4.1: linkki ei erotu pelkällä värillä) |
+
+**Miksi `sourceLink` eikä pelkkä `href`:** sama apuri kuin korttien
+lähdelinkeissä (§23) — se hyväksyy vain http(s)-osoitteet, joten
+`javascript:`- ja `data:`-osoitteet eivät koskaan päädy linkiksi (§14).
+Kaikki kolme linkkiä avataan `target="_blank" rel="noopener noreferrer"`;
+leadin `↗` on sovelluksen vakiomerkintä ulkoiselle linkille.
+
+**Sanamuodot säilyivät:** vain maininta muuttui linkiksi (sulut ja lauseet
+ennallaan). Ei API-, infra- eikä CSP-muutosta — ulkoinen `<a>` ei aiheuta
+selainpyyntöä.
+
+**Testit:** `apps/web/src/lib/saunas.test.ts` +2 (vakion https-muoto ja
+`sourceLink`-tulos: `href` `https://saunahaku.fi/`, label `saunahaku.fi`) →
+saunas-testit 26 ✅. Koko sarja ✅, ESLint ✅, Prettier ✅,
+`npm run build:web` ✅.
+
+**Verifiointi 3.10.2026 (dev, `d36ic5wsx4b9yl.cloudfront.net`, headless
+Chrome `--dump-dom`):** julkaistu `index.html` osoittaa omaan buildiin
+(`assets/index-DJfesDdp.js`), CSS sisältää `.page__lead-link`in, ja DOM:issa
+on **täsmälleen 3** saunahaku-linkkiä:
+
+| Paikka | DOM |
+|---|---|
+| Lead | `<a class="page__lead-link" href="https://saunahaku.fi/" target="_blank" rel="noopener noreferrer">saunahaku.fi ↗</a>` |
+| Alahuomautus | `Tiedot: <a href="https://saunahaku.fi/" target="_blank" rel="noopener noreferrer">saunahaku.fi</a>.` |
+| Footteri | `Saunatiedot: <a href="https://saunahaku.fi" target="_blank" rel="noopener noreferrer">saunahaku.fi</a>.` |
+
+Sivu renderöi 22 saunakorttia ja veden lämpötilan (12,5 °C) ✅; sivun
+konsolissa ei virheitä eikä CSP-rikkomuksia.
+
+Lisäksi **CDP-klikkauskoe** (headless Chrome, `Input.dispatchMouseEvent`, koska
+vastaava koe paljasti aiemmin §28:ssa peittoon jääneen sulkunapin): linkin
+keskipisteessä `document.elementFromPoint` osuu linkkiin (ei peittoa), laskettu
+tyyli on `rgb(77, 163, 255)` (= `--accent`) + `underline`, ja klikkaus avasi
+**uuden välilehden** osoitteeseen `https://saunahaku.fi/` ✅. Lead-teksti
+renderöityy muodossa
+`Tampereen seudun saunat — aukiolo tänään, hinnat ja lisätiedot (saunahaku.fi ↗).`
+
+**Deploy vain deviin:** `tampere360-dev-frontend` (75,4 s). Prodia ei muutettu
+— ks. huomio alla.
+
+**Huomio taustaprosessista:** deployn aikana oli käynnissä *aiempi, tästä
+työstä riippumaton* prod-deploy (`tampere360-prod-*`, alkanut klo 16.38). Se
+oli synsannut assetinsa ennen tätä buildia, ja staged-assetista tarkistettiin,
+ettei se sisällä `page__lead-link`iä → **prod sai vanhan bundlen eikä tätä
+muutosta**. Jos muutos halutaan myös prodiin, se tehdään erikseen
+(`npm run deploy:prod`).
+
+
