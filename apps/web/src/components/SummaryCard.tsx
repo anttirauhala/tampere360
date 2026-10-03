@@ -44,7 +44,7 @@ export function SummaryCard({ category, items, total, to }: Props) {
 
       <ul className="summary-card__list">
         {items.map((item) => {
-          const time = formatCompactTime(item);
+          const time = formatCompactTime(item, { weekday: true });
           const title = sanitizeText(item.title) || 'Tuntematon tapahtuma';
           const description = distinctDescription(title, sanitizeText(item.description));
           const link = sourceLink(item.url);

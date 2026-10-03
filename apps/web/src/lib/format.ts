@@ -49,9 +49,20 @@ export function sanitizeText(input: string | undefined | null): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/** Ajankohdan muotoiluvalinnat. */
+export interface TimeFormatOptions {
+  /**
+   * Näytä viikonpäivä lyhenteenä ajankohdan edessä, esim. `la 3.10.2026 klo 07.00`.
+   * Lyhenne on pienellä alkukirjaimella (fi-FI: `ma`, `ti`, `ke` …).
+   * Oletus: ei viikonpäivää (`3.10.2026 klo 07.00`).
+   */
+  weekday?: boolean;
+}
+
 /**
  * Muotoilee ISO-aikaleiman suomenkieliseksi ajankohdaksi.
  * Mukana päivä, kuukausi JA vuosi (esim. "6.9.2026 klo 7.32").
+ * `options.weekday` lisää viikonpäivälyhenteen eteen (esim. "la 3.10.2026 klo 07.00").
  *
  * Aikavyöhyke on aina Suomen aika (ks. `HELSINKI_TIME_ZONE`): tapahtumat,
  * varoitukset ja kamerakuvat ovat suomalaisia, joten käyttäjän selaimen
@@ -59,12 +70,16 @@ export function sanitizeText(input: string | undefined | null): string {
  * esimerkiksi UTC:llä ajettava selain (tai ulkomailla oleva käyttäjä) näkisi
  * kellonajan 3 tuntia pielessä.
  */
-export function formatTime(iso: string | undefined | null): string {
+export function formatTime(
+  iso: string | undefined | null,
+  options?: TimeFormatOptions,
+): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleString('fi-FI', {
     timeZone: HELSINKI_TIME_ZONE,
+    ...(options?.weekday ? { weekday: 'short' as const } : {}),
     day: 'numeric',
     month: 'numeric',
     year: 'numeric',
@@ -132,16 +147,33 @@ export interface SituationTimes {
 /**
  * Lyhyt aikateksti koostekortille.
  *
- * Palauttaa "Alkoi 20.9.2026 klo 08.53", jos lähteen oma alkuaika on tiedossa,
- * muuten "Julkaistu 17.9.2026 klo 10.56". Sana kertoo aina, kumpi aika on
- * kyseessä, jotta julkaisuaika ei näytä tapahtuman alkuajalta (§5).
+ * Palauttaa "Alkaa 20.9.2026 klo 08.53", jos lähteen oma alkuaika on
+ * **tulevaisuudessa**, muuten "Alkoi …". Jos alkuaikaa ei ole, palautetaan
+ * "Julkaistu 17.9.2026 klo 10.56". Sana kertoo aina, kumpi aika on kyseessä,
+ * jotta julkaisuaika ei näytä tapahtuman alkuajalta (§20). Säävaroituksen
+ * alkuaika on usein tulevaisuudessa, joten "Alkoi" olisi siinä harhaanjohtava.
+ *
+ * `options.weekday` lisää viikonpäivän ajankohdan eteen (esim. Nyt-sivun
+ * kortit: "la 3.10.2026 klo 07.00").
  */
-export function formatCompactTime(times: SituationTimes): string {
+export function formatCompactTime(
+  times: SituationTimes,
+  options?: TimeFormatOptions,
+): string {
   const startsAt = times.startsAt ?? null;
-  if (startsAt) return `Alkoi ${formatTime(startsAt)}`;
+  if (startsAt) {
+    const label = isFuture(startsAt) ? 'Alkaa' : 'Alkoi';
+    return `${label} ${formatTime(startsAt, options)}`;
+  }
 
   const publishedAt = times.publishedAt ?? null;
-  if (publishedAt) return `Julkaistu ${formatTime(publishedAt)}`;
+  if (publishedAt) return `Julkaistu ${formatTime(publishedAt, options)}`;
 
   return '';
+}
+
+/** Onko aikaleima tulevaisuudessa suhteessa nykyhetkeen. */
+function isFuture(iso: string): boolean {
+  const ms = Date.parse(iso);
+  return !Number.isNaN(ms) && ms > Date.now();
 }

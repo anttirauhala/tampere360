@@ -2192,3 +2192,41 @@ Prettier ✅ (uudet tiedostot; olemassa olevat `ingest-fmi/handler.ts`,
   ULID-oletuksia (tarkistettu).
 - `situation-expiry`-logiikka säilyy ennallaan; sivusisar-sulku on nyt FMI:llä
   harmitonta (peruutus päivittää saman rivin).
+
+## 36. Nyt-sivun aikamuotoilu: "Alkaa/Alkoi" ja viikonpäivä (3.10.2026)
+
+Nyt-sivun koostekorttien ajankohtaan kaksi muutosta:
+
+1. **"Alkaa" tulevaisuudessa.** Jos tapahtuman oma alkuaika (`startsAt`) on
+   tulevaisuudessa, näytetään **"Alkaa"** eikä "Alkoi". Säävaroituksen alkuaika
+   on usein tulevaisuudessa, joten "Alkoi" oli harhaanjohtava.
+2. **Viikonpäivä eteen.** Nyt-sivun korteilla ajankohdan edessä näytetään
+   viikonpäivälyhenne **pienellä alkukirjaimella** (esim. `la 3.10.2026 klo 07.00`,
+   `ti`, `ma`). Pieni alkukirjain vastaa fi-FI:n lyhyttä viikonpäivämuotoa.
+
+| Osa | Muutos |
+|---|---|
+| `apps/web/src/lib/format.ts` | uusi `TimeFormatOptions { weekday?: boolean }`; `formatTime(iso, options)` lisää `weekday: 'short'`; `formatCompactTime(times, options)` valitsee `Alkaa`/`Alkoi` apurilla `isFuture` |
+| `apps/web/src/components/SummaryCard.tsx` | Nyt-sivun koostekortti kutsuu `formatCompactTime(item, { weekday: true })` |
+
+**Rajaus:** viikonpäivä näytetään **vain Nyt-sivun koostekorteilla**
+(`SummaryCard`). Kategoria-/tyyppisivut (`CategoryPage`) ja joukkoliikenteen
+sivupaneeli näyttävät edelleen ajankohdan ilman viikonpäivää — mutta saavat
+"Alkaa/Alkoi"-logiikan, koska se on jaetussa `formatCompactTime`-funktiossa.
+Muut `formatTime`-kutsujat (kamerat, TMS, saunat, lähteet) säilyvät ennallaan
+(viikonpäivä ei ole oletus).
+
+**Testit:** `apps/web/src/lib/format.test.ts` +8 (formatTime weekday + oletus,
+`formatCompactTime` tyhjä/Alkaa/Alkoi/Julkaistu/weekday/tuleva+weekday) → 30.
+Koko sarja **618 testiä** ✅, ESLint ✅, `npm run build:web` ✅, Prettier ✅
+(muokatut tiedostot; `lib/format.ts` oli jo ennestään §16:n korjauslistalla,
+joten sitä ei muotoiltu diffin säilyttämiseksi).
+
+**Verifiointi (dev, headless Chrome):** Nyt-sivun DOM renderöi mm.
+`Alkaa ti 6.10.2026 klo 00.00` (tuleva säävaroitus), `Julkaistu pe 2.10.2026
+klo 18.41` ja `Alkoi ma 1.6.2026 klo 07.00` — viikonpäivä pienellä ja oikea
+muoto tulevalle ajalle ✅. Julkaistu bundle sisältää `` `Alkaa`:`Alkoi` `` ja
+`weekday?{weekday:`short`}`.
+
+**Deploy vain deviin:** `tampere360-dev-frontend` (74,9 s). **Prodia ei
+muutettu, eikä muutoksia committoitu.**

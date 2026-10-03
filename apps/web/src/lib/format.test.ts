@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { distinctDescription, formatAge, formatTime, sanitizeText, sourceLink } from './format';
+import {
+  distinctDescription,
+  formatAge,
+  formatCompactTime,
+  formatTime,
+  sanitizeText,
+  sourceLink,
+} from './format';
 
 describe('sanitizeText', () => {
   it('palauttaa tyhjän merkkijonolle, jonka arvo puuttuu', () => {
@@ -58,6 +65,15 @@ describe('formatTime', () => {
     expect(formatted).toContain('klo');
   });
 
+  it('lisää viikonpäivän eteen, kun weekday-valinta on päällä', () => {
+    // 3.10.2026 on lauantai; Suomi on lokakuussa UTC+3 → 07.00.
+    expect(formatTime('2026-10-03T04:00:00Z', { weekday: true })).toBe('la 3.10.2026 klo 07.00');
+  });
+
+  it('ei näytä viikonpäivää ilman valintaa (oletus)', () => {
+    expect(formatTime('2026-10-03T04:00:00Z')).toBe('3.10.2026 klo 07.00');
+  });
+
   /**
    * Regressiosuoja (23.9.2026): kamerasivulla aika näytti olevan 3 tuntia
    * pielessä. Syynä oli se, että aika muotoiltiin selaimen aikavyöhykkeellä —
@@ -109,6 +125,42 @@ describe('formatAge', () => {
     expect(formatAge(new Date(Date.now() - 5 * 60_000).toISOString())).toBe('5 min sitten');
     expect(formatAge(new Date(Date.now() - 3 * 3_600_000).toISOString())).toBe('3 h sitten');
     expect(formatAge(new Date(Date.now() - 2 * 86_400_000).toISOString())).toBe('2 vrk sitten');
+  });
+});
+
+describe('formatCompactTime', () => {
+  it('palauttaa tyhjän, kun aikoja ei ole', () => {
+    expect(formatCompactTime({})).toBe('');
+    expect(formatCompactTime({ startsAt: null, publishedAt: null })).toBe('');
+  });
+
+  it('tulevaisuudessa oleva alkuaika → "Alkaa"', () => {
+    // Regressiosuoja: säävaroituksen alkuaika on usein tulevaisuudessa,
+    // jolloin "Alkoi" olisi harhaanjohtava.
+    const future = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    expect(formatCompactTime({ startsAt: future })).toMatch(/^Alkaa /);
+  });
+
+  it('mennyt alkuaika → "Alkoi"', () => {
+    expect(formatCompactTime({ startsAt: '2020-01-01T00:00:00Z' })).toMatch(/^Alkoi /);
+  });
+
+  it('ilman alkuaikaa käytetään julkaisuaikaa', () => {
+    expect(formatCompactTime({ startsAt: null, publishedAt: '2020-01-01T00:00:00Z' })).toMatch(
+      /^Julkaistu /,
+    );
+  });
+
+  it('näyttää viikonpäivän ajankohdan edessä weekday-valinnalla', () => {
+    expect(formatCompactTime({ startsAt: '2020-01-01T00:00:00Z' }, { weekday: true })).toBe(
+      'Alkoi ke 1.1.2020 klo 02.00',
+    );
+  });
+
+  it('tuleva varoitus + viikonpäivä: "Alkaa la 3.10.2099 klo 07.00"', () => {
+    expect(formatCompactTime({ startsAt: '2099-10-03T04:00:00Z' }, { weekday: true })).toBe(
+      'Alkaa la 3.10.2099 klo 07.00',
+    );
   });
 });
 
