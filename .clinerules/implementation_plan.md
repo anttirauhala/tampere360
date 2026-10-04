@@ -2740,7 +2740,9 @@ ensimmäisestä ajosta lähtien. Korjaus tehtiin `npm audit fix`illä
 
 ### Käsin tehtävät asetukset (eivät ole koodissa)
 
-GitHub: Actions + read-only-työnkulkuoikeudet, Environments `dev` ja `prod`
+GitHub: **Actions permissions = "Allow all actions and reusable workflows"**
+(ilman tätä kaikki ajot kaatuvat `startup_failure`ina, ks. alla) + read-only
+-workflow-oikeudet, Environments `dev` ja `prod`
 (prodissa *required reviewers*), repo-muuttujat `DEV_DEPLOY_ROLE_ARN` /
 `PROD_DEPLOY_ROLE_ARN` (valinnainen `AWS_REGION`), branch protection
 (`checks`), Dependabot-hälytykset. AWS: OIDC-provider, kaksi deploy-roolia
@@ -2749,6 +2751,42 @@ GitHub: Actions + read-only-työnkulkuoikeudet, Environments `dev` ja `prod`
 
 **Ei committoitu eikä pushattu tässä työssä** — muutokset ovat työhakemistossa
 odottamassa läpikäyntiä (format-baseline on tarkoitus committoida omanaan).
+
+### Ensimmäinen ajo GitHubissa: `startup_failure` (4.10.2026)
+
+Push `main`-haaraan (`386fe25`) loi CI-ajon, joka päättyi heti
+`startup_failure`iin: **0 jobia, ei lokia, ei check-runia** — eli workflow ei
+koskaan käynnistynyt. Diagnoosi tehtiin koehaaralla (`ci/probe-*`, poistettu
+analyysin jälkeen) kolmella probe-työnkululla:
+
+| Probe | Sisältö | Tulos |
+|---|---|---|
+| Probe1 | `${{ vars.AWS_REGION \|\| 'eu-north-1' }}` workflow-tason `env`issä | ✅ käynnistyi (hypoteesi `vars`-kontekstista kumoutui) |
+| Probe2 | sama, mutta literaali arvo | ✅ käynnistyi (kontrolli) |
+| Probe3 | `uses: ./.github/actions/setup` (+ checkout) | ❌ `startup_failure` |
+| Probe4 | **pelkkä `actions/checkout@v4`** | ❌ `startup_failure` |
+| Probe5 | minimaalinen paikallinen composite action (+ checkout) | ❌ `startup_failure` |
+| Probe6 | paikallinen action **ilman** marketplace-actionia | ⚠️ käynnistyi (job kaatui, koska checkout puuttui — odotettua) |
+
+Johtopäätös: mikä tahansa marketplace-action kaataa ajon. GitHubin oma
+virheteksti löytyi ajon sivun HTML:stä:
+
+> *The action actions/checkout@v4 is not allowed in anttirauhala/tampere360
+> because all actions must be from a repository owned by anttirauhala.*
+
+**Syy oli repositorion asetus, ei koodi:** Settings → Actions → General →
+*Actions permissions* oli "Allow select actions and reusable workflows" ilman
+sallittuja actioneita → GitHub esti kaikki marketplace-actionit. Korjaus:
+**"Allow all actions and reusable workflows"** (tai "Allow select" +
+"Allow actions created by GitHub" + "Allow Marketplace actions by verified
+creators"). Runbookin §2.1 ja vianetsintä on päivitetty tällä oireella.
+
+Diagnoosityökalu, jota kannattaa käyttää jatkossa: `actionlint`
+(`rhysd/actionlint` v1.7.12) + SchemaStoren `github-workflow.json`
+— molemmat validoivat työnkulut, mutta **eivät** paljasta repositorion
+käytäntöjä, joten `startup_failure` kannattaa aina tarkistaa ajon sivun
+HTML:stä (hakusana `not allowed`).
+
 
 ### Rajaukset
 

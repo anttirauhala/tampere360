@@ -30,7 +30,17 @@ _rulesetin_ ollessa kyseessä jobin nimi `checks` — ks. §3.
 
 **Settings → Actions → General**
 
-- Actions permissions: _Allow all actions and reusable workflows_
+- **Actions permissions: valitse "Allow all actions and reusable workflows".**
+  Tämä on pakollista. Jos valitset _"Allow select actions and reusable
+  workflows"_ ilman lisävalintoja, GitHub estää **kaikki**
+  marketplace-actionit ja työnkulut kaatuvat heti `startup_failure`ina
+  (0 jobia, ei lokia, ei check-runia). Työnkulun sivulla lukee silloin
+  esimerkiksi: _"The action actions/checkout@v4 is not allowed in
+  anttirauhala/tampere360 because all actions must be from a repository owned
+  by anttirauhala."_ Yhtä toimiva vaihtoehto: pidä "Allow select" mutta rastita
+  **"Allow actions created by GitHub"** ja **"Allow Marketplace actions by
+  verified creators"** — ne kattavat `actions/checkout`, `actions/setup-node`
+  ja `aws-actions/configure-aws-credentials`.
 - Workflow permissions: **Read repository contents and packages** (työnkulut
   korottavat oikeutensa itse: deploy tarvitsee `id-token: write`)
 - Ei rastia kohtaan "Allow GitHub Actions to create and approve pull requests"
@@ -301,14 +311,15 @@ samoja npm-skriptejä ja -konteksteja.
 
 ## 7. Vianetsintä
 
-| Oire                                                      | Todennäköinen syy                                                                                                                              |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Roolin trust policyn `sub` ei vastaa environmentia/haaraa, tai OIDC-provideria ei ole luotu                                                    |
-| `is not authorized to perform: cloudformation:...`        | Deploy-roolilta puuttuu oikeuksia (ks. §3.3)                                                                                                   |
-| `Access Denied` bootstrap-bucketiin                       | `cdk bootstrap --trust` puuttuu (§3.4)                                                                                                         |
-| `npm ci` kaatuu                                           | `package-lock.json` ja `package.json` eri versiossa — aja `npm install` paikallisesti ja committoi lock                                        |
-| CI vihreä, deploy ei käynnisty                            | `workflow_run` vaatii, että **CI on määritelty `main`-haarassa** ja että ajo päättyi `success`iin; manuaalinen ajo löytyy Actions → Deploy dev |
-| Savutesti: `HTTP 403` frontendistä                        | CloudFront-invalidointi kesken — yritykset jatkuvat automaattisesti                                                                            |
-| Savutesti: `lähteet virhetilassa: ...`                    | Oikea havainto: katso syykoodi (`error`) ja SSM-parametri                                                                                      |
-| Savutesti: `ei vielä kirjausta: FMI_CAP`                  | Varoitus; FMI kirjaa tilan 5 min välein                                                                                                        |
-| `Workflow permissions` -virhe `id-token`                  | Työnkulun jobilta puuttuu `permissions: id-token: write` tai repossa ei ole sallittu OIDC:tä                                                   |
+| Oire                                                         | Todennäköinen syy                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ajo päättyy heti `startup_failure`iin, 0 jobia, ei lokia** | **Actions permissions estää marketplace-actionit.** Aseta Settings → Actions → General → _Allow all actions and reusable workflows_ (§2.1). Virhe näkyy työnkulun sivulla: _"The action actions/checkout@v4 is not allowed … because all actions must be from a repository owned by …"_. |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity`    | Roolin trust policyn `sub` ei vastaa environmentia/haaraa, tai OIDC-provideria ei ole luotu                                                                                                                                                                                              |
+| `is not authorized to perform: cloudformation:...`           | Deploy-roolilta puuttuu oikeuksia (ks. §3.3)                                                                                                                                                                                                                                             |
+| `Access Denied` bootstrap-bucketiin                          | `cdk bootstrap --trust` puuttuu (§3.4)                                                                                                                                                                                                                                                   |
+| `npm ci` kaatuu                                              | `package-lock.json` ja `package.json` eri versiossa — aja `npm install` paikallisesti ja committoi lock                                                                                                                                                                                  |
+| CI vihreä, deploy ei käynnisty                               | `workflow_run` vaatii, että **CI on määritelty `main`-haarassa** ja että ajo päättyi `success`iin; manuaalinen ajo löytyy Actions → Deploy dev                                                                                                                                           |
+| Savutesti: `HTTP 403` frontendistä                           | CloudFront-invalidointi kesken — yritykset jatkuvat automaattisesti                                                                                                                                                                                                                      |
+| Savutesti: `lähteet virhetilassa: ...`                       | Oikea havainto: katso syykoodi (`error`) ja SSM-parametri                                                                                                                                                                                                                                |
+| Savutesti: `ei vielä kirjausta: FMI_CAP`                     | Varoitus; FMI kirjaa tilan 5 min välein                                                                                                                                                                                                                                                  |
+| `Workflow permissions` -virhe `id-token`                     | Työnkulun jobilta puuttuu `permissions: id-token: write` tai repossa ei ole sallittu OIDC:tä                                                                                                                                                                                             |
