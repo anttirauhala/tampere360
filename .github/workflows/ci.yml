@@ -36,7 +36,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      # Actionien major-versiot määräävät myös niiden oman Node-runtimen:
+      # v4:ät ajavat Node 20:llä, josta GitHub varoittaa jokaisessa ajossa
+      # ("Node.js 20 is deprecated … forced to run on Node.js 24").
+      # checkout v5+ / setup-node v5+ / configure-aws-credentials v5+ = Node 24.
+      - uses: actions/checkout@v7
 
       - name: Asenna riippuvuudet ja build
         uses: ./.github/actions/setup
