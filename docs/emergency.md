@@ -38,7 +38,8 @@ aws apigatewayv2 get-apis --region eu-north-1 \
   --query "Items[?Name=='tampere360-prod-api'].ApiId" --output text
 aws apigatewayv2 get-apis --region eu-north-1 \
   --query "Items[?Name=='tampere360-dev-api'].ApiId" --output text
-# 20.9.2026: prod = e75dymdxu4, dev = vllod80b6i
+# HUOM: API-id voi vaihtua, jos stack tai sen resurssi korvataan (devissä näin
+# on käynyt). Hae se aina yllä olevalla komennolla äläkä luota muistiin.
 
 START=$(date -u -d '-24 hours' +%Y-%m-%dT%H:%M:%SZ); END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -391,7 +392,8 @@ aws lambda put-function-concurrency --region eu-north-1 \
   --function-name tampere360-prod-api --reserved-concurrent-executions 5
 ```
 
-**DEV — sama logiikka:** API-id `vllod80b6i`, funktio `tampere360-dev-api`.
+**DEV — sama logiikka:** hae API-id yllä olevalla `get-apis`-komennolla
+(`tampere360-dev-api`), funktio `tampere360-dev-api`.
 
 ---
 
