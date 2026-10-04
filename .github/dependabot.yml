@@ -30,6 +30,31 @@ updates:
         exclude-patterns:
           - 'aws-cdk*'
           - '@aws-cdk/*'
+          # typescript on oma ryhmänsä (ks. alla), jotta dev-tooling-ryhmä ei
+          # voi koskaan sisältää sen major-hyppyä (ks. ignore jäljempänä).
+          - 'typescript'
+      # TypeScript omana ryhmänään: vain minor- ja patch-päivitykset.
+      # Major-hyppy (7.x) on blokattu ignoressa, koska typescript-eslint
+      # ei tue sitä vielä.
+      typescript:
+        patterns:
+          - 'typescript'
+        update-types:
+          - 'minor'
+          - 'patch'
+
+    # typescript-eslint 8.x — myös canary 8.71.1-alpha — tukee vain
+    # typescript <6.1.0, joten TypeScript 7:n major-hyppy kaataa `npm ci`:n
+    # ERESOLVE-virheeseen (havaittu 4.10.2026, dev-tooling-ryhmä). Blokataan
+    # toistaiseksi vain TS:n major; muut dev-tooling-päivitykset kulkevat
+    # normaalisti (ne on verifioitu: build, lint, format, 645 testiä, synth).
+    # HUOM: ilman tähteä `dependency-name` osuu vain täsmälleen samannimiseen
+    # pakettiin, ei siis typescript-eslintiin (ks. Dependabot options
+    # reference). Poista tämä sääntö, kun typescript-eslint tukee TS 7:ää.
+    ignore:
+      - dependency-name: 'typescript'
+        update-types:
+          - 'version-update:semver-major'
 
   # .github/workflows/** ja .github/actions/** -toimintojen versiot.
   - package-ecosystem: github-actions
