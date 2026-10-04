@@ -105,6 +105,22 @@ const data = new DataStack(app, `${prefix}-data`, {
 
 const eventing = new EventingStack(app, `${prefix}-eventing`, { appContext, env });
 
+// Järjestys on tarkoituksellinen: **event-processing luodaan ennen
+// ingestion-stackia**, koska CloudFormation deployaa stackit tässä
+// järjestyksessä. Ingestionin Schedulerit alkavat ajaa heti, kun sen stack on
+// valmis — jos situation-processor (ja EventBridge-sääntö) eivät ole vielä
+// olemassa, ensimmäiset normalisoidut tapahtumat julkaistaan sääntöön, jota ei
+// ole, ja ne **häviävät pysyvästi** eivätkä enää palaa (adaptterit lähettävät
+// vain muuttuneet tietueet, ks. source-adapter-sdk/incremental.ts).
+// Havaittu 4.10.2026: tuore dev-deploy menetti Poliisi/Nysse/FMI-tapahtumat.
+const processing = new EventProcessingStack(app, `${prefix}-event-processing`, {
+  appContext,
+  env,
+  eventBus: eventing.eventBus,
+  situationsTable: data.situationsTable,
+  sourceEventsTable: data.sourceEventsTable,
+});
+
 const ingestion = new IngestionStack(app, `${prefix}-ingestion`, {
   appContext,
   env,
@@ -112,14 +128,6 @@ const ingestion = new IngestionStack(app, `${prefix}-ingestion`, {
   rawBucket: data.rawBucket,
   eventBus: eventing.eventBus,
   ingestionStateTable: data.ingestionStateTable,
-});
-
-const processing = new EventProcessingStack(app, `${prefix}-event-processing`, {
-  appContext,
-  env,
-  eventBus: eventing.eventBus,
-  situationsTable: data.situationsTable,
-  sourceEventsTable: data.sourceEventsTable,
 });
 
 const api = new ApiStack(app, `${prefix}-api`, {

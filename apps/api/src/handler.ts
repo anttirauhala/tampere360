@@ -141,7 +141,18 @@ async function hCategories(): Promise<APIGatewayProxyResultV2> {
 
 async function hSources(): Promise<APIGatewayProxyResultV2> {
   const r = await doc.send(new ScanCommand({ TableName: process.env['INGESTION_STATE_TABLE_NAME'] }));
-  return { statusCode: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sources: r.Items ?? [] }) };
+  // Projisoi kentät eksplisiittisesti: tauluun tallennetaan myös adapterin
+  // sisäinen `sentItems`-kartta (muuttumattomien tietueiden ohitus), eikä sitä
+  // pidä palauttaa julkisesta API:sta.
+  const sources = (r.Items ?? []).map((i: Record<string, unknown>) => ({
+    source: i.source,
+    status: i.status,
+    lastSuccessfulFetch: i.lastSuccessfulFetch,
+    itemsReceived: i.itemsReceived,
+    error: i.error,
+    updatedAt: i.updatedAt,
+  }));
+  return { statusCode: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sources }) };
 }
 
 async function hHealthSources(): Promise<APIGatewayProxyResultV2> {

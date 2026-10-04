@@ -1,12 +1,26 @@
 /**
- * ingest-nysse - Nysse-hairiotiedotteet Waltti APIsta (Basic Auth)
+ * ingest-nysse — Nysse-häiriötiedotteet Waltti APIsta (Basic Auth).
+ *
+ * Kustannusoptimointi 4.10.2026: vain muuttuneet tietueet lähetetään ja
+ * yhdestä ajokerrasta syntyy yksi S3-objekti (ks. source-adapter-sdk).
+ * Aiemmin sama muuttumaton häiriö lähetettiin minuutin välein.
  */
 
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { createLogger } from '@tampere360/observability';
-import { saveIngestionCheckpoint, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
+import {
+  buildRawArchive,
+  buildSentItems,
+  dropSentItems,
+  loadSentItems,
+  rawArchiveKey,
+  saveIngestionCheckpoint,
+  selectChangedItems,
+  sha256Hex,
+  ulid,
+} from '@tampere360/source-adapter-sdk';
 import { transit_realtime } from 'gtfs-realtime-bindings';
 
 import { type NysseOutcome, buildNysseCheckpoint } from './checkpoint';
@@ -14,20 +28,36 @@ import { type NysseOutcome, buildNysseCheckpoint } from './checkpoint';
 const logger = createLogger({ service: 'ingest-nysse', source: 'NYSSE_ALERTS', environment: process.env['ENVIRONMENT'] ?? 'dev' });
 const s3 = new S3Client({}); const sqs = new SQSClient({}); const ssm = new SSMClient({});
 
+const SOURCE = 'NYSSE_ALERTS' as const;
+const ARCHIVE_PREFIX = 'nysse';
+
+/** Yhden häiriön ehdokas (ennen muutosvertailua). */
+interface NysseCandidate {
+  sourceId: string;
+  contentHash: string;
+  processingKey: string;
+  raw: unknown;
+}
+
 /**
  * Kirjoittaa lähdekohtaisen tilan IngestionState-tauluun JOKAISELLA ajokerralla.
  * Tämä on ainoa tapa, jolla `/v1/health/sources` näkee lähteen — myös silloin
  * kun ajo ei tuottanut yhtään tietuetta (esim. puuttuva API-avain).
  */
-async function saveCheckpoint(outcome: NysseOutcome, itemsReceived = 0): Promise<void> {
+async function saveCheckpoint(
+  outcome: NysseOutcome,
+  itemsReceived = 0,
+  sentItems?: Record<string, string>,
+): Promise<void> {
   const checkpoint = buildNysseCheckpoint(outcome, itemsReceived);
   await saveIngestionCheckpoint({
     tableName: process.env['INGESTION_STATE_TABLE_NAME'] ?? '',
-    source: 'NYSSE_ALERTS',
+    source: SOURCE,
     status: checkpoint.status,
     itemsReceived: checkpoint.itemsReceived,
     ...(checkpoint.lastSuccessfulFetch ? { lastSuccessfulFetch: checkpoint.lastSuccessfulFetch } : {}),
     ...(checkpoint.error ? { error: checkpoint.error } : {}),
+    ...(sentItems ? { sentItems } : {}),
   });
 }
 
@@ -58,6 +88,7 @@ async function fetchWithAuth(url: string, authBase64: string): Promise<Buffer | 
 export async function handler(): Promise<{ status: string; itemsProcessed: number }> {
   const bucketName = process.env['RAW_BUCKET_NAME'] ?? '';
   const queueUrl = process.env['INGESTION_QUEUE_URL'] ?? '';
+  const tableName = process.env['INGESTION_STATE_TABLE_NAME'] ?? '';
   const env = process.env['ENVIRONMENT'] || 'dev';
   const invocationId = ulid();
 
@@ -146,30 +177,103 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
     return { status: 'OK', itemsProcessed: 0 };
   }
 
-  const processed: string[] = [];
-  for (const a of alerts) {
-    // Sisältötarkiste lasketaan VAIN häiriön omista, vakioista kentistä:
-    // feedTimestamp muuttuu jokaisella haulla eikä se saa muuttaa
-    // processingKeyta (muuten sama häiriö lois uuden tilanteen joka minuutti).
+  // Sisältötarkiste lasketaan VAIN häiriön omista, vakioista kentistä:
+  // feedTimestamp muuttuu jokaisella haulla eikä se saa muuttaa
+  // processingKeyta (muuten sama häiriö lois uuden tilanteen joka minuutti).
+  const candidates: NysseCandidate[] = alerts.map((a) => {
     const core = {
-      entityId: a.entityId, header: a.header, description: a.description,
-      start: a.start, end: a.end,
+      entityId: a['entityId'], header: a['header'], description: a['description'],
+      start: a['start'], end: a['end'],
     };
     const c = sha256Hex(JSON.stringify(core));
-    const sourceId = a.entityId ?? `alert-${c.slice(0, 16)}`;
-    const pk = `NYSSE_ALERTS:${sourceId}:${c.slice(0, 16)}`;
-    const bid = ulid();
-    const key = `source=nysse/year=${new Date().getUTCFullYear()}/${bid}.json`;
-    const raw = { ...core, feedTimestamp };
-    try { await s3.send(new PutObjectCommand({ Bucket: bucketName, Key: key, Body: JSON.stringify(raw), ContentType: 'application/json' })); } catch { continue; }
-    const se = { parsedId: ulid(), batchId: bid, source: 'NYSSE_ALERTS', sourceId, processingKey: pk, raw, extractedAt: new Date().toISOString() };
-    const msg = { schemaVersion: '1.0', batch: { batchId: bid, source: 'NYSSE_ALERTS', fetchedAt: new Date().toISOString(), s3Key: key, contentType: 'application/json', byteSize: Buffer.byteLength(JSON.stringify(raw), 'utf8'), contentHash: c, itemCount: 1 }, events: [se], correlationId: invocationId };
-    try { await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(msg) })); } catch { continue; }
-    processed.push(sourceId);
+    const sourceId = a['entityId'] ?? `alert-${c.slice(0, 16)}`;
+    return {
+      sourceId,
+      contentHash: c,
+      processingKey: `NYSSE_ALERTS:${sourceId}:${c.slice(0, 16)}`,
+      raw: { ...core, feedTimestamp },
+    };
+  });
+
+  // Lähetä vain muuttuneet (kustannusoptimointi 4.10.2026).
+  const previous = await loadSentItems(tableName, SOURCE);
+  const changed = selectChangedItems(candidates, previous);
+  logger.info('Muutokset', { candidates: candidates.length, changed: changed.length });
+
+  const fetchedAt = new Date().toISOString();
+  const batchId = ulid();
+  const failed: string[] = [];
+  let sent = 0;
+
+  if (changed.length > 0) {
+    const rawKey = rawArchiveKey(ARCHIVE_PREFIX, batchId);
+    const archive = buildRawArchive({
+      source: SOURCE,
+      batchId,
+      fetchedAt,
+      items: candidates.map((c) => ({
+        sourceId: c.sourceId,
+        processingKey: c.processingKey,
+        raw: c.raw,
+      })),
+    });
+    try {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucketName,
+          Key: rawKey,
+          Body: archive,
+          ContentType: 'application/json',
+        }),
+      );
+    } catch (err) {
+      logger.error('S3-virhe', { error: String(err) });
+      await saveCheckpoint('SUCCESS', alerts.length, previous);
+      return { status: 'ERROR', itemsProcessed: 0 };
+    }
+
+    const batch = {
+      batchId,
+      source: SOURCE,
+      fetchedAt,
+      s3Key: rawKey,
+      contentType: 'application/json',
+      byteSize: Buffer.byteLength(archive, 'utf8'),
+      contentHash: sha256Hex(archive),
+      itemCount: candidates.length,
+    };
+
+    for (const c of changed) {
+      const sourceEvent = {
+        parsedId: ulid(), batchId, source: SOURCE, sourceId: c.sourceId,
+        processingKey: c.processingKey, raw: c.raw,
+        extractedAt: new Date().toISOString(),
+      };
+      const ingestMessage = {
+        schemaVersion: '1.0' as const, batch, events: [sourceEvent], correlationId: invocationId,
+      };
+      try {
+        await sqs.send(
+          new SendMessageCommand({
+            QueueUrl: queueUrl,
+            MessageBody: JSON.stringify(ingestMessage),
+            MessageAttributes: {
+              source: { DataType: 'String', StringValue: SOURCE },
+              correlationId: { DataType: 'String', StringValue: invocationId },
+            },
+          }),
+        );
+        sent += 1;
+      } catch (err) {
+        failed.push(c.sourceId);
+        logger.error('SQS-virhe', { sourceId: c.sourceId, error: String(err) });
+      }
+    }
   }
-  logger.info('Nysse valmis', { count: processed.length });
-  await saveCheckpoint('SUCCESS', processed.length);
-  return { status: 'OK', itemsProcessed: processed.length };
+
+  logger.info('Nysse valmis', { sent, failed: failed.length });
+  await saveCheckpoint('SUCCESS', alerts.length, dropSentItems(buildSentItems(candidates), failed));
+  return { status: 'OK', itemsProcessed: sent };
 }
 
 function t(obj: unknown): string {

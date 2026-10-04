@@ -7,7 +7,7 @@
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import type { IngestionStatus, SourceCheckpoint } from '@tampere360/event-contracts';
 
 const client = new DynamoDBClient({});
@@ -29,6 +29,12 @@ export interface SaveCheckpointInput {
   etag?: string;
   lastModified?: string;
   cursor?: string | null;
+  /**
+   * sourceId → contentHash: adapterin muistilista lähetetyistä tietueista.
+   * Mahdollistaa muuttumattomien tietueiden ohituksen (kustannusoptimointi
+   * 4.10.2026, ks. incremental.ts).
+   */
+  sentItems?: Record<string, string>;
 }
 
 /**
@@ -47,11 +53,40 @@ export async function saveIngestionCheckpoint(input: SaveCheckpointInput): Promi
   if (input.etag) item.etag = input.etag;
   if (input.lastModified) item.lastModified = input.lastModified;
   if (input.cursor) item.cursor = input.cursor;
+  if (input.sentItems) item.sentItems = input.sentItems;
 
   try {
     await doc.send(new PutCommand({ TableName: input.tableName, Item: item }));
   } catch {
     // Checkpointin kirjoitus ei ole kriittinen polku.
+  }
+}
+
+/**
+ * Lukee lähdekohtaisen `sentItems`-kartan (sourceId → contentHash), jolla
+ * adapteri tunnistaa jo lähettämänsä tietueet. Palauttaa tyhjän kartan, jos
+ * riviä ei vielä ole (ensimmäinen ajo) tai luku epäonnistuu — tällöin ajo
+ * lähettää kaikki tietueet, kuten ennen optimointia.
+ */
+export async function loadSentItems(tableName: string, source: string): Promise<Record<string, string>> {
+  if (!tableName) return {};
+  try {
+    const result = await doc.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: { source },
+        ProjectionExpression: 'sentItems',
+      }),
+    );
+    const raw = result.Item?.['sentItems'];
+    if (!raw || typeof raw !== 'object') return {};
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof value === 'string') out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
   }
 }
 

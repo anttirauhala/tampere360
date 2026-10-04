@@ -3,12 +3,26 @@
  * (arkkitehtuuri §9). Hakee RSS-syötteen, suodattaa Tampere/Pirkanmaa-
  * aiheiset otsikot, tallentaa raakadatan S3:een ja lähettää tapahtumat
  * SQS-ingestion-jonoon. CC BY 4.0.
+ *
+ * Kustannusoptimointi 4.10.2026: vain muuttuneet tietueet lähetetään ja
+ * yhdestä ajokerrasta syntyy yksi S3-objekti (ks. source-adapter-sdk).
  */
 
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { createLogger } from '@tampere360/observability';
-import { fetchWithRetry, saveIngestionCheckpoint, sha256Hex, ulid } from '@tampere360/source-adapter-sdk';
+import {
+  buildRawArchive,
+  buildSentItems,
+  dropSentItems,
+  fetchWithRetry,
+  loadSentItems,
+  rawArchiveKey,
+  saveIngestionCheckpoint,
+  selectChangedItems,
+  sha256Hex,
+  ulid,
+} from '@tampere360/source-adapter-sdk';
 import { XMLParser } from 'fast-xml-parser';
 
 const logger = createLogger({
@@ -21,15 +35,40 @@ const s3 = new S3Client({});
 const sqs = new SQSClient({});
 
 const RSS_URL = 'https://poliisi.fi/sisa-suomen-poliisilaitos/-/asset_publisher/ZtAEeHB39Lxr/rss';
+const SOURCE = 'POLICE_RSS' as const;
+const ARCHIVE_PREFIX = 'police';
 
 /** Pirkanmaan kaupunkeja ja tunnisteita — jos otsikossa esiintyy, käsitellään. */
 const TAMPERE_KEYWORDS = [
-  'tampere', 'nokia', 'pirkkala', 'ylöjärvi', 'lempäälä', 'kangasala',
-  'virrat', 'ruovesi', 'parkano', 'ikaalinen', 'sastamala',
-  'valkeakoski', 'akaa', 'pirkanmaa', 'tampereella', 'näsijärvi',
-  'rantaväylä', 'hämeenkatu', 'pispala', 'hervanta', 'tesoma',
-  'ratina', 'rautatientori', 'linja-autoasema', 'sorin aukio',
-  'lielahti', 'koivistonkylä', 'lapinniemi', 'epilänharju',
+  'tampere',
+  'nokia',
+  'pirkkala',
+  'ylöjärvi',
+  'lempäälä',
+  'kangasala',
+  'virrat',
+  'ruovesi',
+  'parkano',
+  'ikaalinen',
+  'sastamala',
+  'valkeakoski',
+  'akaa',
+  'pirkanmaa',
+  'tampereella',
+  'näsijärvi',
+  'rantaväylä',
+  'hämeenkatu',
+  'pispala',
+  'hervanta',
+  'tesoma',
+  'ratina',
+  'rautatientori',
+  'linja-autoasema',
+  'sorin aukio',
+  'lielahti',
+  'koivistonkylä',
+  'lapinniemi',
+  'epilänharju',
 ];
 
 function isRelevant(title: string, description: string): boolean {
@@ -45,11 +84,24 @@ interface RssItem {
   pubDate?: string;
 }
 
-const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', textNodeName: '#text' });
+interface PoliceCandidate {
+  sourceId: string;
+  contentHash: string;
+  processingKey: string;
+  raw: unknown;
+  title: string;
+}
+
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  textNodeName: '#text',
+});
 
 export async function handler(): Promise<{ status: string; itemsProcessed: number }> {
   const bucketName = process.env['RAW_BUCKET_NAME'] ?? '';
   const queueUrl = process.env['INGESTION_QUEUE_URL'] ?? '';
+  const tableName = process.env['INGESTION_STATE_TABLE_NAME'] ?? '';
   const invocationId = ulid();
 
   logger.info('Haetaan poliisin RSS-tiedotteita', { url: RSS_URL });
@@ -79,13 +131,16 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
   }
 
   const rawItems = channel.item ?? [];
-  const items: RssItem[] = Array.isArray(rawItems) ? rawItems as RssItem[] : [rawItems] as RssItem[];
+  const items: RssItem[] = Array.isArray(rawItems)
+    ? (rawItems as RssItem[])
+    : ([rawItems] as RssItem[]);
 
   // Suodata duplikaatit guid:n perusteella (normalisointi hoitaa lopullisen idempotenssin)
   const seen = new Set<string>();
   const relevant: RssItem[] = [];
   for (const item of items) {
-    const guid = typeof item.guid === 'object' ? item.guid?.['#text'] ?? '' : String(item.guid ?? '');
+    const guid =
+      typeof item.guid === 'object' ? (item.guid?.['#text'] ?? '') : String(item.guid ?? '');
     if (!guid || seen.has(guid)) continue;
     seen.add(guid);
     const title = String(item.title ?? '');
@@ -97,80 +152,111 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
 
   logger.info('RSS käsitelty', { total: items.length, relevant: relevant.length });
 
-  const processed: string[] = [];
-  for (const item of relevant) {
-    const rawGuid = typeof item.guid === 'object' ? item.guid?.['#text'] ?? '' : String(item.guid ?? '');
+  const candidates: PoliceCandidate[] = relevant.map((item) => {
+    const rawGuid =
+      typeof item.guid === 'object' ? (item.guid?.['#text'] ?? '') : String(item.guid ?? '');
     const sourceId = rawGuid || `police-${ulid()}`;
     const contentHash = sha256Hex(JSON.stringify(item));
-    const processingKey = `POLICE_RSS:${sourceId}:${contentHash.slice(0, 16)}`;
-
-    const batchId = ulid();
-    const rawKey = `source=police/year=${
-      new Date().getUTCFullYear()
-    }/month=${
-      String(new Date().getUTCMonth() + 1).padStart(2, '0')
-    }/day=${
-      String(new Date().getUTCDate()).padStart(2, '0')
-    }/hour=${
-      String(new Date().getUTCHours()).padStart(2, '0')
-    }/${batchId}.xml`;
-
-    try {
-      await s3.send(new PutObjectCommand({
-        Bucket: bucketName, Key: rawKey, Body: JSON.stringify(item), ContentType: 'application/json',
-      }));
-    } catch (err) {
-      logger.error('S3-virhe', { sourceId, error: String(err) });
-      continue;
-    }
-
-    const sourceEvent = {
-      parsedId: ulid(), batchId,
-      source: 'POLICE_RSS' as const,
-      sourceId, revision: undefined,
-      processingKey,
+    return {
+      sourceId,
+      contentHash,
+      processingKey: `POLICE_RSS:${sourceId}:${contentHash.slice(0, 16)}`,
       raw: item,
-      extractedAt: new Date().toISOString(),
+      title: String(item.title ?? ''),
     };
+  });
 
-    const ingestMessage = {
-      schemaVersion: '1.0' as const,
-      batch: {
-        batchId, source: 'POLICE_RSS' as const,
-        fetchedAt: new Date().toISOString(),
-        s3Key: rawKey, contentType: 'application/json',
-        byteSize: Buffer.byteLength(JSON.stringify(item), 'utf8'),
-        contentHash,
-        itemCount: 1,
-      },
-      events: [sourceEvent],
-      correlationId: invocationId,
-    };
+  // Muuttumattomat tietueet ohitetaan (kustannusoptimointi 4.10.2026).
+  const previous = await loadSentItems(tableName, SOURCE);
+  const changed = selectChangedItems(candidates, previous);
+  logger.info('Muutokset', { candidates: candidates.length, changed: changed.length });
 
+  const fetchedAt = new Date().toISOString();
+  const batchId = ulid();
+  const failed: string[] = [];
+  let sent = 0;
+
+  if (changed.length > 0) {
+    const rawKey = rawArchiveKey(ARCHIVE_PREFIX, batchId);
+    const archive = buildRawArchive({
+      source: SOURCE,
+      batchId,
+      fetchedAt,
+      items: candidates.map((c) => ({
+        sourceId: c.sourceId,
+        processingKey: c.processingKey,
+        raw: c.raw,
+      })),
+    });
     try {
-      await sqs.send(new SendMessageCommand({
-        QueueUrl: queueUrl,
-        MessageBody: JSON.stringify(ingestMessage),
-        MessageAttributes: {
-          source: { DataType: 'String', StringValue: 'POLICE_RSS' },
-          correlationId: { DataType: 'String', StringValue: invocationId },
-        },
-      }));
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucketName,
+          Key: rawKey,
+          Body: archive,
+          ContentType: 'application/json',
+        }),
+      );
     } catch (err) {
-      logger.error('SQS-virhe', { sourceId, error: String(err) });
-      continue;
+      logger.error('S3-virhe', { error: String(err) });
+      return { status: 'ERROR', itemsProcessed: 0 };
     }
 
-    processed.push(sourceId);
-    logger.info('Poliisitiedote käsitelty', { sourceId, title: (item.title ?? '').slice(0, 80) });
+    const batch = {
+      batchId,
+      source: SOURCE,
+      fetchedAt,
+      s3Key: rawKey,
+      contentType: 'application/json',
+      byteSize: Buffer.byteLength(archive, 'utf8'),
+      contentHash: sha256Hex(archive),
+      itemCount: candidates.length,
+    };
+
+    for (const c of changed) {
+      const sourceEvent = {
+        parsedId: ulid(),
+        batchId,
+        source: SOURCE,
+        sourceId: c.sourceId,
+        revision: undefined,
+        processingKey: c.processingKey,
+        raw: c.raw,
+        extractedAt: new Date().toISOString(),
+      };
+      const ingestMessage = {
+        schemaVersion: '1.0' as const,
+        batch,
+        events: [sourceEvent],
+        correlationId: invocationId,
+      };
+      try {
+        await sqs.send(
+          new SendMessageCommand({
+            QueueUrl: queueUrl,
+            MessageBody: JSON.stringify(ingestMessage),
+            MessageAttributes: {
+              source: { DataType: 'String', StringValue: SOURCE },
+              correlationId: { DataType: 'String', StringValue: invocationId },
+            },
+          }),
+        );
+        sent += 1;
+        logger.info('Lähetetty', { sourceId: c.sourceId, title: c.title.slice(0, 80) });
+      } catch (err) {
+        failed.push(c.sourceId);
+        logger.error('SQS-virhe', { sourceId: c.sourceId, error: String(err) });
+      }
+    }
   }
 
   await saveIngestionCheckpoint({
-    tableName: process.env['INGESTION_STATE_TABLE_NAME'] ?? '',
-    source: 'POLICE_RSS',
+    tableName,
+    source: SOURCE,
     status: 'OK',
-    lastSuccessfulFetch: new Date().toISOString(),
-    itemsReceived: processed.length,
+    lastSuccessfulFetch: fetchedAt,
+    itemsReceived: candidates.length,
+    sentItems: dropSentItems(buildSentItems(candidates), failed),
   });
-  return { status: 'OK', itemsProcessed: processed.length };
+  return { status: 'OK', itemsProcessed: sent };
 }

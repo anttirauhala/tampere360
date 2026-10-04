@@ -2536,3 +2536,77 @@ Kesto **76,5 s**. WAF on edelleen pois päältä (`wafEnabled=false`), kuten
 | Valitsimen vaihto (390 px) | `/saunat` → `location.pathname` vaihtui, valitsin `/saunat`, aktiivinen linkki "Saunat" ✅ |
 | Konsoli | **0 virhettä, 0 CSP-rikkomusta** ✅ |
 
+
+## 39. Kustannusoptimointi: muuttumattomien ohitus, yksi S3-objekti per ajo, S3 Bucket Key (4.10.2026)
+
+**Lähtökohta:** koko tilin kustannus ~1,2 $/vrk (≈ 1,1 €/vrk). Se ei ollut
+yksittäinen "queue"-rivi vaan jakautui: S3 ~0,35 $, KMS ~0,31 $, CloudWatch
+~0,16 $, **SQS ~0,12 $**, DynamoDB ~0,11 $, EventBridge ~0,08 $ /vrk.
+Syy oli yhteinen: **adapterit kirjoittivat ja lähettivät jokaisen raakatietueen
+uudelleen joka pollauskierroksella** — Nysse ja Tampere Traffic minuutin välein.
+Mittaus 7 vrk:lta: `tampere360-dev-ingestion` 238 619 lähetettyä viestiä,
+`tampere360-prod-ingestion` 238 634 (≈ **34 000 viestiä/vrk/ympäristö**), vaikka
+tietueita oli ~20–25 ja ne muuttuivat harvoin. Dedup tapahtui vasta
+normalisoinnissa (`processingKey`), jolloin SQS-pyyntö, S3-PUT, KMS-kutsu ja
+Lambda-ajo oli jo maksettu. Sama juurisyy selitti S3:n PUT-pyynnöt
+(~2 M/kk ≈ 10 $/kk) ja KMS-pyynnöt (1,09 M/kk = 3,21 $ + avain 0,92 $): ilman
+S3 Bucket Keytä **jokainen objektioperaatio tekee KMS-kutsun** (AWS: bucket key
+vähentää KMS-pyyntöjä jopa 99 %).
+
+### Toteutus
+
+| Osa | Muutos |
+|---|---|
+| `packages/source-adapter-sdk/src/incremental.ts` (uusi) | `selectChangedItems` (vertaa `contentHash`ia), `buildSentItems` (kartta koko joukosta → kadonneet siivoutuvat), `dropSentItems` (epäonnistuneet jäävät uudelleenlähetettäviksi) |
+| `packages/source-adapter-sdk/src/archive.ts` (uusi) | `buildRawArchive` (JSON-kirjekuori `{schemaVersion, source, batchId, fetchedAt, itemCount, items[]}`), `rawArchiveKey` (sama `source=/year=/month=/day=/hour=/<batchId>.json`) |
+| `packages/source-adapter-sdk/src/checkpoint.ts` | `SaveCheckpointInput.sentItems` + `loadSentItems(tableName, source)`. Tila IngestionState-tauluun (PK = source) → **ei IAM-muutosta** (`grantReadWriteData` oli jo) |
+| Kaikki 5 adapteria | lähettävät vain muuttuneet tietueet; **yksi S3-objekti per ajokerta** (kirjoitus vain kun jokin muuttui). FMI säilyttää CAP-XML:n `sourceText`-kentässä |
+| `infra/lib/data-stack.ts` | `bucketKeyEnabled: true` raakabucketiin |
+| `apps/api/src/handler.ts` | `/v1/sources` projisoi kentät eksplisiittisesti — sisäinen `sentItems`-kartta **ei vuoda** julkisesta API:sta |
+
+`itemsReceived` säilytettiin = lähteen palauttamien relevanttien tietueiden
+määrä, joten Lähteiden tila -näkymä ei muutu.
+
+### Verifiointi (dev)
+
+| Tarkistus | Tulos |
+|---|---|
+| Testit / ESLint / Prettier / build | **645 testiä** ✅, ESLint ✅, build ✅ |
+| Deploy dev (8 stackia) | ✅ 791 s |
+| **SQS-lähetykset** `dev-ingestion` | **132 → 0 viestiä / 5 min** kun mikään ei muutu ✅ |
+| **S3-objektit** | tasan **1 per lähde** (nysse ajaa minuutin välein → 1 objekti) ✅ |
+| `sentItems` | TAMPERE_TRAFFIC 3, NYSSE 10, FMI 1, POLICE 33 ✅ |
+| Koko putki | adapteri → normalize → EventBridge → processor → DynamoDB ✅; `/v1/situations` palauttaa kaikki kategoriat ✅ |
+
+**Ei committoja. Prodia ei muutettu.**
+
+### Muutos paljasti kaksi aiemmin piilossa ollutta vikaa
+
+**(1) Stackkien deploy-järjestys menetti tapahtumia.** `cdk deploy --all` loi
+ingestion-stackin (4/8) ennen event-processingiä (5/8). Tuoreessa dev-deployssa
+normalisoija julkaisi tapahtumat 06:02:48 UTC, mutta situation-processor ja
+EventBridge-sääntö syntyivät 06:02:55 — tapahtumat julkaistiin sääntöön, jota ei
+ollut, ja ne **hävisivät pysyvästi**. Aiemmin tämä ei näkynyt, koska tietue
+lähetettiin uudelleen joka minuutti; nyt `sentItems` merkitsi ne lähetetyiksi →
+**Poliisi/Nysse/FMI eivät koskaan ilmestyneet UI:hin** (vain 3 TRAFFIC-riviä).
+Korjaus: (a) `infra/bin/app.ts` luo **event-processingin ennen ingestionia**
+(templaatit ennallaan, `cdk diff` → "no differences"); (b) datan korjaus:
+`sentItems` poistettiin ja adapterit ajettiin uudelleen → POLICE 33,
+PUBLIC_TRANSPORT 10, WEATHER 1, TRAFFIC 3 (47 tilannetta).
+**Operatiivinen muistisääntö:** jos lähetyksen ohi menee tapahtumia (esim. uusi
+deploy), poista `sentItems`-kartat IngestionState-taulusta — muuten ne eivät
+palaa itsestään.
+
+**(2) CDK:n hallitsemat Lambda-logiryhmät ovat `RETAIN`.** Devin `cdk destroy`
+ei poista `/aws/lambda/tampere360-dev-*`-logiryhmiä, joten seuraava deploy
+törmäsi `already exists` (ensimmäinen dev-deploy kaatui tähän). Ne poistettiin
+käsin. Sama asia on pieni CloudWatch-kustannuserä (logit eivät vanhene) —
+suositus jatkoon: eksplisiittinen `logRetention` (dev 3 pv / prod 30 pv).
+
+### Rajaukset
+
+Muutokset vietiin **vain deviin**. Prod toistetaan samana muutoksena
+(`npm run deploy:prod`) ja sen jälkeen prodin `sentItems`-kartat on tyhjennettävä
+kertaalleen, jotta tuoreen deploin aikana mahdollisesti menetetyt tapahtumat
+syntyvät uudelleen.
+

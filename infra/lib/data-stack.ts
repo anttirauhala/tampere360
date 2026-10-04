@@ -59,6 +59,12 @@ export class DataStack extends cdk.Stack {
       ),
       encryption: s3.BucketEncryption.KMS,
       encryptionKey: dataKey,
+      // S3 Bucket Key (kustannusoptimointi 4.10.2026): ilman tätä **jokainen**
+      // objektioperaatio tekee KMS-kutsun (GenerateDataKey/Decrypt). Raakadataan
+      // kirjoitetaan paljon pieniä objekteja, joten KMS-pyynnöistä tuli yksi
+      // suurimmista kustannuseristä (~0,31 $/vrk). AWS: bucket key vähentää
+      // KMS-pyyntöjä jopa 99 % (ks. S3 User Guide: S3 Bucket Keys for SSE-KMS).
+      bucketKeyEnabled: true,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
       versioned: false,
