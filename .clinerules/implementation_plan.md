@@ -2817,9 +2817,22 @@ tyhjä eikä kumpaakaan `tampere360-github-*-deploy`-roolia ollut olemassa
 | Resurssi | Tulos |
 |---|---|
 | OIDC-provider | `arn:aws:iam::132339120388:oidc-provider/token.actions.githubusercontent.com` ✅ |
-| dev-rooli | `arn:aws:iam::132339120388:role/tampere360-github-dev-deploy` + `PowerUserAccess`, `IAMFullAccess` ✅ (trust: `…:environment:dev`) |
+| dev-rooli | `arn:aws:iam::132339120388:role/tampere360-github-dev-deploy` + `PowerUserAccess`, `IAMFullAccess` ✅ (trust: `…:environment:dev`, **molemmat sub-muodot**: legacy + ID-pohjainen) |
 | prod-rooli | `arn:aws:iam::132339120388:role/tampere360-github-prod-deploy` + samat policyt ✅ (trust: `…:environment:prod`) |
 | bootstrap | `cdk bootstrap aws://132339120388/eu-north-1 --trust <molemmat>` → *bootstrapped*; CDKToolkit `UPDATE_COMPLETE`; deploy-roolin luottamus sisältää molemmat roolit ✅ |
+
+**GitHubin `sub`-väitteen muoto (4.10.2026):** trust policyn ensimmäinen versio
+käytti muotoa `repo:anttirauhala/tampere360:environment:dev`, mutta GitHub lähettää
+nykyään **ID-pohjaisen** väitteen
+`repo:anttirauhala@20150993/tampere360@1359212266:environment:dev` → STS vastasi
+`AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity`.
+`sub`-väite ei näy GitHubin lokista eikä IAM-konfiguraatiosta, mutta **CloudTrail
+näyttää sen** (`aws cloudtrail lookup-events --lookup-attributes
+AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity`; tapahtuman
+`userIdentity.principalId` sisältää koko väitteen). Roolit päivitettiin
+`aws iam update-assume-role-policy`illa hyväksymään molemmat muodot, ja
+osuvuus varmistettiin CloudTrailista luettua väitettä vasten (uusi muoto osuu,
+eri omistaja/repo ja prod-ehto eivät osu). Runbook §3.2 ja §7 on päivitetty.
 
 GitHub-muuttujiin tulee siis **täsmälleen** yllä olevat kaksi ARN:ia. Koska
 ARN:t ovat deterministisiä (tili + roolin nimi), arvot voi kirjoittaa käsin —

@@ -130,7 +130,24 @@ GitHub saa lyhytaikaisen tokenin OIDC:n kautta.
 ### 3.2 Kaksi deploy-roolia
 
 Molemmat luodaan konsolissa (IAM → Roles → Create role → Web identity →
-GitHub) tai CLI:llä. Trust policy jätetään **tarkasti rajatulle subille**:
+GitHub) tai CLI:llä. Trust policy jätetään **tarkasti rajatulle subille**.
+
+> **Tärkeää — GitHubin `sub`-väitteen muoto (päivitetty 4.10.2026):** GitHub
+> lähettää nykyään **ID-pohjaisen** `sub`-väitteen, jossa on omistajan ja repon
+> pysyvät numerotunnukset:
+>
+> ```
+> repo:anttirauhala@20150993/tampere360@1359212266:environment:dev
+>      └── omistaja ──┘└─ id ─┘└── repo ──┘└── id ──┘
+> ```
+>
+> Pelkkä `repo:anttirauhala/tampere360:environment:dev` **ei osu** tähän, jolloin
+> STS vastaa `AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity`.
+> Siksi ehtoon laitetaan **molemmat muodot** (taulukko `StringLike`-arvossa) —
+> vanha muoto ei haittaa, ja uusi toimii riippumatta siitä, milloin GitHub on
+> ottanut muutoksen käyttöön repossa. Numerotunnukset näkee omasta repossa
+> CloudTrailista (ks. alla) tai GitHubin API:sta
+> (`GET /repos/<omistaja>/<repo>` → `id`, ja omistajan `id`).
 
 `tampere360-github-dev-deploy`:
 
@@ -147,7 +164,10 @@ GitHub) tai CLI:llä. Trust policy jätetään **tarkasti rajatulle subille**:
       "Condition": {
         "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:anttirauhala/tampere360:environment:dev"
+          "token.actions.githubusercontent.com:sub": [
+            "repo:anttirauhala/tampere360:environment:dev",
+            "repo:anttirauhala@*/tampere360@*:environment:dev"
+          ]
         }
       }
     }
@@ -155,8 +175,29 @@ GitHub) tai CLI:llä. Trust policy jätetään **tarkasti rajatulle subille**:
 }
 ```
 
-`tampere360-github-prod-deploy`: sama, mutta `sub` =
-`repo:anttirauhala/tampere360:environment:prod`.
+`tampere360-github-prod-deploy`: sama, mutta molemmat arvot muodossa
+`…:environment:prod`.
+
+Päivitys olemassa olevaan rooliin (tiedosto `trust-<env>.json`):
+
+```bash
+aws iam update-assume-role-policy --role-name tampere360-github-dev-deploy \
+  --policy-document file://trust-dev.json
+```
+
+**Tarkista, mikä `sub` todella saapui** (ei näy GitHubin lokista eikä IAM:sta):
+
+```bash
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity \
+  --max-results 5 --region eu-north-1 \
+  --query 'Events[].CloudTrailEvent' --output text \
+  | grep -o 'environment:[a-z]*'
+```
+
+Tapahtuman `userIdentity.principalId` sisältää koko `sub`-väitteen
+(`…oidc-provider/token.actions.githubusercontent.com:sts.amazonaws.com:<sub>`)
+ja `errorMessage` kertoo, hylättiinkö oletus.
 
 ### 3.3 Roolien oikeudet
 
@@ -333,7 +374,7 @@ samoja npm-skriptejä ja -konteksteja.
 | **Ajo päättyy heti `startup_failure`iin, 0 jobia, ei lokia**  | **Actions permissions estää marketplace-actionit.** Aseta Settings → Actions → General → _Allow all actions and reusable workflows_ (§2.1). Virhe näkyy työnkulun sivulla: _"The action actions/checkout@v4 is not allowed … because all actions must be from a repository owned by …"_.                                                                                                                                                                                                                     |
 | **`Could not assume role with OIDC: Request ARN is invalid`** | `DEV_DEPLOY_ROLE_ARN` / `PROD_DEPLOY_ROLE_ARN` -muuttujan arvo ei ole validi ARN. Action tarkistaa muodon **ennen** STS-kutsua, joten tämä havaitaan nopeasti. Tyypilliset syyt: välilyönti tai rivinvaihto arvon lopussa, roolin **nimi** ARN:n sijaan, OIDC-**providerin** ARN roolin ARN:n sijaan tai väärä tilinumeron pituus. Odotettu muoto: `arn:aws:iam::<12 numeroa>:role/<roolin-nimi>`. Oikea arvo: `aws iam get-role --role-name tampere360-github-dev-deploy --query 'Role.Arn' --output text`. |
 
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Roolin trust policyn `sub` ei vastaa environmentia/haaraa, tai OIDC-provideria ei ole luotu |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` (CloudTrailissa `AccessDenied`) | Yleisin syy: trust policyn `sub`-ehto on **vanhassa muodossa** (`repo:omistaja/repo:environment:dev`) eikä osu GitHubin nykyiseen **ID-pohjaiseen** väitteeseen (`repo:anttirauhala@20150993/tampere360@1359212266:environment:dev`) — ks. §3.2 ja CloudTrail-komento. Muita syitä: väärä environment/haara, puuttuva OIDC-provider tai providerin `aud`-lista ilman `sts.amazonaws.com`ia. |
 | `is not authorized to perform: cloudformation:...` | Deploy-roolilta puuttuu oikeuksia (ks. §3.3) |
 | `Access Denied` bootstrap-bucketiin | `cdk bootstrap --trust` puuttuu (§3.4) |
 | `npm ci` kaatuu | `package-lock.json` ja `package.json` eri versiossa — aja `npm install` paikallisesti ja committoi lock |
