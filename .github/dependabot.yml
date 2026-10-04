@@ -1,0 +1,48 @@
+# Dependabot: riippuvuuksien haavoittuvuus- ja päivitystarkistukset
+# (arkkitehtuuri §14: "riippuvuuksien haavoittuvuusskannaus CI-putkessa").
+#
+# Hälytykset ja turvapäivitykset kytketään repossa erikseen:
+# Settings → Code security and analysis → Dependabot alerts / security updates.
+version: 2
+updates:
+  # npm-workspaces: juuren package-lock.json kattaa apps/, packages/ ja infra/.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+      timezone: Europe/Helsinki
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      aws-sdk:
+        patterns:
+          - '@aws-sdk/*'
+      aws-cdk:
+        patterns:
+          - 'aws-cdk*'
+          - '@aws-cdk/*'
+          - 'constructs'
+      dev-tooling:
+        dependency-type: development
+        exclude-patterns:
+          - 'aws-cdk*'
+          - '@aws-cdk/*'
+
+  # .github/workflows/** ja .github/actions/** -toimintojen versiot.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+      timezone: Europe/Helsinki
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(ci)'
+    groups:
+      actions:
+        patterns:
+          - '*'

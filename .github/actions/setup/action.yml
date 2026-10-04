@@ -1,0 +1,27 @@
+name: Setup (Node, riippuvuudet, build)
+description: >
+  Asentaa Node 22:n (.nvmrc), npm-riippuvuudet (npm ci) ja ajaa koko buildin
+  (paketit → infra → apps-typecheck → web). Yksi paikka, jotta CI ja deployt
+  eivät eriydy toisistaan (implementation_plan §15).
+
+runs:
+  using: composite
+  steps:
+    - name: Node (.nvmrc)
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+
+    - name: npm ci
+      shell: bash
+      run: npm ci
+
+    # Build on pakollinen ennen testejä ja cdk syntiä:
+    #  - packages/* → dist (event-contracts, source-adapter-sdk, observability)
+    #  - infra → dist (cdk synth lukee infra/lib/*)
+    #  - apps/* → tsc --noEmit (tyyppitarkistus)
+    #  - apps/web/dist → FrontendStack heittää ilman index.html:ää
+    - name: npm run build
+      shell: bash
+      run: npm run build

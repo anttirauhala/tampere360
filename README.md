@@ -38,6 +38,8 @@ packages/
   source-adapter-sdk/       # EventSourceAdapter-rajapinta + apurit
   observability/            # Jäsennelty logitus, correlation ID, mittarit
 infra/                      # AWS CDK -stackit — vaihe 1
+.github/                    # GitHub Actions: ci.yml + deploy-dev/prod.yml + setup
+scripts/                    # smoke.mjs (deployn jälkeinen savutesti)
 docs/architecture/          # Arkkitehtuuridokumentaatio
 docs/adr/                   # Arkkitehtuuripäätökset (ADR)
 ```
@@ -78,6 +80,32 @@ VITE_API_URL=https://<api-id>.execute-api.eu-north-1.amazonaws.com npm run dev
 Ilman muuttujaa kyselyt menevät samaan origin-palvelimeen (`/v1/...`), jolloin
 Viten proxyä ei ole käytössä — käytä siis `VITE_API_URL`:ia.
 
+## CI/CD (GitHub Actions)
+
+Putki on määritelty `.github/`-hakemistossa. Tarkka runbook (myös kerran
+tehtävät GitHub- ja AWS-asetukset): [`docs/architecture/ci-cd.md`](./docs/architecture/ci-cd.md).
+
+| Työnkulku         | Käynnistyy                                                          | Mitä tekee                                                                                             |
+| ----------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `ci.yml`          | PR + push `main`                                                    | build → ESLint → Prettier → testit → `cdk synth` (dev + prod) → `npm audit` — **ei AWS-kirjautumista** |
+| `deploy-dev.yml`  | CI vihreä `main`issa (tai manuaalisesti)                            | OIDC → `cdk diff` → `cdk deploy --all` (dev) → savutesti                                               |
+| `deploy-prod.yml` | **vain manuaalisesti**, GitHub Environment `prod` vaatii hyväksyjän | OIDC → `cdk diff` → `cdk deploy --all` (prod, `wafEnabled=false`) → savutesti                          |
+
+AWS-kirjautuminen tapahtuu **OIDC-roolilla** — repossa ei ole AWS-avaimia eikä
+GitHub-salaisuuksia. Tarvittavat repo-muuttujat ovat `DEV_DEPLOY_ROLE_ARN` ja
+`PROD_DEPLOY_ROLE_ARN` (+ valinnainen `AWS_REGION`, oletus `eu-north-1`).
+
+Savutesti ajetaan deployn jälkeen myös käsin:
+
+```bash
+node scripts/smoke.mjs --outputs infra/cdk-outputs-dev.json --env dev
+node scripts/smoke.mjs --api https://api.tampere247.online \
+                       --frontend https://tampere247.online
+```
+
+Sama komentoputki paikallisesti: `npm ci && npm run build && npm run lint &&
+npm run format:check && npx vitest run && (cd infra && npx cdk synth -c env=dev)`.
+
 ## Infra (AWS CDK)
 
 `infra/` sisältää koko AWS-arkkitehtuurin kahdeksana stackina
@@ -97,9 +125,9 @@ Prodilla on omat npm-skriptit: `npm run synth:prod`, `npm run diff:prod`,
 
 ## Julkaistu ympäristö (dev, eu-north-1)
 
-| Resurssi | Osoite |
-|---|---|
-| Frontend (CloudFront) | https://d36ic5wsx4b9yl.cloudfront.net |
+| Resurssi                   | Osoite                                                  |
+| -------------------------- | ------------------------------------------------------- |
+| Frontend (CloudFront)      | https://d36ic5wsx4b9yl.cloudfront.net                   |
 | API (API Gateway HTTP API) | https://vllod80b6i.execute-api.eu-north-1.amazonaws.com |
 
 ```bash
@@ -113,10 +141,10 @@ curl https://vllod80b6i.execute-api.eu-north-1.amazonaws.com/v1/health/sources
 Prod ajetaan samassa AWS-tilissä omalla nimiavaruudella
 (`tampere360-prod-*`) ja omalla domainilla:
 
-| Resurssi | Osoite |
-|---|---|
-| Frontend (CloudFront) | https://tampere247.online (myös www.) |
-| API (HTTP API custom domain) | https://api.tampere247.online |
+| Resurssi                     | Osoite                                |
+| ---------------------------- | ------------------------------------- |
+| Frontend (CloudFront)        | https://tampere247.online (myös www.) |
+| API (HTTP API custom domain) | https://api.tampere247.online         |
 
 Prod-deploy lyhyesti (tarkka runbook: [`docs/architecture/prod-deploy.md`](./docs/architecture/prod-deploy.md)):
 

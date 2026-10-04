@@ -1,0 +1,105 @@
+# Deploy dev — automaattinen julkaisu main-haarasta (implementation_plan §15).
+#
+# Kulku: CI onnistuu mainissa → OIDC-rooli → cdk diff → cdk deploy --all
+#        → savutesti (scripts/smoke.mjs).
+#
+# Miksi workflow_run eikä push: deploy ei käynnisty ennen kuin CI on vihreä,
+# eikä se edellytä branch protection -asetusta. Checkout tehdään **siitä
+# commitista, jonka CI validoi** (workflow_run.head_sha).
+#
+# AWS-kirjautuminen tapahtuu OIDC-roolilla (GitHub Environment `dev` määrää
+# tokenin sub-väitteen) — repossa ei ole aws-avaimia eikä salaisuuksia.
+name: Deploy dev
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Manuaalinen ajo: Actions → Deploy dev → Run workflow.
+  workflow_dispatch:
+
+# Deployt eivät koskaan peru toisiaan kesken — ne jonottavat.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ENV_NAME: dev
+  # cdk-komennot ajetaan infra/-hakemistossa (cdk.json on siellä), joten
+  # outputs-tiedosto annetaan absoluuttisena polkuna — sama polku toimii sekä
+  # cdk:lle että juuresta ajettavalle savutestille.
+  OUTPUTS_FILE: ${{ github.workspace }}/infra/cdk-outputs-dev.json
+  CDK_DEFAULT_ACCOUNT: '132339120388'
+  CDK_DEFAULT_REGION: ${{ vars.AWS_REGION || 'eu-north-1' }}
+
+jobs:
+  deploy:
+    name: deploy
+    # workflow_run: vain onnistunut CI. workflow_dispatch: aina.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Environment `dev`: OIDC-sub `repo:<omistaja>/<repo>:environment:dev`
+    # ja tarvittaessa sallitut haarat (Settings → Environments).
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write # OIDC-tokenin hakeminen (configure-aws-credentials)
+    steps:
+      - name: Checkout (CI:n validoima commit)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Asenna riippuvuudet ja build
+        uses: ./.github/actions/setup
+
+      - name: AWS-kirjautuminen (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.DEV_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-north-1' }}
+          role-session-name: gha-deploy-dev
+
+      # Informatiivinen esitarkastus: muutokset näkyvät ajon lokissa ennen
+      # deployta. Huom: `cdk diff` kattaa kaikki stackit ilman lippuja, eikä
+      # `--all` ole sille validi (se on vain deploy/destroy).
+      # working-directory: infra — cdk.json (app-polku) on siellä.
+      - name: cdk diff (esitarkastus)
+        working-directory: infra
+        run: npx cdk diff -c env=${{ env.ENV_NAME }}
+
+      - name: cdk deploy (dev)
+        working-directory: infra
+        run: >-
+          npx cdk deploy --all
+          -c env=${{ env.ENV_NAME }}
+          --require-approval never
+          --outputs-file ${{ env.OUTPUTS_FILE }}
+
+      - name: Savutesti
+        run: >-
+          node scripts/smoke.mjs
+          --outputs ${{ env.OUTPUTS_FILE }}
+          --env ${{ env.ENV_NAME }}
+
+      # Operatiivinen muistutus: jos ingestion- tai event-processing-stack
+      # korvattiin, lähdekohtaiset `sentItems`-kartat on tyhjennettävä, jotta
+      # muuttumattomatkin tietueet lähetetään uudelleen (§39). Ei automatisoida
+      # (datan operaatio) — ohje: docs/architecture/ci-cd.md §6.
+      - name: Muistutus sentItems-tilasta
+        if: always()
+        run: |
+          {
+            echo "### Deploy dev valmis"
+            echo ""
+            echo "Jos tämä deploy korvasi ingestion- tai event-processing-stackin,"
+            echo "tyhjennä lähdekohtaiset \`sentItems\`-kartat (docs/architecture/ci-cd.md §6),"
+            echo "muuten putki ei palauta jo lähetettyjä tapahtumia."
+          } >> "$GITHUB_STEP_SUMMARY"

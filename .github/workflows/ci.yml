@@ -1,0 +1,81 @@
+# CI — pull request- ja main-haaran tarkistukset (implementation_plan §15).
+#
+# Tämä työnkulku EI kirjaudu AWS:ään eikä muuta mitään pilvessä:
+#   npm ci → lint → format → build → testit → cdk synth (dev + prod) → npm audit
+#
+# Deployt ovat omissa työnkuluissaan (deploy-dev.yml, deploy-prod.yml) ja
+# käyttävät OIDC-roolia — ei pitkäikäisiä avaimia.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Sama haara: uusi työntö peruuttaa vanhan, keskeneräisen ajon.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Vähimmät oikeudet: tarkistukset vain lukevat repoa.
+permissions:
+  contents: read
+
+env:
+  # CDK-templaatit riippuvat tilistä ja alueesta (infra/bin/app.ts lukee nämä).
+  # Tili on julkinen tieto — sama arvo on infra/lib/config.ts:ssä.
+  # Synteesi tehdään tarkoituksella mainitulla tilillä, jotta prod-stackit
+  # syntyvät täsmälleen niin kuin oikea deploy tekisi (ei kredentiaaleja).
+  CDK_DEFAULT_ACCOUNT: '132339120388'
+  # AWS_REGION on valinnainen repo-muuttuja; oletus eu-north-1 (dev ja prod).
+  CDK_DEFAULT_REGION: ${{ vars.AWS_REGION || 'eu-north-1' }}
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Asenna riippuvuudet ja build
+        uses: ./.github/actions/setup
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Prettier
+        run: npm run format:check
+
+      # npx vitest run ohittaa package.jsonin `pretest`-buildin (build ajettiin
+      # jo setupissa) — muuten build ajautuisi kahteen kertaan.
+      - name: Yksikkö- ja sopimustestit
+        run: npx vitest run
+
+      # Huom: `--all` on vain deploy/diff/destroy-lippu; synth syntesoi kaikki
+      # stackit ilman sitä. Komennot ajetaan infra/-hakemistossa, koska
+      # cdk.json (app-polku) on siellä.
+      - name: CDK synth — dev
+        working-directory: infra
+        run: npx cdk synth -c env=dev
+
+      # Prod-synteesi valvoo domain- ja TLS-konfiguraatiota (config.ts) sekä
+      # stackien järjestystä ilman, että mitään deployataan.
+      - name: CDK synth — prod
+        working-directory: infra
+        run: npx cdk synth -c env=prod -c wafEnabled=false
+
+      # Turvatarkistus (arkkitehtuuri §14). Kaksi porrasta:
+      #  1) kriittiset haavoittuvuudet pysäyttävät putken,
+      #  2) korkeat raportoidaan lokiin mutta eivät pysäytä.
+      # Perustelu (4.10.2026): nykyiset korkeat löydökset ovat transitiivisia
+      # DoS-advisoryja build-aikaisissa työkaluissa (brace-expansion
+      # aws-cdk-lib:n, globin ja @typescript-eslintin alla). Ne eivät kulkeudu
+      # Lambda-bundleihin, eikä korjaus onnistu ilman `npm audit fix --force`ia
+      # (breaking). Dependabot seuraa ja päivittää ne PR:inä.
+      - name: Turvatarkistus — kriittiset (portti)
+        run: npm audit --audit-level=critical
+
+      - name: Turvatarkistus — korkeat ja matalat (raportti)
+        continue-on-error: true
+        run: npm audit --audit-level=high

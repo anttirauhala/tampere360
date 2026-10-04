@@ -8,6 +8,9 @@
 > Frontend: https://d36ic5wsx4b9yl.cloudfront.net
 > API: https://vllod80b6i.execute-api.eu-north-1.amazonaws.com
 > Seuraavaksi Vaihe 5 (testit, valvonta, CI).
+> **CI/CD ✅ (§40):** GitHub Actions -putki (`ci.yml`, `deploy-dev.yml`,
+> `deploy-prod.yml`) OIDC-tunnistautumisella + savutesti `scripts/smoke.mjs`.
+> Runbook: `docs/architecture/ci-cd.md`, päätös: `docs/adr/0001-github-actions-ci-cd.md`.
 > **Prod-valmius ✅ (§21):** `tampere360-prod-*` + domain `tampere247.online`
 > (+ www), API `api.tampere247.online`, WAF (us-east-1, opt-in), TLS 1.2,
 > RETAIN/PITR-kovennukset. Deploy: `npm run deploy:prod`;
@@ -471,6 +474,16 @@ pitkäikäisiä access key -avaimia CI:hin.
 
 MVP-vaiheessa deploy tapahtuu paikallisesti `cdk deploy` -komennolla;
 GitHub Actions -workflow lisätään kun repo on GitHubissa.
+
+> **Toteutettu 4.10.2026 — ks. §40.** Putki on `.github/`-hakemistossa
+> (`ci.yml`, `deploy-dev.yml`, `deploy-prod.yml`, composite setup), savutesti
+> `scripts/smoke.mjs`issä ja runbook
+> [`docs/architecture/ci-cd.md`](../docs/architecture/ci-cd.md)issa.
+> Poikkeamat yllä olevasta luonnoksesta: `cdk diff` ajetaan deploy-työnkuluissa
+> (ei PR:ssä, koska PR-tarkistuksessa ei ole AWS-kredentiaaleja), sopimustestit
+> ovat nykyiset fixture-pohjaiset adapteritestit, ja turvatarkistus on
+> `npm audit --audit-level=high` + Dependabot. Paikallinen `cdk deploy` on
+> edelleen tuettu.
 
 ## 16. Toteutusvaiheet
 
@@ -2641,4 +2654,109 @@ täsmälleen saman bundlen.
 
 `cdk destroy` ei poista Lambda-logiryhmiä (oletus `RETAIN`) — ks. kohta (2)
 yllä. Jatkoon suositellaan eksplisiittistä `logRetention`ia.
+
+
+## 40. GitHub Actions -putki (4.10.2026)
+
+§15:n CI/CD-tavoite toteutettiin: `.github/` sisältää kolme työnkulkua,
+composite actionin ja Dependabotin; savutesti on `scripts/smoke.mjs`.
+Tarkka runbook (myös kerran tehtävät GitHub- ja AWS-asetukset):
+[`docs/architecture/ci-cd.md`](../docs/architecture/ci-cd.md), päätös:
+[`docs/adr/0001-github-actions-ci-cd.md`](../docs/adr/0001-github-actions-ci-cd.md).
+
+### Työnkulut
+
+| Tiedosto | Käynnistyy | Sisältö | AWS |
+|---|---|---|---|
+| `.github/workflows/ci.yml` | PR + push `main` | `npm ci` → build → ESLint → Prettier → `npx vitest run` → `cdk synth` (dev **ja** prod) → `npm audit --audit-level=high` | ei |
+| `.github/workflows/deploy-dev.yml` | `workflow_run` CI:n jälkeen `main`issa + `workflow_dispatch` | OIDC → `cdk diff` → `cdk deploy --all` → `smoke.mjs` | OIDC |
+| `.github/workflows/deploy-prod.yml` | **vain `workflow_dispatch`** | sama prod-kontekstilla (`-c env=prod -c wafEnabled=false`) | OIDC |
+| `.github/actions/setup/action.yml` | — | Node `.nvmrc`:stä, `npm ci`, `npm run build` (yksi paikka CI:lle ja deployille) | — |
+| `.github/dependabot.yml` | viikoittain | npm-workspaces + GitHub Actions, ryhmitelty PR:iin | — |
+
+### Keskeiset ratkaisut
+
+| Ratkaisu | Perustelu |
+|---|---|
+| **OIDC, ei salaisuuksia** | `aws-actions/configure-aws-credentials@v4` + kaksi roolia. GitHub Environment määrää tokenin `sub`-väitteen (`repo:anttirauhala/tampere360:environment:dev\|prod`) → prod-roolia ei voi käyttää muusta työnkulusta. Repossa ei ole AWS-avaimia eikä GitHub-secretiä. |
+| **`workflow_run`, ei push** | Dev-deploy ei käynnisty ennen kuin CI on vihreä, eikä tämä vaadi branch protection -asetusta. |
+| **Checkout `workflow_run.head_sha`ista** | Deploy tehdään **täsmälleen siitä commitista, jonka CI validoi**. |
+| **Prod vain environmentin kautta** | *Required reviewers* antaa manuaalisen hyväksynnän; sama asetus rajaa OIDC-subin. |
+| **`CDK_DEFAULT_ACCOUNT` + `CDK_DEFAULT_REGION` työnkulun `env`issä** | `app.ts` oletus on `eu-west-1`, mutta dev **ja** prod ovat `eu-north-1`; prod-synth heittää ilman tiliä. Näin PR-synth toimii ilman kredentiaaleja. Tili on julkinen (myös `config.ts`issä). |
+| **Synth dev + prod PR:ssä** | Domain/TLS-konfiguraation ja stackijärjestyksen regressiot näkyvät ennen mergeä, ei vasta deployn puolivälissä. |
+| **`npx vitest run`** | `npm test` ajaa `pretest`-buildin uudelleen; build on jo ajettu setupissa. |
+| **Savutesti lukee `--outputs-file`in** | Ei kovakoodattuja osoitteita; prodissa käytetään ensisijaisesti custom domainia (`ApiCustomUrl` / `FrontendCustomUrl`). |
+| **Puuttuva lähde = varoitus, `ERROR` = virhe** | Tuoreessa ympäristössä Schedulerit kirjaavat tilan vasta ensimmäisellä ajolla (FMI 5 min) — savutesti yrittää 10 × 15 s, mutta `ERROR` (esim. `API_KEY_MISSING`) on aina oikea havainto. |
+
+### Prettier-baseline (pakollinen esityö)
+
+`npm run format:check` ei ole koskaan ollut vihreä (§16). Ennen format-vaiheen
+lisäämistä CI:hin ajettiin `npm run format` **omassa commitissaan**.
+`.prettierignore` rajasi `.clinerules/`in pois: se on agenttisääntöjä ja
+pitkämuotoista suunnitteludokumentaatiota (~3 400 riviä), joiden muotoilu toisi
+~1 200 riviä pelkkää kosmetiikkaa. Muutokset: 40 tiedostoa muotoiltiin
+(apps/packages/infra + `docs/*.md` + README).
+
+Lisäksi `eslint.config.mjs` sai Node-globaalit (`console`, `process`, `fetch`,
+`AbortSignal`, `URL`, `URLSearchParams`, `setTimeout`) `.js`/`.mjs`-tiedostoille
+— ilman tätä `scripts/smoke.mjs` laukaisi `js.configs.recommended`in
+`no-undef`in (20 virhettä).
+
+### Toinen pakollinen esityö: lukitustiedosto oli epäsynkronissa
+
+`package-lock.json` ei sisältänyt workspaceja `apps/saunas` ja
+`apps/water-temperature`, joten **`npm ci` kaatui heti**:
+
+```
+npm error `npm ci` can only install packages when your package.json and
+npm error package-lock.json or npm-shrinkwrap.json are in sync.
+npm error Missing: @tampere360/saunas@0.1.0 from lock file
+npm error Missing: @tampere360/water-temperature@0.1.0 from lock file
+```
+
+Todennettu kahdesti: alkuperäisellä lukituksella `npm ci --dry-run` → `EUSAGE`,
+korjatulla → läpi. Ilman tätä korjausta koko CI olisi ollut punainen
+ensimmäisestä ajosta lähtien. Korjaus tehtiin `npm audit fix`illä
+(synkronoi workspacet + nosti `brace-expansion`in turvallisille versioille:
+1.1.18 → 1.1.21, 2.1.4 → 2.1.7, 5.0.9 → 5.0.12); package-lock.json muuttui
+31 riviä.
+
+### Verifiointi
+
+| Tarkistus | Tulos |
+|---|---|
+| `npm run lint` | ✅ (sisältää `scripts/smoke.mjs`) |
+| `npm run format:check` | ✅ (43 → 0 poikkeamaa; `.clinerules/` ignoroitu) |
+| `npx vitest run` | ✅ 61 tiedostoa, **645 testiä** |
+| `cd infra && npx cdk synth -c env=dev` / `-c env=prod -c wafEnabled=false` | ✅ 8 stackia kummallakin |
+| `npm audit --audit-level=critical` (portti) | ✅ 0 kriittistä |
+| `npm audit --audit-level=high` (raportti) | ⚠️ 1 high + 2 moderate (transitiiviset `brace-expansion`-advisoryt `aws-cdk-lib`:n/`glob`in/`@typescript-eslint`in alla + `@vitest/mocker`); korjaus vaatisi `--force`in → raportoidaan, Dependabot seuraa |
+| `npm ci` puhtaalla asennuksella | ✅ (vaati **lukitustiedoston synkronoinnin**, ks. alla) |
+| `cd infra && npx cdk diff -c env=dev` (deploy-workflown komento, ajettu AWS:ää vasten) | ✅ exit 0; `foundation`, `data`, `eventing`, `monitoring` = **ei eroja**; `event-processing`, `ingestion`, `api` = vain Lambda-koodin asset-hash (`[-] .zip → [+] .zip`), `frontend` = vain web-assetin hash → format-baseline päivittää koodin, **ei korvaa yhtään resurssia** |
+| `cdk diff --all` | ❌ *Unknown option(s): --all* → lippu poistettu työnkuluista (`--all` on vain `deploy`/`destroy`) |
+| `node scripts/smoke.mjs --help` / `-h` | ✅ exit 0 (korjattu: arvottomat liput eivät enää vaadi arvoa) |
+| `node scripts/smoke.mjs` paikallista stub-palvelinta vasten | ✅ exit `0` (kaikki kunnossa) · `1` (`ERROR`-lähde, brändi puuttuu) · `2` (outputs-tiedostosta puuttuu stack) · varoitus `ei vielä kirjausta: …` (osittainen lähdelista) · `ApiCustomUrl`/`FrontendCustomUrl` ohittaa oletusosoitteet |
+| `node scripts/smoke.mjs` dev-ympäristöä vasten | ⚠️ ei ajettu tässä ympäristössä (DNS ei resolvoi AWS-domainia; ks. §9). Ajetaan ensimmäisessä deploy-ajossa GitHubissa. |
+
+### Käsin tehtävät asetukset (eivät ole koodissa)
+
+GitHub: Actions + read-only-työnkulkuoikeudet, Environments `dev` ja `prod`
+(prodissa *required reviewers*), repo-muuttujat `DEV_DEPLOY_ROLE_ARN` /
+`PROD_DEPLOY_ROLE_ARN` (valinnainen `AWS_REGION`), branch protection
+(`checks`), Dependabot-hälytykset. AWS: OIDC-provider, kaksi deploy-roolia
+(trust policy rajattu environment-subiin), `PowerUserAccess + IAMFullAccess` ja
+`cdk bootstrap --trust`. Komennot ja JSON-politiikat ovat runbookissa.
+
+**Ei committoitu eikä pushattu tässä työssä** — muutokset ovat työhakemistossa
+odottamassa läpikäyntiä (format-baseline on tarkoitus committoida omanaan).
+
+### Rajaukset
+
+- Selaintason verifiointia (headless Chrome + CDP) **ei** automatisoida CI:hin;
+  se tehdään edelleen käsin (Vaihe 5:n jatko).
+- `packages/test-fixtures`ia ei perustettu — nykyiset fixture-pohjaiset
+  adapteritestit toimivat sopimustesteinä.
+- CodeQL jätettiin pois (vaatii GitHub Advanced Securityn yksityisessä repossa);
+  turvatarkistuksena on `npm audit` + Dependabot.
+- WAF pysyy opt-inina: `deploy-prod.yml` ajaa `-c wafEnabled=false`.
 

@@ -12,6 +12,9 @@ coverage/
 cdk.out/
 cdk.context.json
 
+# CDK deploy --outputs-file (smoke-testi lukee nämä; ei versioida)
+infra/cdk-outputs-*.json
+
 # Ympäristömuuttujat ja salaisuudet
 .env
 .env.*

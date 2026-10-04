@@ -1,0 +1,91 @@
+# Deploy prod — manuaalinen, hyväksynnän takana (implementation_plan §15).
+#
+# Tämä työnkulku EI koskaan käynnisty automaattisesti. Käynnistys:
+#   Actions → Deploy prod → Run workflow
+# ja sen jälkeen GitHub Environment `prod` vaatii hyväksyjän
+# (Settings → Environments → prod → Required reviewers).
+#
+# AWS-kirjautuminen OIDC-roolilla; environment `prod` määrää tokenin
+# sub-väitteen `repo:<omistaja>/<repo>:environment:prod`, joten prod-roolia ei
+# voi käyttää mistään muusta työnkulusta eikä haarasta.
+name: Deploy prod
+
+on:
+  workflow_dispatch:
+
+# Kaksi prod-deployta ei saa koskaan ajaa rinnakkain (RETAIN-resurssit,
+# DynamoDB-migraatiot, CloudFront-invalidointi).
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ENV_NAME: prod
+  # cdk-komennot ajetaan infra/-hakemistossa (cdk.json on siellä) → outputs
+  # annetaan absoluuttisena polkuna, jotta myös juuresta ajettava savutesti
+  # löytää saman tiedoston.
+  OUTPUTS_FILE: ${{ github.workspace }}/infra/cdk-outputs-prod.json
+  CDK_DEFAULT_ACCOUNT: '132339120388'
+  CDK_DEFAULT_REGION: ${{ vars.AWS_REGION || 'eu-north-1' }}
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout (main)
+        uses: actions/checkout@v4
+
+      - name: Asenna riippuvuudet ja build
+        uses: ./.github/actions/setup
+
+      - name: AWS-kirjautuminen (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.PROD_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-north-1' }}
+          role-session-name: gha-deploy-prod
+
+      # WAF on opt-in ja pois päältä (ks. docs/architecture/prod-deploy.md §1):
+      # sama konteksti kuin npm run diff:prod / deploy:prod.
+      # Huom: `cdk diff` kattaa kaikki stackit ilman lippuja (--all on vain
+      # deploy/destroy). working-directory: infra — cdk.json on siellä.
+      - name: cdk diff (esitarkastus)
+        working-directory: infra
+        run: npx cdk diff -c env=${{ env.ENV_NAME }} -c wafEnabled=false
+
+      - name: cdk deploy (prod)
+        working-directory: infra
+        run: >-
+          npx cdk deploy --all
+          -c env=${{ env.ENV_NAME }}
+          -c wafEnabled=false
+          --require-approval never
+          --outputs-file ${{ env.OUTPUTS_FILE }}
+
+      - name: Savutesti
+        run: >-
+          node scripts/smoke.mjs
+          --outputs ${{ env.OUTPUTS_FILE }}
+          --env ${{ env.ENV_NAME }}
+
+      - name: Yhteenveto
+        if: always()
+        run: |
+          {
+            echo "### Deploy prod valmis"
+            echo ""
+            echo "- Frontend: https://tampere247.online"
+            echo "- API: https://api.tampere247.online"
+            echo ""
+            echo "Muista: jos ingestion/event-processing-stack korvattiin, tyhjennä"
+            echo "\`sentItems\`-kartat (docs/architecture/ci-cd.md §6) myös prodista."
+          } >> "$GITHUB_STEP_SUMMARY"

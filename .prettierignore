@@ -1,0 +1,16 @@
+# Agenttisäännöt ja pitkämuotoinen suunnitteludokumentaatio (.clinerules/, ~3400
+# riviä) eivät ole sovelluskoodia. Prettier muotoilisi niistä ~1200 riviä
+# pelkkää kosmetiikkaa, joten ne jätetään muotoilun ulkopuolelle — samalla
+# suunnitteludokumentin diffit pysyvät luettavina (ks. implementation_plan §40).
+.clinerules/
+
+# Build-tuotteet, riippuvuudet ja generoidut artefaktit.
+# (.gitignore kattaa samat polut, mutta lista pidetään eksplisiittisenä.)
+node_modules/
+dist/
+cdk.out/
+coverage/
+package-lock.json
+
+# cdk deploy --outputs-file -tulosteet (smoke-testin syöte, ei versioida)
+infra/cdk-outputs-*.json
