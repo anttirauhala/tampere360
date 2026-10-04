@@ -73,6 +73,14 @@ Nämä ovat **variableita, eivät salaisuuksia** — rooli-ARN ei ole salaisuus.
 Repositorioon **ei tarvita yhtään GitHub-salaisuutta**: tunnistautuminen
 tapahtuu OIDC:llä (periaate: "Do not commit secrets" toteutuu rakenteellisesti).
 
+> **Tarkista arvon muoto.** `configure-aws-credentials` validoi ARN:n ennen
+> STS-kutsua, ja virheellinen arvo näkyy deployn lokissa muodossa
+> _`Could not assume role with OIDC: Request ARN is invalid`_ (ks. §7).
+> Liitä arvo **AWS:stä**, älä käsin kirjoitettuna — esim.
+> `aws iam get-role --role-name tampere360-github-dev-deploy --query 'Role.Arn' --output text`.
+> Arvossa ei saa olla välilyöntiä eikä rivinvaihtoa lopussa; roolin **nimi**
+> tai OIDC-**providerin** ARN eivät kelpaa.
+
 ### 2.4 Branch protection
 
 **Settings → Branches** (tai Rulesets): vaadi `main`-haaralle
@@ -311,15 +319,17 @@ samoja npm-skriptejä ja -konteksteja.
 
 ## 7. Vianetsintä
 
-| Oire                                                         | Todennäköinen syy                                                                                                                                                                                                                                                                        |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Ajo päättyy heti `startup_failure`iin, 0 jobia, ei lokia** | **Actions permissions estää marketplace-actionit.** Aseta Settings → Actions → General → _Allow all actions and reusable workflows_ (§2.1). Virhe näkyy työnkulun sivulla: _"The action actions/checkout@v4 is not allowed … because all actions must be from a repository owned by …"_. |
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity`    | Roolin trust policyn `sub` ei vastaa environmentia/haaraa, tai OIDC-provideria ei ole luotu                                                                                                                                                                                              |
-| `is not authorized to perform: cloudformation:...`           | Deploy-roolilta puuttuu oikeuksia (ks. §3.3)                                                                                                                                                                                                                                             |
-| `Access Denied` bootstrap-bucketiin                          | `cdk bootstrap --trust` puuttuu (§3.4)                                                                                                                                                                                                                                                   |
-| `npm ci` kaatuu                                              | `package-lock.json` ja `package.json` eri versiossa — aja `npm install` paikallisesti ja committoi lock                                                                                                                                                                                  |
-| CI vihreä, deploy ei käynnisty                               | `workflow_run` vaatii, että **CI on määritelty `main`-haarassa** ja että ajo päättyi `success`iin; manuaalinen ajo löytyy Actions → Deploy dev                                                                                                                                           |
-| Savutesti: `HTTP 403` frontendistä                           | CloudFront-invalidointi kesken — yritykset jatkuvat automaattisesti                                                                                                                                                                                                                      |
-| Savutesti: `lähteet virhetilassa: ...`                       | Oikea havainto: katso syykoodi (`error`) ja SSM-parametri                                                                                                                                                                                                                                |
-| Savutesti: `ei vielä kirjausta: FMI_CAP`                     | Varoitus; FMI kirjaa tilan 5 min välein                                                                                                                                                                                                                                                  |
-| `Workflow permissions` -virhe `id-token`                     | Työnkulun jobilta puuttuu `permissions: id-token: write` tai repossa ei ole sallittu OIDC:tä                                                                                                                                                                                             |
+| Oire                                                          | Todennäköinen syy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Ajo päättyy heti `startup_failure`iin, 0 jobia, ei lokia**  | **Actions permissions estää marketplace-actionit.** Aseta Settings → Actions → General → _Allow all actions and reusable workflows_ (§2.1). Virhe näkyy työnkulun sivulla: _"The action actions/checkout@v4 is not allowed … because all actions must be from a repository owned by …"_.                                                                                                                                                                                                                     |
+| **`Could not assume role with OIDC: Request ARN is invalid`** | `DEV_DEPLOY_ROLE_ARN` / `PROD_DEPLOY_ROLE_ARN` -muuttujan arvo ei ole validi ARN. Action tarkistaa muodon **ennen** STS-kutsua, joten tämä havaitaan nopeasti. Tyypilliset syyt: välilyönti tai rivinvaihto arvon lopussa, roolin **nimi** ARN:n sijaan, OIDC-**providerin** ARN roolin ARN:n sijaan tai väärä tilinumeron pituus. Odotettu muoto: `arn:aws:iam::<12 numeroa>:role/<roolin-nimi>`. Oikea arvo: `aws iam get-role --role-name tampere360-github-dev-deploy --query 'Role.Arn' --output text`. |
+
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Roolin trust policyn `sub` ei vastaa environmentia/haaraa, tai OIDC-provideria ei ole luotu |
+| `is not authorized to perform: cloudformation:...` | Deploy-roolilta puuttuu oikeuksia (ks. §3.3) |
+| `Access Denied` bootstrap-bucketiin | `cdk bootstrap --trust` puuttuu (§3.4) |
+| `npm ci` kaatuu | `package-lock.json` ja `package.json` eri versiossa — aja `npm install` paikallisesti ja committoi lock |
+| CI vihreä, deploy ei käynnisty | `workflow_run` vaatii, että **CI on määritelty `main`-haarassa** ja että ajo päättyi `success`iin; manuaalinen ajo löytyy Actions → Deploy dev |
+| Savutesti: `HTTP 403` frontendistä | CloudFront-invalidointi kesken — yritykset jatkuvat automaattisesti |
+| Savutesti: `lähteet virhetilassa: ...` | Oikea havainto: katso syykoodi (`error`) ja SSM-parametri |
+| Savutesti: `ei vielä kirjausta: FMI_CAP` | Varoitus; FMI kirjaa tilan 5 min välein |
+| `Workflow permissions` -virhe `id-token` | Työnkulun jobilta puuttuu `permissions: id-token: write` tai repossa ei ole sallittu OIDC:tä |

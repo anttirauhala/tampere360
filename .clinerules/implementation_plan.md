@@ -2787,6 +2787,27 @@ Diagnoosityökalu, jota kannattaa käyttää jatkossa: `actionlint`
 käytäntöjä, joten `startup_failure` kannattaa aina tarkistaa ajon sivun
 HTML:stä (hakusana `not allowed`).
 
+### CI vihreä, mutta Deploy dev kaatui OIDC-kirjautumiseen (4.10.2026)
+
+Kun Actions permissions oli korjattu, **CI meni läpi** (run 37187631073: build,
+ESLint, Prettier, 645 testiä, synth dev + prod, `npm audit`) ja `workflow_run`
+käynnisti **Deploy dev**in automaattisesti. Deployn alkupää toimi täysin —
+checkout, `npm ci`, `npm run build` ja **paikallinen composite action** ✅ —
+mutta vaihe *AWS-kirjautuminen (OIDC)* kaatui ~5 min uudelleenyritysten
+jälkeen:
+
+> *Could not assume role with OIDC: Request ARN is invalid*
+
+Syy oli **repo-muuttujan arvo**, ei koodi: `configure-aws-credentials` validoi
+`role-to-assume`-arvon muodon **ennen** STS-kutsua, joten AWS:ää ei koskaan
+kutsuttu. Odotettu muoto on `arn:aws:iam::<12 numeroa>:role/<nimi>`; arvo
+kannattaa liittää suoraan `aws iam get-role --role-name … --query 'Role.Arn'
+--output text`istä (ei käsin kirjoitettuna, ei välilyöntejä).
+
+Opetus: erota *actionin oma validaatio* AWS:n virheestä — edellinen tarkoittaa,
+että AWS:ään ei ole vielä yritettykään. Sama tarkistus koskee
+`PROD_DEPLOY_ROLE_ARN`ia.
+
 
 ### Rajaukset
 
