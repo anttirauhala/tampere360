@@ -256,12 +256,12 @@ node scripts/smoke.mjs --api https://api.tampere247.online \
                        --frontend https://tampere247.online
 ```
 
-| Tarkistus                         | Kriteeri                                          |
-| --------------------------------- | ------------------------------------------------- |
-| `GET <api>/v1/situations?limit=1` | 200, `{ items: [...] }`, rivillä `situationId`    |
-| `GET <api>/v1/health/sources`     | 200, `status: OK`, **ei yhtään** `ERROR`-lähdettä |
-| `GET <frontend>/`                 | 200, sisältää brändin `Tampere 247`               |
-| `GET <frontend>/config.json`      | 200, `apiUrl` on http(s)-osoite                   |
+| Tarkistus                         | Kriteeri                                                                   |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `GET <api>/v1/situations?limit=1` | 200, `{ items: [...] }`, rivillä `situationId`                             |
+| `GET <api>/v1/health/sources`     | 200, `status: OK`, **ei yhtään** `ERROR`-lähdettä                          |
+| `GET <frontend>/`                 | 200, sisältää brändin `Tampere 247`                                        |
+| `GET <frontend>/config.json`      | 200, API:n juuri asetettu avaimella `apiBaseUrl` (sama, jota selain lukee) |
 
 **Puuttuva lähde on varoitus, ei virhe.** Tuoreessa ympäristössä Schedulerit
 kirjaavat tilan vasta ensimmäisellä ajokerralla (FMI 5 min, POLICE 2–5 min);
