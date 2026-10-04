@@ -225,7 +225,8 @@ a {
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  /* Sama periaate kuin muissa ruudukoissa (ks. selitys `.cards`in kohdalla). */
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -262,9 +263,24 @@ a {
 
 /* --- Kortit --- */
 
+/*
+ * Sarakkeen minimi on `min(320px, 100%)` eikä pelkkä `320px`.
+ *
+ * Kiinteä 320px valuu säiliön reunan yli, kun sisältöalue on kapeampi kuin
+ * 320px. Näin käy helposti juuri puhelimissa: CSS-viewport on esim. 360px ja
+ * `.main`-reunus vie 2 × 20px, jolloin sisältöalueeksi jää täsmälleen 320px —
+ * ja heti kun käyttäjän fonttikoko ei ole oletus, selain zoomaa koko sivun
+ * (Chrome: "Accessibility Page Zoom", Firefox: `browser.display.os-zoom-
+ * behavior = 1`), jolloin viewport kapenee ja ylivuoto kasvaa kymmeniin
+ * pikseleihin. Sama tapahtuu näytön koko/zoom-asetuksella.
+ *
+ * `min(320px, 100%)` rajaa minimin säiliön leveyteen: työpöydällä sarake on
+ * edelleen vähintään 320px, mutta kapealla se kutistuu eikä koskaan ylitä
+ * reunaa riippumatta selaimen, fonttikoon tai zoomauksen asetuksista.
+ */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 12px;
 }
 
@@ -1069,7 +1085,9 @@ a {
 }
 
 .now-head__text {
-  min-width: 240px;
+  /* Sama periaate kuin ruudukoissa: minimi ei saa ylittää säiliötä, jotta
+     suuri fonttikoko / zoomaus ei työnnä palstaa reunan yli. */
+  min-width: min(240px, 100%);
 }
 
 /* Leadin oma ala-marginaali pois: väli sisältöön tulee vain .now-headin
@@ -1080,7 +1098,8 @@ a {
 
 .weather-card {
   flex: 0 0 auto;
-  min-width: 210px;
+  /* Minimi ei saa ylittää säiliötä (ks. `.now-head__text`). */
+  min-width: min(210px, 100%);
   max-width: 260px;
   margin-left: auto;
   padding: 12px 16px;
@@ -1311,10 +1330,14 @@ a {
 
 /*
  * Kameraruudukko.
+ *
+ * Sarakkeen minimi rajataan säiliön leveyteen (ks. selitys `.cards`in
+ * kohdalla): muuten kortti valuu reunan yli kapealla näytöllä tai suurella
+ * fonttikoolla.
  */
 .camera-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
   gap: 12px;
 }
 
@@ -1404,10 +1427,14 @@ a {
  * Asemaruudukko: kortti on painike (valitsee aseman, jonka historia näytetään).
  * Siksi `text-align: left` ja `font-family: inherit` — painikkeen oletukset
  * eivät sovi tekstikortille.
+ *
+ * Sarakkeen minimi rajataan säiliön leveyteen (ks. selitys `.cards`in
+ * kohdalla): muuten kortti valuu reunan yli kapealla näytöllä tai suurella
+ * fonttikoolla.
  */
 .tms-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 12px;
 }
 
@@ -1654,9 +1681,11 @@ a {
 
 /* --- Saunat (§33) --- */
 
+/* Sarakkeen minimi rajataan säiliön leveyteen (ks. selitys `.cards`in kohdalla):
+   muuten kortti valuu reunan yli kapealla näytöllä tai suurella fonttikoolla. */
 .sauna-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 12px;
 }
 
