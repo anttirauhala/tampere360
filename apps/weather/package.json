@@ -10,6 +10,6 @@
   },
   "dependencies": {
     "@tampere360/observability": "0.1.0",
-    "fast-xml-parser": "^5.0.0"
+    "fast-xml-parser": "^5.11.2"
   }
 }
