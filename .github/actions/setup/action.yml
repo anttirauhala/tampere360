@@ -8,7 +8,9 @@ runs:
   using: composite
   steps:
     - name: Node (.nvmrc)
-      uses: actions/setup-node@v4
+      # v7 ajaa Node 24:llä (v4 varoittaisi "Node.js 20 is deprecated").
+      # Itse projektin Node tulee .nvmrc:stä (22) — ks. infra (nodejs22.x).
+      uses: actions/setup-node@v7
       with:
         node-version-file: .nvmrc
         cache: npm
