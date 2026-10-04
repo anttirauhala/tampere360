@@ -4,9 +4,10 @@
 > Tilanne: Vaiheet 0–4 ✅ (CDK-infra 8 stackia; FMI CAP, Digitraffic,
 > poliisi-RSS ja Nysse Waltti toimivat päästä päähän; React-frontend
 > julkaistu CloudFrontiin; tapahtumalähde disabloitu, API 404 — ks. §18).
-> Deploy: `tampere360-dev-*` eu-north-1.
-> Frontend: https://d36ic5wsx4b9yl.cloudfront.net
-> API: https://vllod80b6i.execute-api.eu-north-1.amazonaws.com
+> Deploy: `tampere360-dev-*` eu-north-1. **Dev-osoitteita ei kirjata tänne** —
+> ne vaihtuvat, jos resurssi (CloudFront-jakelu tai HTTP API) korvataan; hae ne
+> CloudFormationin outputeista (README §Julkaistu ympäristö, savutesti tekee
+> tämän automaattisesti `--outputs-file`-tiedostosta).
 > Seuraavaksi Vaihe 5 (testit, valvonta, CI).
 > **CI/CD ✅ (§40):** GitHub Actions -putki (`ci.yml`, `deploy-dev.yml`,
 > `deploy-prod.yml`) OIDC-tunnistautumisella + savutesti `scripts/smoke.mjs`.
@@ -1764,7 +1765,7 @@ erityisesti jos sivu on ollut kauan auki"*:
 
 ```
 Uncaught TypeError: error loading dynamically imported module:
-https://d36ic5wsx4b9yl.cloudfront.net/assets/NysseMapPage-DyiIPu-z.js
+https://<dev-jakelu>/assets/NysseMapPage-DyiIPu-z.js
 ```
 
 Virhe koski dev-jakelua, mutta sama rakenne oli myös prodissa
@@ -2269,7 +2270,7 @@ selainpyyntöä.
 saunas-testit 26 ✅. Koko sarja ✅, ESLint ✅, Prettier ✅,
 `npm run build:web` ✅.
 
-**Verifiointi 3.10.2026 (dev, `d36ic5wsx4b9yl.cloudfront.net`, headless
+**Verifiointi 3.10.2026 (dev, headless
 Chrome `--dump-dom`):** julkaistu `index.html` osoittaa omaan buildiin
 (`assets/index-DJfesDdp.js`), CSS sisältää `.page__lead-link`in, ja DOM:issa
 on **täsmälleen 3** saunahaku-linkkiä:
@@ -2458,8 +2459,7 @@ Julkaistu build on täsmälleen sama kuin paikallinen:
 `script-src 'self'`, `connect-src` API + tiilet) **ei vaatinut muutosta** —
 ulkoinen `<select>` ei aiheuta uusia origineja.
 
-**Julkaistun dev-sivuston verifiointi** (headless Chrome + CDP,
-`https://d36ic5wsx4b9yl.cloudfront.net`):
+**Julkaistun dev-sivuston verifiointi** (headless Chrome + CDP, dev-jakelu):
 
 | Tarkistus | Tulos |
 |---|---|
@@ -2740,7 +2740,9 @@ ensimmäisestä ajosta lähtien. Korjaus tehtiin `npm audit fix`illä
 
 ### Käsin tehtävät asetukset (eivät ole koodissa)
 
-GitHub: Actions + read-only-työnkulkuoikeudet, Environments `dev` ja `prod`
+GitHub: **Actions permissions = "Allow all actions and reusable workflows"**
+(ilman tätä kaikki ajot kaatuvat `startup_failure`ina, ks. alla) + read-only
+-workflow-oikeudet, Environments `dev` ja `prod`
 (prodissa *required reviewers*), repo-muuttujat `DEV_DEPLOY_ROLE_ARN` /
 `PROD_DEPLOY_ROLE_ARN` (valinnainen `AWS_REGION`), branch protection
 (`checks`), Dependabot-hälytykset. AWS: OIDC-provider, kaksi deploy-roolia
@@ -2749,6 +2751,98 @@ GitHub: Actions + read-only-työnkulkuoikeudet, Environments `dev` ja `prod`
 
 **Ei committoitu eikä pushattu tässä työssä** — muutokset ovat työhakemistossa
 odottamassa läpikäyntiä (format-baseline on tarkoitus committoida omanaan).
+
+### Ensimmäinen ajo GitHubissa: `startup_failure` (4.10.2026)
+
+Push `main`-haaraan (`386fe25`) loi CI-ajon, joka päättyi heti
+`startup_failure`iin: **0 jobia, ei lokia, ei check-runia** — eli workflow ei
+koskaan käynnistynyt. Diagnoosi tehtiin koehaaralla (`ci/probe-*`, poistettu
+analyysin jälkeen) kolmella probe-työnkululla:
+
+| Probe | Sisältö | Tulos |
+|---|---|---|
+| Probe1 | `${{ vars.AWS_REGION \|\| 'eu-north-1' }}` workflow-tason `env`issä | ✅ käynnistyi (hypoteesi `vars`-kontekstista kumoutui) |
+| Probe2 | sama, mutta literaali arvo | ✅ käynnistyi (kontrolli) |
+| Probe3 | `uses: ./.github/actions/setup` (+ checkout) | ❌ `startup_failure` |
+| Probe4 | **pelkkä `actions/checkout@v4`** | ❌ `startup_failure` |
+| Probe5 | minimaalinen paikallinen composite action (+ checkout) | ❌ `startup_failure` |
+| Probe6 | paikallinen action **ilman** marketplace-actionia | ⚠️ käynnistyi (job kaatui, koska checkout puuttui — odotettua) |
+
+Johtopäätös: mikä tahansa marketplace-action kaataa ajon. GitHubin oma
+virheteksti löytyi ajon sivun HTML:stä:
+
+> *The action actions/checkout@v4 is not allowed in anttirauhala/tampere360
+> because all actions must be from a repository owned by anttirauhala.*
+
+**Syy oli repositorion asetus, ei koodi:** Settings → Actions → General →
+*Actions permissions* oli "Allow select actions and reusable workflows" ilman
+sallittuja actioneita → GitHub esti kaikki marketplace-actionit. Korjaus:
+**"Allow all actions and reusable workflows"** (tai "Allow select" +
+"Allow actions created by GitHub" + "Allow Marketplace actions by verified
+creators"). Runbookin §2.1 ja vianetsintä on päivitetty tällä oireella.
+
+Diagnoosityökalu, jota kannattaa käyttää jatkossa: `actionlint`
+(`rhysd/actionlint` v1.7.12) + SchemaStoren `github-workflow.json`
+— molemmat validoivat työnkulut, mutta **eivät** paljasta repositorion
+käytäntöjä, joten `startup_failure` kannattaa aina tarkistaa ajon sivun
+HTML:stä (hakusana `not allowed`).
+
+### CI vihreä, mutta Deploy dev kaatui OIDC-kirjautumiseen (4.10.2026)
+
+Kun Actions permissions oli korjattu, **CI meni läpi** (run 37187631073: build,
+ESLint, Prettier, 645 testiä, synth dev + prod, `npm audit`) ja `workflow_run`
+käynnisti **Deploy dev**in automaattisesti. Deployn alkupää toimi täysin —
+checkout, `npm ci`, `npm run build` ja **paikallinen composite action** ✅ —
+mutta vaihe *AWS-kirjautuminen (OIDC)* kaatui ~5 min uudelleenyritysten
+jälkeen:
+
+> *Could not assume role with OIDC: Request ARN is invalid*
+
+Syy oli **repo-muuttujan arvo**, ei koodi: `configure-aws-credentials` validoi
+`role-to-assume`-arvon muodon **ennen** STS-kutsua, joten AWS:ää ei koskaan
+kutsuttu. Odotettu muoto on `arn:aws:iam::<12 numeroa>:role/<nimi>`; arvo
+kannattaa liittää suoraan `aws iam get-role --role-name … --query 'Role.Arn'
+--output text`istä (ei käsin kirjoitettuna, ei välilyöntejä).
+
+Opetus: erota *actionin oma validaatio* AWS:n virheestä — edellinen tarkoittaa,
+että AWS:ään ei ole vielä yritettykään. Sama tarkistus koskee
+`PROD_DEPLOY_ROLE_ARN`ia.
+
+### AWS-esiedellytykset toteutettu (4.10.2026)
+
+Selvisi, että §3.1–3.4 oli kokonaan tekemättä: `OpenIDConnectProviderList` oli
+tyhjä eikä kumpaakaan `tampere360-github-*-deploy`-roolia ollut olemassa
+(`NoSuchEntity`). Luotiin AWS CLI:llä (idempotentti skripti, ks. runbook §3):
+
+| Resurssi | Tulos |
+|---|---|
+| OIDC-provider | `arn:aws:iam::132339120388:oidc-provider/token.actions.githubusercontent.com` ✅ |
+| dev-rooli | `arn:aws:iam::132339120388:role/tampere360-github-dev-deploy` + `PowerUserAccess`, `IAMFullAccess` ✅ (trust: `…:environment:dev`, **molemmat sub-muodot**: legacy + ID-pohjainen) |
+| prod-rooli | `arn:aws:iam::132339120388:role/tampere360-github-prod-deploy` + samat policyt ✅ (trust: `…:environment:prod`) |
+| bootstrap | `cdk bootstrap aws://132339120388/eu-north-1 --trust <molemmat>` → *bootstrapped*; CDKToolkit `UPDATE_COMPLETE`; deploy-roolin luottamus sisältää molemmat roolit ✅ |
+
+**GitHubin `sub`-väitteen muoto (4.10.2026):** trust policyn ensimmäinen versio
+käytti muotoa `repo:anttirauhala/tampere360:environment:dev`, mutta GitHub lähettää
+nykyään **ID-pohjaisen** väitteen
+`repo:anttirauhala@20150993/tampere360@1359212266:environment:dev` → STS vastasi
+`AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity`.
+`sub`-väite ei näy GitHubin lokista eikä IAM-konfiguraatiosta, mutta **CloudTrail
+näyttää sen** (`aws cloudtrail lookup-events --lookup-attributes
+AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity`; tapahtuman
+`userIdentity.principalId` sisältää koko väitteen). Roolit päivitettiin
+`aws iam update-assume-role-policy`illa hyväksymään molemmat muodot, ja
+osuvuus varmistettiin CloudTrailista luettua väitettä vasten (uusi muoto osuu,
+eri omistaja/repo ja prod-ehto eivät osu). Runbook §3.2 ja §7 on päivitetty.
+
+GitHub-muuttujiin tulee siis **täsmälleen** yllä olevat kaksi ARN:ia. Koska
+ARN:t ovat deterministisiä (tili + roolin nimi), arvot voi kirjoittaa käsin —
+ne eivät riipu mistään kopioitavasta merkkijonosta.
+
+> Diagnoosimenetelmä, joka kannattaa muistaa: **repo-muuttujan arvoa ei näe
+> API:sta eikä lokista**, mutta AWS:n IAM-lista paljastaa heti, onko roolia
+> olemassa (`aws iam get-role --role-name …`). Tyhjä OIDC-providerilista
+> (`aws iam list-open-id-connect-providers`) kertoo samasta asiasta.
+
 
 ### Rajaukset
 

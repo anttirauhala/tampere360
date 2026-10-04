@@ -125,16 +125,29 @@ Prodilla on omat npm-skriptit: `npm run synth:prod`, `npm run diff:prod`,
 
 ## Julkaistu ympäristö (dev, eu-north-1)
 
-| Resurssi                   | Osoite                                                  |
-| -------------------------- | ------------------------------------------------------- |
-| Frontend (CloudFront)      | https://d36ic5wsx4b9yl.cloudfront.net                   |
-| API (API Gateway HTTP API) | https://vllod80b6i.execute-api.eu-north-1.amazonaws.com |
+Dev-ympäristön osoitteita **ei kirjata dokumentaatioon**: `cdk deploy` voi
+korvata resurssin (esim. CloudFront-jakelun tai HTTP API:n), jolloin sekä
+API-id että jakelun domain vaihtuvat. Hae ajantasaiset osoitteet aina
+CloudFormationin outputeista:
 
 ```bash
-curl https://d36ic5wsx4b9yl.cloudfront.net/config.json
-curl "https://vllod80b6i.execute-api.eu-north-1.amazonaws.com/v1/situations?limit=5"
-curl https://vllod80b6i.execute-api.eu-north-1.amazonaws.com/v1/health/sources
+# Frontend (CloudFront) ja API (HTTP API) — dev
+aws cloudformation describe-stacks --stack-name tampere360-dev-frontend \
+  --query 'Stacks[0].Outputs[?OutputKey==`FrontendUrl`].OutputValue' --output text
+aws cloudformation describe-stacks --stack-name tampere360-dev-api \
+  --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text
 ```
+
+Sama tieto tallentuu deployn yhteydessä tiedostoon, kun `--outputs-file`
+annetaan — savutesti lukee sen sieltä:
+
+```bash
+cd infra && npx cdk deploy --all -c env=dev --outputs-file cdk-outputs-dev.json
+node scripts/smoke.mjs --outputs infra/cdk-outputs-dev.json --env dev
+```
+
+CI tekee tämän automaattisesti: _Deploy dev_ kirjoittaa outputit tiedostoon ja
+ajaa savutestin niitä vasten (ks. [`.github/workflows/deploy-dev.yml`](./.github/workflows/deploy-dev.yml)).
 
 ## Tuotanto (prod, eu-north-1)
 

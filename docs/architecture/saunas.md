@@ -122,8 +122,10 @@ joka hyväksyy vain http(s)-osoitteet ja johtaa otsikon verkkotunnuksesta
 ## 5. Verifiointi (toistettavat komennot)
 
 ```bash
-# API (dev)
-curl "https://vllod80b6i.execute-api.eu-north-1.amazonaws.com/v1/saunas"
+# API (dev) — hae juuri outputeista (README §Julkaistu ympäristö):
+# API=$(aws cloudformation describe-stacks --stack-name tampere360-dev-api \
+#   --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)
+curl "$API/v1/saunas"
 
 # Testit, lintti ja buildi
 npx vitest run apps/saunas apps/web/src/lib/saunas.test.ts infra/test/config.test.ts
