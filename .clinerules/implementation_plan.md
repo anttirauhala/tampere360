@@ -2928,4 +2928,79 @@ Kun `typescript-eslint` julkaisee TypeScript 7 -tuen
 `ignore`-sääntö poistetaan ja `typescript` palautetaan dev-tooling-ryhmään.
 Pysyvä ohje: `docs/architecture/ci-cd.md` §2.5, §6.13 ja §7.
 
+## 42. Koostekortit valuivat reunan yli kapealla näytöllä — sarakeminimi kiinteästä suhteelliseksi (4.10.2026)
+
+**Käyttäjän havainto:** *"onko etusivun koostekorteilla kiinteä minimileveys?
+Mobiilissa leveys ei täysin skaalaudu niin että kortin leveys ei menisi
+vaakatasossa reunan yli"* — ja tarkennus: Samsung Galaxy S24:llä kortti menee
+reunan yli, ja epäily, että puhelimen fonttikokoasetus vaikuttaa.
+
+### Juurisyy: kiinteä pikseliminimi ruudukossa
+
+`.summary-card`illa **ei ole** omaa `min-width`ia; raja tulee sitä ympäröivästä
+ruudukosta yhdessä `.main`-reunuksen kanssa:
+
+```css
+.main  { padding: 24px 20px 48px; }                               /* sisältö = viewport − 40px */
+.cards { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }  /* ← kiinteä 320px */
+```
+
+`minmax(320px, 1fr)` ei kutistu alle 320px:n, joten sarake valuu reunan yli heti
+kun sisältöalue on kapeampi. **Sama piilevä vika oli kolmella muulla sivulla:**
+`.sauna-grid` (320px), `.tms-grid` (300px) ja `.camera-grid` (280px), sekä
+otsikkorivillä `.now-head__text` (`min-width: 240px`) ja `.weather-card`
+(`min-width: 210px`).
+
+### Fonttikokoasetus pahentaa — ja vaikuttaa sekä Chromessa että Firefoxissa
+
+Tämä ei ole "teksti kasvaa kortin sisällä" vaan **koko sivun zoomaus**, joka
+kaventaa CSS-viewporttia:
+
+| Selain | Fonttikoko → | Viewport kapenee? |
+|---|---|---|
+| Chrome Android (M113+) | *Accessibility Page Zoom* — *"any user on Android who has a non-default OS-level font size setting (~40% of users), will use a non-100% zoom … This will change the overall distribution of `window.innerWidth` values"* | **kyllä** |
+| Firefox for Android (116+) | `browser.display.os-zoom-behavior` oletus **1** = `settings.mFullZoom = GetTextScaleFactor()` (`widget/nsXPLookAndFeel.cpp`); Firefoxin oma bugi **1849825** *"'Font size' seems to change the entire viewport size"* (UNCONFIRMED) | **kyllä** |
+| Samsung Internet | skaalaa vain tekstiä (sama bugi: *"The only thing that changes there is the scale of certain icons"*) | ei |
+| Firefox työpöytä (Win/Linux) | sama oletus 1 + Ctrl+/- zoom | **kyllä** |
+
+Eli Galaxy S24:llä (CSS-viewport **360px**, DPR 3) oletusfonttikoolla sisältöalue
+on täsmälleen 320px → **0 px pelivaraa**; jo pieni fonttikoon nosto kutistaa
+viewportin alle 360px:n ja ylivuoto kasvaa kymmeniin pikseleihin. Myös Androidin
+*Display size* (screen zoom) kapentaa viewportin samalla tavalla.
+
+### Korjaus
+
+| Tiedosto | Muutos |
+|---|---|
+| `apps/web/src/styles.css` | `.cards`, `.sauna-grid`, `.camera-grid`, `.tms-grid`, `.tiles`: `minmax(<N>px, 1fr)` → `minmax(min(<N>px, 100%), 1fr)` |
+| `apps/web/src/styles.css` | `.now-head__text`: `min-width: 240px` → `min(240px, 100%)`; `.weather-card`: `min-width: min(210px, 100%)` |
+| `apps/web/src/styles.test.ts` (uusi) | Regressiosuoja: jokaisen `repeat(auto-fill, minmax(…))`-ruudukon minimin on käytettävä `min()`ia, ja minimi ei saa pudota alle 5 ruudukon (estää regexin hiljaisen hajoamisen). Lukee `styles.css`:n `node:fs`:llä — **ei `?raw`-importilla**, koska Vitest ei prosessoi CSS:ää (`test.css` oletus `false`) ja `?raw` palauttaisi tyhjän merkkijonon |
+
+`min(Npx, 100%)` rajaa minimin säiliön leveyteen: työpöydällä sarake on edelleen
+vähintään N px, kapealla se kutistuu eikä koskaan ylitä reunaa. Yksi rivi per
+ruudukko, ei uusia mediaqueryjä eikä JS:ää, eikä työpöytäasettelu muutu.
+
+### Verifiointi
+
+| Tarkistus | Tulos |
+|---|---|
+| `npx vitest run` | **649 testiä** ✅ (62 tiedostoa; +4 uutta) |
+| `npm run build:web` | ✅ (`tsc --noEmit` hyväksyy `node:fs`-importin apps/webin tsconfigilla) |
+| `npm run lint`, `npm run format:check` | ✅ |
+| Julkaistu CSS (`dist/assets/index-*.css`) | `minmax(min(320px,100%),1fr)` säilyi LightningCSSin läpi ✅ |
+| **CSS-mittaus, Chrome 154** (säiliö 360/320/273/240) | ylitys **−21 px** kaikilla = reunan sisällä ✅ |
+| **CSS-mittaus, Firefox 156** (sama aineisto, screenshot + pikselianalyysi) | **identtinen** Chrome-tuloksen kanssa ✅; ennen korjausta 273px:n säiliöllä **+47 px** |
+| **Päästä-päähän, oikea build** (paikallinen http-serveri + mock `/v1/situations`, iframe = aito viewport) | 360 px: 4 koostekorttia, `scrollWidth == clientWidth == 360`, **ei ylivuotoa**; 320 px ✅; 273 px ✅ |
+| Sama **ennen korjausta** (CSS palautettu `minmax(320px,1fr)`) | 320 px → `scrollWidth 340` (**+20 px yli**); 273 px → `scrollWidth 340` (**+67 px yli**) |
+
+### Rajaukset
+
+- Deploy vain deviin (`tampere360-dev-frontend`); prodia ei muutettu.
+- `.tiles`/`.tile` ovat kuollutta CSS:ää (mikään komponentti ei renderöi niitä) —
+  ne korjattiin samalla, jotta invariantti ("mikään auto-fill-ruudukko ei käytä
+  kiinteää pikseliminimiä") on ehjä ja testi voi olla yksinkertainen. Siivous
+  pois on oma erillinen tehtävänsä.
+- Regressiosuoja on CSS-tekstitasoinen, ei selaintasoinen: se ei havaitse uutta
+  *erilaista* ylivuotosyytä (esim. `nowrap`-elementtiä), vain tämän vikaluokan.
+
 
