@@ -31,14 +31,14 @@
     "deploy:prod": "npm run deploy -w @tampere360/infra -- -c env=prod -c wafEnabled=false --region eu-north-1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.15.0",
-    "@types/aws-lambda": "^8.10.163",
-    "@types/node": "^22.10.0",
+    "@eslint/js": "^10.0.1",
+    "@types/aws-lambda": "^8.10.164",
+    "@types/node": "^26.6.3",
     "esbuild": "^0.28.0",
-    "eslint": "^9.15.0",
-    "prettier": "^3.4.1",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.16.0",
-    "vitest": "^3.0.0"
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
   }
 }

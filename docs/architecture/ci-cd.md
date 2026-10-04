@@ -96,6 +96,26 @@ _Dependabot security updates_ päälle. Ajastetut päivitykset tulevat
 [`.github/dependabot.yml`](../../.github/dependabot.yml)istä (npm + Actions,
 viikoittain).
 
+**TypeScriptin major on blokattu (4.10.2026).** `typescript-eslint` 8.71.0 —
+ja myös canary 8.71.1-alpha — rajaa peer-vaatimuksensa
+`typescript >=4.8.4 <6.1.0`, joten TypeScript 7:n major-hyppy kaataa
+`npm ci`:n `ERESOLVE`-virheeseen (ks. §6.13 ja §7). Siksi:
+
+- `typescript` on **jätetty pois** `dev-tooling`-ryhmästä
+  (`exclude-patterns`), jotta ryhmä ei voi koskaan sisältää sen majoria,
+- sillä on oma `typescript`-ryhmä vain `minor`/`patch`-päivityksille,
+- ja `ignore`-sääntö `dependency-name: 'typescript'` +
+  `update-types: ['version-update:semver-major']` estää major-PR:n
+  syntymisen kokonaan.
+
+Ilman tähteä `dependency-name` osuu vain **täsmälleen** samannimiseen
+pakettiin (Dependabot options reference: _”Ignore updates for dependencies
+with matching names, optionally using `*` to match zero or more
+characters”_), joten sääntö ei blokkaa `typescript-eslint`-päivityksiä —
+juuri sen päivitys tuo aikanaan TS 7 -tuen. **Poista `ignore`-sääntö ja
+palauta `typescript` `dev-tooling`-ryhmään, kun `typescript-eslint` tukee
+TypeScript 7:ää** (`npm view typescript-eslint@latest peerDependencies`).
+
 ### 2.6 Järjestys
 
 1. Tämä konfiguraatio (2.1–2.5) ja AWS-osuus (§3).
@@ -366,6 +386,20 @@ samoja npm-skriptejä ja -konteksteja.
     (uusi `S3Key`). Tämä on todettu `cdk diff`illä: vain asset-hashit
     muuttuvat, **yksikään resurssi ei korvaudu** (foundation/data/eventing/
     monitoring: ei eroja).
+13. **`npm ci` kaatuu peer-riippuvuuteen (TypeScript 7).** Dependabotin
+    dev-tooling-ryhmä ehdotti 4.10.2026 TypeScriptin major-hyppyä
+    (5.9.3 → 7.0.2). `typescript-eslint` 8.71.0 rajaa peer-vaatimuksensa
+    `typescript >=4.8.4 <6.1.0`, joten npm:n tiukka peer-resoluutio kaatoi
+    asennuksen `ERESOLVE`-virheeseen **ennen kuin lint, format, testit tai
+    synth ehtivät ajaa lainkaan** — sama ongelma olisi tullut myös
+    `main`-haaraan, jos PR olisi mergetty. Ratkaisu: TypeScript pidetään
+    5.x:ssä ja sen major on blokattu `dependabot.yml`in `ignore`-säännöllä
+    (§2.5). Saman ryhmän muut majorit — eslint 10, `@eslint/js` 10,
+    vitest 5, `@types/node` 26, prettier 3.9 — on verifioitu toimiviksi
+    (`npm ci`, build, lint, `format:check`, 645 testiä, synth dev + prod).
+    **`--legacy-peer-deps` ei ole ratkaisu:** se piilottaa
+    yhteensopimattomuuden, ja typescript-eslint hajoaisi TS 7:n API:in
+    vasta ajonaikaisesti.
 
 ## 7. Vianetsintä
 
@@ -378,6 +412,7 @@ samoja npm-skriptejä ja -konteksteja.
 | `is not authorized to perform: cloudformation:...` | Deploy-roolilta puuttuu oikeuksia (ks. §3.3) |
 | `Access Denied` bootstrap-bucketiin | `cdk bootstrap --trust` puuttuu (§3.4) |
 | `npm ci` kaatuu | `package-lock.json` ja `package.json` eri versiossa — aja `npm install` paikallisesti ja committoi lock |
+| **`npm ci` kaatuu `ERESOLVE`:iin, lokissa `peer typescript@…` tai `Conflicting peer dependency`** | **Jokin riippuvuus ehdottaa major-versiota, jota peer ei tue.** 4.10.2026: Dependabot ehdotti TypeScript 7.0.2:ta, mutta `typescript-eslint` 8.71.0 vaatii `typescript >=4.8.4 <6.1.0` (myös canary). Tarkista peer-vaatimus: `npm view <paketti>@<versio> peerDependencies`. Korjaus on **version rajaaminen** (tai `ignore`-sääntö `dependabot.yml`iin, ks. §2.5) — **ei** `--legacy-peer-deps`, joka vain siirtäisi vian ajonaikaiseksi. |
 | CI vihreä, deploy ei käynnisty | `workflow_run` vaatii, että **CI on määritelty `main`-haarassa** ja että ajo päättyi `success`iin; manuaalinen ajo löytyy Actions → Deploy dev |
 | Savutesti: `HTTP 403` frontendistä | CloudFront-invalidointi kesken — yritykset jatkuvat automaattisesti |
 | Savutesti: `lähteet virhetilassa: ...` | Oikea havainto: katso syykoodi (`error`) ja SSM-parametri |

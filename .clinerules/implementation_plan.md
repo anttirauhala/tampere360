@@ -2854,3 +2854,78 @@ ne eivät riipu mistään kopioitavasta merkkijonosta.
   turvatarkistuksena on `npm audit` + Dependabot.
 - WAF pysyy opt-inina: `deploy-prod.yml` ajaa `-c wafEnabled=false`.
 
+## 41. Dependabotin TypeScript 7 -major kaatoi `npm ci`:n (4.10.2026)
+
+**Oire (käyttäjän havainto):** Dependabotin dev-tooling-ryhmän PR:n CI oli
+punainen heti asennusvaiheessa:
+
+```
+npm error While resolving: typescript-eslint@8.71.0
+npm error Found: typescript@7.0.2
+npm error   dev typescript@"^7.0.2" from the root project
+npm error peer typescript@">=4.8.4 <6.1.0" from typescript-eslint@8.71.0
+npm error Fix the upstream dependency conflict, or retry this command with
+npm error --force or --legacy-peer-deps
+```
+
+### Juurisyy
+
+Dependabotin dev-tooling-ryhmä (haara
+`dependabot/npm_and_yarn/dev-tooling-3bad3fbc8b`, kärki `8673817`) nosti
+yhdeksän dev-riippuvuutta, joiden joukossa oli **TypeScriptin major-hyppy
+`^5.7.2 → ^7.0.2`**. `typescript-eslint` 8.71.0 — ja myös canary
+`8.71.1-alpha.8` — rajaa peer-vaatimuksensa `typescript >=4.8.4 <6.1.0`,
+joten npm:n tiukka peer-resoluutio kaatui `ERESOLVE`-virheeseen **ennen kuin
+lint, format, testit tai synth ehtivät ajaa lainkaan**. Reproduktio
+paikallisesti ryhmähaarassa: `npm ci --dry-run` → sama virhe kuin CI:ssä.
+
+**`main` oli terve:** `origin/main` = `33ababb` (lukitustiedostossa
+`typescript 5.9.3`). Sama vika olisi tullut `main`-haaraan, jos PR olisi
+mergetty — CI:n portti toimi siis tarkoitetusti.
+
+### Korjaus
+
+| Osa | Muutos |
+|---|---|
+| `.github/dependabot.yml` | `typescript` **pois** `dev-tooling`-ryhmästä (`exclude-patterns`), oma `typescript`-ryhmä vain `minor`/`patch`-päivityksille, ja `ignore`-sääntö `dependency-name: 'typescript'` + `update-types: ['version-update:semver-major']` estää major-PR:n kokonaan |
+| `package.json` | `typescript` palautettu `^5.7.2`:ään — kaikki muut ryhmän päivitykset jäävät voimaan |
+
+Kolminkertainen varmistus on tahallinen: `exclude-patterns` takaa, ettei
+group-PR **voi** sisältää TS:n majoria, vaikka `ignore`-säännön ja ryhmien
+yhteispelissä olisi epäselvyyttä (vrt. dependabot-core #8802: ignoorauksen
+jälkeen uudelleenluotu PR ei noudattanut ryhmittelyä).
+
+Ilman tähteä `dependency-name` osuu vain **täsmälleen** samannimiseen
+pakettiin (Dependabot options reference: _”optionally using `*` to match zero
+or more characters”_), joten sääntö **ei** blokkaa `typescript-eslint`-
+päivityksiä — juuri se päivitys tuo aikanaan TS 7 -tuen.
+
+**Ei** käytetty `--legacy-peer-deps`iä eikä npm `overrides`ia: ne vain
+piilottaisivat yhteensopimattomuuden, ja typescript-eslint hajoaisi TS 7:n
+API:in vasta ajonaikaisesti. CI:n tiukka resoluutio on tässä oikea portti.
+
+### Verifiointi — sama ketju kuin CI:ssä (paikallisesti)
+
+| Vaihe | Tulos |
+|---|---|
+| `npm ci` | ✅ (täsmälleen CI:n komento) |
+| `npm run build` | ✅ packages + infra + 15 appin `tsc --noEmit` + web |
+| `npm run lint` | ✅ eslint 10.11.0 + `@eslint/js` 10.0.1 + typescript-eslint 8.71.0 |
+| `npm run format:check` | ✅ prettier 3.9.9 |
+| `npx vitest run` | ✅ 61 tiedostoa / **645 testiä** (vitest 5.0.3) |
+| `cdk synth -c env=dev` ja `-c env=prod -c wafEnabled=false` | ✅ 8 + 8 stackia |
+
+Ratkaistut versiot: typescript 5.9.3, typescript-eslint 8.71.0, eslint 10.11.0,
+`@eslint/js` 10.0.1, vitest 5.0.3, prettier 3.9.9, `@types/node` 26.6.3.
+
+Eli **koko dev-tooling-ryhmä kelpaa ilman TypeScript 7:ää** — mikään muu
+major ei vaadi koodi- eikä konfiguraatiomuutoksia.
+
+### Jatko
+
+Kun `typescript-eslint` julkaisee TypeScript 7 -tuen
+(`npm view typescript-eslint@latest peerDependencies` → yläraja ≥ 7.0),
+`ignore`-sääntö poistetaan ja `typescript` palautetaan dev-tooling-ryhmään.
+Pysyvä ohje: `docs/architecture/ci-cd.md` §2.5, §6.13 ja §7.
+
+
