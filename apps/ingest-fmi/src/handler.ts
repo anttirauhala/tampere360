@@ -101,7 +101,10 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
   // 3. Käy läpi jokainen CAP item, nouda XML ja suodata Pirkanmaa/Tampere
   const candidates: FmiCandidate[] = [];
   for (const item of items) {
-    const guid = typeof item.guid === 'object' ? item.guid?.['#text'] ?? String(item.guid) : String(item.guid ?? '');
+    const guid =
+      typeof item.guid === 'object'
+        ? (item.guid?.['#text'] ?? String(item.guid))
+        : String(item.guid ?? '');
     const capUrl = item.link;
     if (!capUrl || !guid) continue;
 

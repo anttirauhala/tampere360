@@ -33,7 +33,10 @@ export const BODY_SHAPES: Record<VehicleMode, { length: number; width: number }>
   BUS: { length: 13, width: 8 },
 };
 
-function createCanvas(width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+function createCanvas(
+  width: number,
+  height: number,
+): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(width * ICON_PIXEL_RATIO);
   canvas.height = Math.ceil(height * ICON_PIXEL_RATIO);

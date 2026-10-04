@@ -4,7 +4,10 @@
   "private": true,
   "description": "Tampere360 — joukkoliikenteen ajoneuvosijainnit (Nysse / Waltti SIRI VM) API-reittiä /v1/vehicles varten",
   "main": "dist/handler.js",
-  "scripts": { "build": "tsc -p tsconfig.json", "clean": "rm -rf dist" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
   "dependencies": {
     "@aws-sdk/client-ssm": "^3.700.0",
     "@tampere360/observability": "0.1.0",

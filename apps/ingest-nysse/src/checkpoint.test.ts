@@ -43,7 +43,13 @@ describe('buildNysseCheckpoint', () => {
   });
 
   it('ei koskaan palauta STALE-tilaa (sen laskee API aikaleimasta)', () => {
-    for (const outcome of ['SUCCESS', 'NO_ALERTS', 'API_KEY_MISSING', 'FETCH_FAILED', 'PARSE_FAILED'] as const) {
+    for (const outcome of [
+      'SUCCESS',
+      'NO_ALERTS',
+      'API_KEY_MISSING',
+      'FETCH_FAILED',
+      'PARSE_FAILED',
+    ] as const) {
       expect(buildNysseCheckpoint(outcome, 0, NOW).status).not.toBe('STALE');
     }
   });

@@ -134,9 +134,9 @@ describe('filterVehicleFeatures', () => {
   });
 
   it('suodattaa bussit', () => {
-    expect(filterVehicleFeatures(collection, 'BUS').features.map((f) => f.properties.line)).toEqual([
-      '80',
-    ]);
+    expect(filterVehicleFeatures(collection, 'BUS').features.map((f) => f.properties.line)).toEqual(
+      ['80'],
+    );
   });
 
   it('ilman muotoa palautetaan kaikki ajoneuvot', () => {

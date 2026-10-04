@@ -68,7 +68,10 @@ export async function saveIngestionCheckpoint(input: SaveCheckpointInput): Promi
  * riviä ei vielä ole (ensimmäinen ajo) tai luku epäonnistuu — tällöin ajo
  * lähettää kaikki tietueet, kuten ennen optimointia.
  */
-export async function loadSentItems(tableName: string, source: string): Promise<Record<string, string>> {
+export async function loadSentItems(
+  tableName: string,
+  source: string,
+): Promise<Record<string, string>> {
   if (!tableName) return {};
   try {
     const result = await doc.send(

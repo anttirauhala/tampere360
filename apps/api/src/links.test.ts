@@ -40,6 +40,8 @@ describe('situationSourceUrl', () => {
   });
 
   it('ei koskaan palauta javascript-osoitetta', () => {
-    expect(situationSourceUrl({ source: { url: 'javascript:alert(1)', sourceId: 'x' } })).toBeNull();
+    expect(
+      situationSourceUrl({ source: { url: 'javascript:alert(1)', sourceId: 'x' } }),
+    ).toBeNull();
   });
 });

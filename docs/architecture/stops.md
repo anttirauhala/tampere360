@@ -36,13 +36,13 @@ eikä sen toteutusta muutettu (§28 kohta 5).
 
 ## Tietolähteet
 
-| Asia | Arvo |
-|---|---|
-| Pysäkit | Tampereen/Nyssen GTFS-static: `https://data.itsfactory.fi/journeys/files/gtfs/latest/gtfs_tampere.zip` (ITS Factory, CC BY 4.0) |
-| Pysäkkien määrä | 3 423 (verifioitu 27.9.2026); kentät `stop_id`, `stop_name`, `stop_lat`, `stop_lon` |
-| Lähdöt | Waltti SIRI **StopMonitoring** v1.3: `POST https://data.waltti.fi/tampere/api/sirirealtime/v1.3/ws` (Basic-auth) |
-| Avain | SSM `/tampere360/{env}/sources/nysse/api-key` — **sama** kuin ajoneuvoissa ja Nysse-adapterissa |
-| Päivitysväli | Waltti: SM 30 s, VM 1 s (dokumentoitu) |
+| Asia            | Arvo                                                                                                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Pysäkit         | Tampereen/Nyssen GTFS-static: `https://data.itsfactory.fi/journeys/files/gtfs/latest/gtfs_tampere.zip` (ITS Factory, CC BY 4.0) |
+| Pysäkkien määrä | 3 423 (verifioitu 27.9.2026); kentät `stop_id`, `stop_name`, `stop_lat`, `stop_lon`                                             |
+| Lähdöt          | Waltti SIRI **StopMonitoring** v1.3: `POST https://data.waltti.fi/tampere/api/sirirealtime/v1.3/ws` (Basic-auth)                |
+| Avain           | SSM `/tampere360/{env}/sources/nysse/api-key` — **sama** kuin ajoneuvoissa ja Nysse-adapterissa                                 |
+| Päivitysväli    | Waltti: SM 30 s, VM 1 s (dokumentoitu)                                                                                          |
 
 ### SIRI StopMonitoring: kaksi helppoa ansaa
 
@@ -160,15 +160,15 @@ Frontend tuntee pysäkin joka tapauksessa kartalta.
 
 ## Kustannusmalli
 
-| Suoja | Arvo (`infra/lib/config.ts`) | Tehtävä |
-|---|---|---|
-| `STOP_CACHE_MS` | 15 000 | reaaliaikaiset lähdöt: N selainta → enintään yksi Waltti-kutsu / 15 s / lämmin kontti |
-| `STOP_STALE_MAX_MS` | 60 000 | virhetilanteessa näytetään viimeisin vastaus, ei tyhjää listaa |
-| `STOP_CACHE_MAX_ENTRIES` | 200 | muisti ei kasva rajatta, kun pysäkkejä klikataan paljon (vanhin avain poistuu) |
-| `STOP_RESERVED_CONCURRENCY` | 2 | oma katto, erillään query-Lambdasta (5) ja ajoneuvoista (2) |
-| `GTFS_STOPS_CACHE_MS` | 6 h | 17 Mt:n zip ladataan ja puretaan käytännössä kerran kontin elinaikana (~171 ms mitattu) |
-| `GTFS_STOPS_STALE_MAX_MS` | 7 vrk | pysäkkirekisteri ei katoa, vaikka lähde olisi hetken alhaalla |
-| `GTFS_STOPS_TIMEOUT_MS` | 15 s | selvästi Lambdan 25 s timeoutia lyhyempi |
+| Suoja                       | Arvo (`infra/lib/config.ts`) | Tehtävä                                                                                 |
+| --------------------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
+| `STOP_CACHE_MS`             | 15 000                       | reaaliaikaiset lähdöt: N selainta → enintään yksi Waltti-kutsu / 15 s / lämmin kontti   |
+| `STOP_STALE_MAX_MS`         | 60 000                       | virhetilanteessa näytetään viimeisin vastaus, ei tyhjää listaa                          |
+| `STOP_CACHE_MAX_ENTRIES`    | 200                          | muisti ei kasva rajatta, kun pysäkkejä klikataan paljon (vanhin avain poistuu)          |
+| `STOP_RESERVED_CONCURRENCY` | 2                            | oma katto, erillään query-Lambdasta (5) ja ajoneuvoista (2)                             |
+| `GTFS_STOPS_CACHE_MS`       | 6 h                          | 17 Mt:n zip ladataan ja puretaan käytännössä kerran kontin elinaikana (~171 ms mitattu) |
+| `GTFS_STOPS_STALE_MAX_MS`   | 7 vrk                        | pysäkkirekisteri ei katoa, vaikka lähde olisi hetken alhaalla                           |
+| `GTFS_STOPS_TIMEOUT_MS`     | 15 s                         | selvästi Lambdan 25 s timeoutia lyhyempi                                                |
 
 Lähtölista palvellaan **vain valitulle pysäkille** — kaikkien pysäkkien
 lähtötietoja ei haeta etukäteen. Mitatut vasteajat devissä 27.9.2026:
@@ -177,16 +177,16 @@ lähtötietoja ei haeta etukäteen. Mitatut vasteajat devissä 27.9.2026:
 
 ## Frontend
 
-| Osa | Ratkaisu |
-|---|---|
-| Kerros | yksi GeoJSON-lähde + 4 kerrosta: klusteriympyrä, klusterin lukumäärä, yksittäinen pysäkki, valitun pysäkin korostus |
-| Klusterointi | MapLibren oma (`cluster: true`, radius 50, `clusterMaxZoom: 14`) → klusterit hajoavat zoomilla 15 |
+| Osa                 | Ratkaisu                                                                                                                                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kerros              | yksi GeoJSON-lähde + 4 kerrosta: klusteriympyrä, klusterin lukumäärä, yksittäinen pysäkki, valitun pysäkin korostus                                                                             |
+| Klusterointi        | MapLibren oma (`cluster: true`, radius 50, `clusterMaxZoom: 14`) → klusterit hajoavat zoomilla 15                                                                                               |
 | Klusterin lukumäärä | `text-field: ['get','point_count_abbreviated']` (esim. `1.2k`); **glyph-lähde** `tiles.openfreemap.org/fonts/...` on jo sallittu CSP:ssä karttatiilien takia, joten CSP:tä ei tarvinnut muuttaa |
-| Visuaalinen ero | pysäkit valkoisia ympyröitä, klusterit kelta-oransseja (`#f59e0b`) — ajoneuvot ovat vihreitä/sinisiä ikoneita linjanumerolla |
-| Klikkaus | klusteri → `getClusterExpansionZoom` + `easeTo` (ei avaa paneelia); yksittäinen pysäkki → sidepanel |
-| Kerrosten järjestys | pysäkkikerrokset lisätään ajoneuvokerrosten **alle** (`beforeId`) |
-| Tila | `showStops` (oletus false) ja `selectedStopId` (`null` = paneeli kiinni); valinnan sammuttaminen sulkee paneelin |
-| Pollaus | lähdöt 15 s, vain kun pysäkki on valittu; taustavälilehti ei pollaa |
+| Visuaalinen ero     | pysäkit valkoisia ympyröitä, klusterit kelta-oransseja (`#f59e0b`) — ajoneuvot ovat vihreitä/sinisiä ikoneita linjanumerolla                                                                    |
+| Klikkaus            | klusteri → `getClusterExpansionZoom` + `easeTo` (ei avaa paneelia); yksittäinen pysäkki → sidepanel                                                                                             |
+| Kerrosten järjestys | pysäkkikerrokset lisätään ajoneuvokerrosten **alle** (`beforeId`)                                                                                                                               |
+| Tila                | `showStops` (oletus false) ja `selectedStopId` (`null` = paneeli kiinni); valinnan sammuttaminen sulkee paneelin                                                                                |
+| Pollaus             | lähdöt 15 s, vain kun pysäkki on valittu; taustavälilehti ei pollaa                                                                                                                             |
 
 Sidepanel (`components/StopPanel.tsx`) näyttää pysäkin nimen ja tunnisteen,
 lähtölistan (linja · määränpää · aika) sekä päivitysajan. Lataus-, virhe- ja
@@ -214,7 +214,7 @@ kohdistui zoom-painikkeeseen, ei sulkunappiin — virhe oli täysin hiljainen ei
 konsolissa näkynyt mitään. Todennus:
 
 ```js
-document.elementFromPoint(closeBtn.x, closeBtn.y).className
+document.elementFromPoint(closeBtn.x, closeBtn.y).className;
 // ennen: "maplibregl-ctrl-group button"  (zoom-painike päällimmäisenä)
 // nyt:   "stop-panel__close"            (sulkunappi päällimmäisenä)
 ```
@@ -247,22 +247,22 @@ Headless Chrome (CDP), puhdas sivulataus osoitteessa
 React-fiberistä, jotta tarkistukset tehtiin MapLibren omilla API:lla
 (`querySourceFeatures`, `queryRenderedFeatures`, `project`).
 
-| Vaihe | Tulos |
-|---|---|
-| Pysäkit oletuksena | valintaruutu **ei** valittu, klustereita ruudulla 0 ✅ |
-| "Näytä pysäkit" | `Näytä pysäkit (3423)`, `GET /v1/stops` **200** ✅ |
-| Klusterointi zoomilla 11 | lähteessä 223 featurea joista **216 klusteria**, ruudulla 27 klusteriympyrää ✅ |
-| Klusterin lukumäärä | glyph-pyyntö `tiles.openfreemap.org/fonts/Noto Sans Bold/0-255.pbf` → **200** ✅ |
-| Klusterin klikkaus | zoom 11,00 → **12,20**, sidepanelia **ei** avattu ✅ |
-| Zoom 16 | lähteessä 21 featurea, **0 klusteria**, 4 yksittäistä pysäkkiä renderöity ✅ |
-| Pysäkin klikkaus | sidepanel: `🚏 Lielahden koulu`, `Pysäkki 1409`, lähdöt `21 Ryydynpohja 7 min` ja `≈ 36 min`, päivitysaika 13.49.58 ✅ |
-| Reaaliaikakysely | `GET /v1/stops/1409/departures` **200** (vain valitulle pysäkille) ✅ |
-| Valinnan korostus | `stops-selected`-kerros renderöi 1 renkaan ✅ |
-| Sulkunappi | `elementFromPoint` = `stop-panel__close` → paneeli sulkeutui, korostus poistui ✅ |
-| Esc-näppäin | avasi uudelleen ja sulki ✅ |
-| Karttakontrollit | zoom **top-left**, attribuutio **bottom-left**, top-right tyhjä ✅ |
-| Konsoli / CSP | **0 konsolivirhettä**, **0 CSP-rikkomusta** ✅ |
-| Regressio `/kartta` | 3 tilannemarkerit, popup aukesi ("Itsenäisyydenkatu, Tampere. Liikennetiedote."), kontrollit vasemmalla, 0 virhettä ✅ |
+| Vaihe                    | Tulos                                                                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| Pysäkit oletuksena       | valintaruutu **ei** valittu, klustereita ruudulla 0 ✅                                                                 |
+| "Näytä pysäkit"          | `Näytä pysäkit (3423)`, `GET /v1/stops` **200** ✅                                                                     |
+| Klusterointi zoomilla 11 | lähteessä 223 featurea joista **216 klusteria**, ruudulla 27 klusteriympyrää ✅                                        |
+| Klusterin lukumäärä      | glyph-pyyntö `tiles.openfreemap.org/fonts/Noto Sans Bold/0-255.pbf` → **200** ✅                                       |
+| Klusterin klikkaus       | zoom 11,00 → **12,20**, sidepanelia **ei** avattu ✅                                                                   |
+| Zoom 16                  | lähteessä 21 featurea, **0 klusteria**, 4 yksittäistä pysäkkiä renderöity ✅                                           |
+| Pysäkin klikkaus         | sidepanel: `🚏 Lielahden koulu`, `Pysäkki 1409`, lähdöt `21 Ryydynpohja 7 min` ja `≈ 36 min`, päivitysaika 13.49.58 ✅ |
+| Reaaliaikakysely         | `GET /v1/stops/1409/departures` **200** (vain valitulle pysäkille) ✅                                                  |
+| Valinnan korostus        | `stops-selected`-kerros renderöi 1 renkaan ✅                                                                          |
+| Sulkunappi               | `elementFromPoint` = `stop-panel__close` → paneeli sulkeutui, korostus poistui ✅                                      |
+| Esc-näppäin              | avasi uudelleen ja sulki ✅                                                                                            |
+| Karttakontrollit         | zoom **top-left**, attribuutio **bottom-left**, top-right tyhjä ✅                                                     |
+| Konsoli / CSP            | **0 konsolivirhettä**, **0 CSP-rikkomusta** ✅                                                                         |
+| Regressio `/kartta`      | 3 tilannemarkerit, popup aukesi ("Itsenäisyydenkatu, Tampere. Liikennetiedote."), kontrollit vasemmalla, 0 virhettä ✅ |
 
 Kuvat otettiin headless-Chromella (`Page.captureScreenshot`); ne eivät ole
 versionhallinnassa. Kuvista tarkistettiin myös, että taustakuva on tasainen ja
@@ -276,10 +276,10 @@ että klusteriympyröissä on lukumäärä (glyphit) eikä pelkkiä ympyröitä.
 **Mittaus:** Walttin SIRI-yhdyskäytävä (`POST …/sirirealtime/v1.3/ws`) vastasi
 **HTTP 500** ja rungoksi `Something went wrong`. Kaksi eri syytä:
 
-| Havainto | Mittaus |
-|---|---|
-| **Tilapäinen lähdevirhe** | Pysäkit 6154, 6155 ja 1027 epäonnistuivat lokissa 27.9.2026 klo 11:21–11:24 (10 + 8 + 2 virhettä), mutta **saman päivän suora testi antoi 200** kolmella peräkkäisellä yrityksellä. Kyse ei siis ollut pysäkistä vaan hetkellisestä lähdevirheestä. |
-| **Pysäkki puuttuu Walttin reaaliaikarekisteristä** | Satunnaisotannassa **2 / 60 pysäkkiä** (6833, 6837) vastasi 500 myös **24 tunnin `PreviewInterval`illa** — pysyvä ominaisuus. Samoin muotoon sopimattomat tunnisteet `9999` ja `HQ:1`. |
+| Havainto                                           | Mittaus                                                                                                                                                                                                                                             |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tilapäinen lähdevirhe**                          | Pysäkit 6154, 6155 ja 1027 epäonnistuivat lokissa 27.9.2026 klo 11:21–11:24 (10 + 8 + 2 virhettä), mutta **saman päivän suora testi antoi 200** kolmella peräkkäisellä yrityksellä. Kyse ei siis ollut pysäkistä vaan hetkellisestä lähdevirheestä. |
+| **Pysäkki puuttuu Walttin reaaliaikarekisteristä** | Satunnaisotannassa **2 / 60 pysäkkiä** (6833, 6837) vastasi 500 myös **24 tunnin `PreviewInterval`illa** — pysyvä ominaisuus. Samoin muotoon sopimattomat tunnisteet `9999` ja `HQ:1`.                                                              |
 
 Rajattu pois: kuormitusrajausta ei ole (20 peräkkäistä + 10 rinnakkaista pyyntöä
 → kaikki 200), eikä SIRI-tason pysäkkirekisteriä ole käytettävissä
@@ -289,12 +289,12 @@ rungossa, joten "tuntematon pysäkki" ja "hetkellinen vika" ovat vastauksesta
 
 ### Korjaus: kolme osaa
 
-| Osa | Toteutus |
-|---|---|
-| **Uusintayritys** | `apps/stops/src/retry.ts`: yksi uusinta 250 ms viiveellä **vain 5xx- ja verkkovirheille** (4xx = oma pyyntö on väärä, ei uusita). Tilapäiset virheet eivät enää näy käyttäjälle. |
-| **Peiton oppiminen** | `apps/stops/src/coverage.ts`: kun pysäkille saadaan `failureThreshold` (3) peräkkäistä virhettä 2 minuutin sisällä **ja jokin toinen pysäkki on vastannut samana aikana**, pysäkki merkitään 30 minuutiksi "ei reaaliaikapeittoa". Merkinnän ajan Walttiin ei soiteta: vastaus on rehellinen `200 { realtimeCoverage: false }`. Merkintä vanhenee itsestään, joten tilanne korjautuu ilman uudelleenkäynnistystä. |
-| **Rehellisempi virhevastaus** | Ennen merkintää vastaus on **503 + `Retry-After: 15`** (aiemmin 502). 503 kertoo, että lähde ei vastannut, ja selain saa yrittää uudelleen. |
-| **Jäähdytys epäonnistumisille** | `cache.ts`: epäonnistuneelle pysäkille ei soiteta uudelleen 30 sekuntiin (`STOP_FAILURE_COOLDOWN_MS`), jos tarjolla ei ole vanhaa arvoa. Ilman tätä jokainen selaimen 15 sekunnin pollaus olisi lähettänyt **kaksi uutta yritystä** Walttiin (`retry.ts`) loputtomiin. Vanha arvo ohittaa jäähdytyksen, koska tuoreus voittaa. |
+| Osa                             | Toteutus                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Uusintayritys**               | `apps/stops/src/retry.ts`: yksi uusinta 250 ms viiveellä **vain 5xx- ja verkkovirheille** (4xx = oma pyyntö on väärä, ei uusita). Tilapäiset virheet eivät enää näy käyttäjälle.                                                                                                                                                                                                                                  |
+| **Peiton oppiminen**            | `apps/stops/src/coverage.ts`: kun pysäkille saadaan `failureThreshold` (3) peräkkäistä virhettä 2 minuutin sisällä **ja jokin toinen pysäkki on vastannut samana aikana**, pysäkki merkitään 30 minuutiksi "ei reaaliaikapeittoa". Merkinnän ajan Walttiin ei soiteta: vastaus on rehellinen `200 { realtimeCoverage: false }`. Merkintä vanhenee itsestään, joten tilanne korjautuu ilman uudelleenkäynnistystä. |
+| **Rehellisempi virhevastaus**   | Ennen merkintää vastaus on **503 + `Retry-After: 15`** (aiemmin 502). 503 kertoo, että lähde ei vastannut, ja selain saa yrittää uudelleen.                                                                                                                                                                                                                                                                       |
+| **Jäähdytys epäonnistumisille** | `cache.ts`: epäonnistuneelle pysäkille ei soiteta uudelleen 30 sekuntiin (`STOP_FAILURE_COOLDOWN_MS`), jos tarjolla ei ole vanhaa arvoa. Ilman tätä jokainen selaimen 15 sekunnin pollaus olisi lähettänyt **kaksi uutta yritystä** Walttiin (`retry.ts`) loputtomiin. Vanha arvo ohittaa jäähdytyksen, koska tuoreus voittaa.                                                                                    |
 
 **Miksi "jokin toinen pysäkki on vastannut" -ehto:** ilman sitä koko Walttin
 katkos merkitsisi kaikki pysäkit ilman peittoa. Ehto rajaa merkinnän tilanteeseen,
@@ -308,32 +308,32 @@ muuta tilannetta.
 
 ### Frontend
 
-| Osa | Muutos |
-|---|---|
-| `api/client.ts` | `ApiError` kuljettaa HTTP-tilakoodin oliona (`apiErrorStatus(error)` lukee sen; tekstivarmistus säilyy varalla) |
-| `lib/stops.ts` | `stopDeparturesNotice(status)` → rauhallinen teksti; `NO_REALTIME_COVERAGE_TEXT` peitottomalle pysäkille |
-| `components/StopPanel.tsx` | Virhe näytetään luettavana huomautuksena **ilman** teknistä `API-virhe 502` -tekstiä, mukana **"Yritä uudelleen"** -painike. `realtimeCoverage === false` → tiedoksi-tyylinen huomautus (ei virhe). |
+| Osa                                        | Muutos                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api/client.ts`                            | `ApiError` kuljettaa HTTP-tilakoodin oliona (`apiErrorStatus(error)` lukee sen; tekstivarmistus säilyy varalla)                                                                                                                                                                                                                    |
+| `lib/stops.ts`                             | `stopDeparturesNotice(status)` → rauhallinen teksti; `NO_REALTIME_COVERAGE_TEXT` peitottomalle pysäkille                                                                                                                                                                                                                           |
+| `components/StopPanel.tsx`                 | Virhe näytetään luettavana huomautuksena **ilman** teknistä `API-virhe 502` -tekstiä, mukana **"Yritä uudelleen"** -painike. `realtimeCoverage === false` → tiedoksi-tyylinen huomautus (ei virhe).                                                                                                                                |
 | `components/StopPanel.tsx` (nykäisyn esto) | TanStack Query nollaa `error`in uuden yrityksen alkaessa, joten pelkkä `error`-tarkistus piilottaisi huomautuksen joka 15 sekunnin pollauksella (ja väläyttäisi virheellisesti "Ei lähtöjä seuraavan tunnin aikana"). Viimeisin huomautus pidetään `useRef`issä ja näytetään uusinnan ajan — painike lukee silloin **"Haetaan…"**. |
-| `styles.css` | `.state--info`, `.state__retry`, `.stop-panel__notice` |
+| `styles.css`                               | `.state--info`, `.state__retry`, `.stop-panel__notice`                                                                                                                                                                                                                                                                             |
 
 Käyttäjälle näkyvät tekstit:
 
-- lähde ei vastannut: *"Lähtötietoja ei juuri nyt saada tälle pysäkille — lähde
-  (Waltti) ei vastannut. Yritämme uudelleen automaattisesti."* + **Yritä uudelleen**
-- peitoton pysäkki: *"Waltti ei tarjoa tälle pysäkille lähtötietoja, joten
-  reaaliaikaista aikataulua ei ole näytettävissä."*
+- lähde ei vastannut: _"Lähtötietoja ei juuri nyt saada tälle pysäkille — lähde
+  (Waltti) ei vastannut. Yritämme uudelleen automaattisesti."_ + **Yritä uudelleen**
+- peitoton pysäkki: _"Waltti ei tarjoa tälle pysäkille lähtötietoja, joten
+  reaaliaikaista aikataulua ei ole näytettävissä."_
 
 ### Konfiguraatio (ympäristömuuttujat)
 
-| Muuttuja | Oletus | Merkitys |
-|---|---|---|
-| `STOP_RETRY_ATTEMPTS` | 2 | yritysten kokonaismäärä |
-| `STOP_RETRY_BACKOFF_MS` | 250 | tauko yritysten välissä |
-| `STOP_FAILURE_COOLDOWN_MS` | 30000 | epäonnistuneen pysäkin uudelleenyrityksen jäähdytys |
-| `STOP_COVERAGE_FAILURE_THRESHOLD` | 3 | peräkkäiset virheet ennen merkintää |
-| `STOP_COVERAGE_WINDOW_MS` | 120000 | ikkuna, jonka sisällä virheet lasketaan |
-| `STOP_COVERAGE_TTL_MS` | 1800000 | merkinnän voimassaolo (30 min) |
-| `STOP_COVERAGE_MAX_ENTRIES` | 500 | muistissa pidettävät pysäkit |
+| Muuttuja                          | Oletus  | Merkitys                                            |
+| --------------------------------- | ------- | --------------------------------------------------- |
+| `STOP_RETRY_ATTEMPTS`             | 2       | yritysten kokonaismäärä                             |
+| `STOP_RETRY_BACKOFF_MS`           | 250     | tauko yritysten välissä                             |
+| `STOP_FAILURE_COOLDOWN_MS`        | 30000   | epäonnistuneen pysäkin uudelleenyrityksen jäähdytys |
+| `STOP_COVERAGE_FAILURE_THRESHOLD` | 3       | peräkkäiset virheet ennen merkintää                 |
+| `STOP_COVERAGE_WINDOW_MS`         | 120000  | ikkuna, jonka sisällä virheet lasketaan             |
+| `STOP_COVERAGE_TTL_MS`            | 1800000 | merkinnän voimassaolo (30 min)                      |
+| `STOP_COVERAGE_MAX_ENTRIES`       | 500     | muistissa pidettävät pysäkit                        |
 
 ### Testit
 
@@ -349,30 +349,30 @@ nollaus, vanhan arvon etusija, jäähdytyksen poiskytkentä),
 
 **1. API (curl, dev):**
 
-| Tilanne | Tulos |
-|---|---|
-| Tavallinen pysäkki (1409, 1027, 6154, 6155) | `200`, `realtimeCoverage: true`, lähdöt mukana ✅ |
-| Peitoton pysäkki (6833) ennen merkintää | `503 UPSTREAM_UNAVAILABLE`, vastausaika ~0,5 s = **2 yritystä + 250 ms tauko** ✅ |
-| Sama pysäkki uudelleen 15 s kuluttua | `503`, mutta **0,07 s** (jäähdytys: upstream-kutsua ei tehdä) ✅ |
-| Peitoton pysäkki merkinnän jälkeen | `200`, `realtimeCoverage: false`, `departures: []`, ~0,07 s ✅ |
-| Virheellinen tunniste / tuntematon polku | `400 INVALID_STOP_ID` / `404` ✅ |
-| Lokit | `Waltti SIRI SM uudelleenyritys` (10), `Pysäkki merkitty ilman reaaliaikapeittoa` (1), `…upstream-kutsu ohitetaan` (2) ✅ |
+| Tilanne                                     | Tulos                                                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Tavallinen pysäkki (1409, 1027, 6154, 6155) | `200`, `realtimeCoverage: true`, lähdöt mukana ✅                                                                         |
+| Peitoton pysäkki (6833) ennen merkintää     | `503 UPSTREAM_UNAVAILABLE`, vastausaika ~0,5 s = **2 yritystä + 250 ms tauko** ✅                                         |
+| Sama pysäkki uudelleen 15 s kuluttua        | `503`, mutta **0,07 s** (jäähdytys: upstream-kutsua ei tehdä) ✅                                                          |
+| Peitoton pysäkki merkinnän jälkeen          | `200`, `realtimeCoverage: false`, `departures: []`, ~0,07 s ✅                                                            |
+| Virheellinen tunniste / tuntematon polku    | `400 INVALID_STOP_ID` / `404` ✅                                                                                          |
+| Lokit                                       | `Waltti SIRI SM uudelleenyritys` (10), `Pysäkki merkitty ilman reaaliaikapeittoa` (1), `…upstream-kutsu ohitetaan` (2) ✅ |
 
 Peitottomien pysäkkien osuus mitattiin kahdella satunnaisotoksella (60 + 140
 pysäkkiä): **6 / 200 ≈ 3 %** (6833, 6837, 6340, 6350, 6470, 9429, 9433).
 
 **2. Selain (headless Chrome + CDP, pysäkki 9433):**
 
-| Vaihe | Tulos |
-|---|---|
-| Ennen merkintää | `VIRHE: Lähtötietoja ei juuri nyt saada tälle pysäkille — lähde (Waltti) ei vastannut. Yritämme uudelleen automaattisesti.` + **Yritä uudelleen** ✅ |
-| Tekninen virheteksti DOM:issa | **ei yhtään** `API-virhe`-osumaa ✅ (regressio korjattu) |
-| "Yritä uudelleen" -klikkaus | nappi lukee **"Haetaan…"** ja huomautus pysyy näkyvissä (6/6 sekunnin näyte: `nakyy`) — ei enää välähdystä "Ei lähtöjä" ✅ |
-| Merkinnän jälkeen (t+14 s … t+70 s) | `TIETO: Waltti ei tarjoa tälle pysäkille lähtötietoja, joten reaaliaikaista aikataulua ei ole näytettävissä.` — ei virhettä, ei uusintanappia ✅ |
-| Verkkopyynnöt | `9433:503` ×4 → `9433:200` ×5 (merkinnän jälkeen upstream-kutsuja ei enää tehdä) ✅ |
-| Tavallinen pysäkki (1409) samassa istunnossa | 2 lähtöriviä, ei huomautuksia ✅ |
-| Konsoli | vain selaimen omat `Failed to load resource: 503` -rivit (odotettuja 5xx-vastauksia), **ei JS-virheitä** |
-| CSP-rikkomukset | **0** ✅ |
+| Vaihe                                        | Tulos                                                                                                                                                |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ennen merkintää                              | `VIRHE: Lähtötietoja ei juuri nyt saada tälle pysäkille — lähde (Waltti) ei vastannut. Yritämme uudelleen automaattisesti.` + **Yritä uudelleen** ✅ |
+| Tekninen virheteksti DOM:issa                | **ei yhtään** `API-virhe`-osumaa ✅ (regressio korjattu)                                                                                             |
+| "Yritä uudelleen" -klikkaus                  | nappi lukee **"Haetaan…"** ja huomautus pysyy näkyvissä (6/6 sekunnin näyte: `nakyy`) — ei enää välähdystä "Ei lähtöjä" ✅                           |
+| Merkinnän jälkeen (t+14 s … t+70 s)          | `TIETO: Waltti ei tarjoa tälle pysäkille lähtötietoja, joten reaaliaikaista aikataulua ei ole näytettävissä.` — ei virhettä, ei uusintanappia ✅     |
+| Verkkopyynnöt                                | `9433:503` ×4 → `9433:200` ×5 (merkinnän jälkeen upstream-kutsuja ei enää tehdä) ✅                                                                  |
+| Tavallinen pysäkki (1409) samassa istunnossa | 2 lähtöriviä, ei huomautuksia ✅                                                                                                                     |
+| Konsoli                                      | vain selaimen omat `Failed to load resource: 503` -rivit (odotettuja 5xx-vastauksia), **ei JS-virheitä**                                             |
+| CSP-rikkomukset                              | **0** ✅                                                                                                                                             |
 
 ## Käyttöönotto ja vianetsintä
 
@@ -392,15 +392,13 @@ curl -s -o /dev/null -w '%{http_code}\n' "$API/v1/stops/0015%3Cscript%3E/departu
 aws logs tail /aws/lambda/tampere360-dev-stops --follow --region eu-north-1
 ```
 
-| Oire | Syy |
-|---|---|
-| `502 UPSTREAM_UNAVAILABLE` | SSM-avain puuttuu tai Waltti/ITS Factory ei vastaa |
-| Lähtölista aina tyhjä mutta `200` | Waltti palauttaa vuorot vain liikennöintiaikana; tarkista `visits`-määrä lokista |
-| `406` Walttilta lokissa | `PreviewInterval` puuttuu pyynnöstä |
-| Klusterit näkyvät, lukumäärä ei | Glyph-lähde ei lataudu (CSP/origin) — ympyrät piirtyvät silti |
-| Pysäkit eivät ilmesty lainkaan | "Näytä pysäkit" ei ole valittu, tai `/v1/stops` palautti virheen |
-| Paneeli ei avautunut klikkauksesta | kerroskohtaiset kuuntelijat rekisteröitiin ennen kerrosta — sama ansa kuin §27.1.1:ssä |
-| Paneelin sulkunappi ei toimi | karttakontrollit ovat oikeassa reunassa ja piirtyvät paneelin päälle (`z-index: 2`). Kontrollit kuuluvat vasemmalle (`top-left`/`bottom-left`) |
-| Lähdöt eivät päivity | Selain pollaa 15 s; taustavälilehdellä pollaus on pois päältä |
-
-
+| Oire                               | Syy                                                                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `502 UPSTREAM_UNAVAILABLE`         | SSM-avain puuttuu tai Waltti/ITS Factory ei vastaa                                                                                             |
+| Lähtölista aina tyhjä mutta `200`  | Waltti palauttaa vuorot vain liikennöintiaikana; tarkista `visits`-määrä lokista                                                               |
+| `406` Walttilta lokissa            | `PreviewInterval` puuttuu pyynnöstä                                                                                                            |
+| Klusterit näkyvät, lukumäärä ei    | Glyph-lähde ei lataudu (CSP/origin) — ympyrät piirtyvät silti                                                                                  |
+| Pysäkit eivät ilmesty lainkaan     | "Näytä pysäkit" ei ole valittu, tai `/v1/stops` palautti virheen                                                                               |
+| Paneeli ei avautunut klikkauksesta | kerroskohtaiset kuuntelijat rekisteröitiin ennen kerrosta — sama ansa kuin §27.1.1:ssä                                                         |
+| Paneelin sulkunappi ei toimi       | karttakontrollit ovat oikeassa reunassa ja piirtyvät paneelin päälle (`z-index: 2`). Kontrollit kuuluvat vasemmalle (`top-left`/`bottom-left`) |
+| Lähdöt eivät päivity               | Selain pollaa 15 s; taustavälilehdellä pollaus on pois päältä                                                                                  |

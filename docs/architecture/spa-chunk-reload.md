@@ -5,8 +5,8 @@
 
 ## Oire
 
-Käyttäjän raportti: *"frontendistä tulee välillä virhe eikä sivu lataudu,
-erityisesti jos sivu on ollut kauan auki"*:
+Käyttäjän raportti: _"frontendistä tulee välillä virhe eikä sivu lataudu,
+erityisesti jos sivu on ollut kauan auki"_:
 
 ```
 Uncaught TypeError: error loading dynamically imported module:
@@ -27,8 +27,8 @@ https://d36ic5wsx4b9yl.cloudfront.net/assets/NysseMapPage-DyiIPu-z.js
    kohdalla (§27.1).
 3. **Dokumentti jäi välimuistiin.** Jakelun oletusbehavior käytti
    `CACHING_OPTIMIZED`-policya, eikä S3:ssa ole `Cache-Control`-otsaketta →
-   CloudFront käytti **oletus-TTL:ää (1 vrk)**. Siksi *"sivu on ollut kauan
-   auki"*: selaimen muistissa (ja CloudFrontissa) oli vanha `index.html`, jonka
+   CloudFront käytti **oletus-TTL:ää (1 vrk)**. Siksi _"sivu on ollut kauan
+   auki"_: selaimen muistissa (ja CloudFrontissa) oli vanha `index.html`, jonka
    chunk-nimet oli jo poistettu. Uusi välilehti olisi hakenut tuoreen
    dokumentin, mutta avoinna oleva SPA ei.
 
@@ -42,11 +42,11 @@ istunnosta.
 
 `infra/lib/web-cache.ts` + `infra/lib/frontend-stack.ts`:
 
-| Polkukuvio | Policy | TTL |
-|---|---|---|
-| oletus (`/`, `/kartta`, SPA-fallback) | `CACHING_DISABLED` (AWS managed, `4135ea2d-…`) | 0 |
-| `assets/*` | oma `CachePolicy` `tampere360-{env}-assets` | 31 536 000 s (1 v) |
-| `config.json` | `CACHING_DISABLED` | 0 |
+| Polkukuvio                            | Policy                                         | TTL                |
+| ------------------------------------- | ---------------------------------------------- | ------------------ |
+| oletus (`/`, `/kartta`, SPA-fallback) | `CACHING_DISABLED` (AWS managed, `4135ea2d-…`) | 0                  |
+| `assets/*`                            | oma `CachePolicy` `tampere360-{env}-assets`    | 31 536 000 s (1 v) |
+| `config.json`                         | `CACHING_DISABLED`                             | 0                  |
 
 Perustelu: `index.html` sisältää **build-kohtaiset chunk-nimet**, joten se ei
 saa koskaan tulla välimuistista; assettien nimessä on **sisällön hash**, joten
@@ -121,9 +121,9 @@ epäonnistumisena (`if (!module) throw …`) puolustuksena samaa ilmiötä vasta
 
 ## Regressiosuojat
 
-| Testi | Mitä vartioi |
-|---|---|
-| `infra/test/frontend-cache.test.ts` (5) | oletusbehavior käyttää **samaa no-store-policya** kuin `config.json`; `assets/*` käyttää omaa policya, jonka min/default/max = 1 v ja gzip+br päällä; **Cache-Control-otsakkeet** dokumentille (`no-store`) ja asseteille (`immutable`); TTL-vakio on vuosi; SPA-fallback 403/404 → 200 `/index.html` säilyy |
+| Testi                                        | Mitä vartioi                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `infra/test/frontend-cache.test.ts` (5)      | oletusbehavior käyttää **samaa no-store-policya** kuin `config.json`; `assets/*` käyttää omaa policya, jonka min/default/max = 1 v ja gzip+br päällä; **Cache-Control-otsakkeet** dokumentille (`no-store`) ja asseteille (`immutable`); TTL-vakio on vuosi; SPA-fallback 403/404 → 200 `/index.html` säilyy          |
 | `apps/web/src/lib/chunk-reload.test.ts` (20) | uusintayritys ennen palautusta; palautus tehdään **kerran**; URL-merkintä (`?chunkRetry=1`) estää silmukan **myös ilman `localStorage`ia**; vartijan ikkuna ja `clear()`; `ChunkLoadError` kuljettaa nimen ja syyn; lupaus jää odottamaan; **tyhjä moduulitulos käsitellään epäonnistumisena** (Viten preload-helper) |
 
 ## Verifiointi (toistettava selainsimulaatio)
@@ -142,15 +142,15 @@ google-chrome --headless=new --no-sandbox --user-data-dir=/tmp/c \
 
 Mitattu 1.10.2026 (`--dump-dom` + palvelimen loki):
 
-| Tarkistus | Tulos |
-|---|---|
-| Dokumenttilataukset | **2**: `/nysse-kartta/` + `/nysse-kartta/?chunkRetry=1` → tasan yksi automaattinen uudelleenlataus, ei silmukkaa |
-| Chunk-pyynnöt | 1 per dokumentti (Vite muistaa epäonnistuneen importin lupauksen) |
-| `?chunkRetry=1`-osoitteella | **1** dokumenttilataus (ei uutta reloadia) |
-| DOM (`?chunkRetry=1`) | `role="alert"` + `state state--error`: *"Sivun osaa ”Nysse” ei saatu ladattua… "* ja **Lataa sivu uudelleen** -nappi ✅ |
-| Konsoli (`window.onerror` + `unhandledrejection`-koetin) | **0 virhettä** ✅ |
-| Sovelluksen runko | `#root` renderöi `.app`-rakenteen (ei tyhjää sivua) ✅ |
-| Vanha logiikka (vertailu) | pelkällä aikaleimalla syntyi **2053 reloadia**; `preventDefault`illa `#root` jäi tyhjäksi virheeseen *reading 'default'* |
+| Tarkistus                                                | Tulos                                                                                                                    |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Dokumenttilataukset                                      | **2**: `/nysse-kartta/` + `/nysse-kartta/?chunkRetry=1` → tasan yksi automaattinen uudelleenlataus, ei silmukkaa         |
+| Chunk-pyynnöt                                            | 1 per dokumentti (Vite muistaa epäonnistuneen importin lupauksen)                                                        |
+| `?chunkRetry=1`-osoitteella                              | **1** dokumenttilataus (ei uutta reloadia)                                                                               |
+| DOM (`?chunkRetry=1`)                                    | `role="alert"` + `state state--error`: _"Sivun osaa ”Nysse” ei saatu ladattua… "_ ja **Lataa sivu uudelleen** -nappi ✅  |
+| Konsoli (`window.onerror` + `unhandledrejection`-koetin) | **0 virhettä** ✅                                                                                                        |
+| Sovelluksen runko                                        | `#root` renderöi `.app`-rakenteen (ei tyhjää sivua) ✅                                                                   |
+| Vanha logiikka (vertailu)                                | pelkällä aikaleimalla syntyi **2053 reloadia**; `preventDefault`illa `#root` jäi tyhjäksi virheeseen _reading 'default'_ |
 
 ## Verifiointi (julkaistu ympäristö)
 

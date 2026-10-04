@@ -25,8 +25,14 @@ import { transit_realtime } from 'gtfs-realtime-bindings';
 
 import { type NysseOutcome, buildNysseCheckpoint } from './checkpoint';
 
-const logger = createLogger({ service: 'ingest-nysse', source: 'NYSSE_ALERTS', environment: process.env['ENVIRONMENT'] ?? 'dev' });
-const s3 = new S3Client({}); const sqs = new SQSClient({}); const ssm = new SSMClient({});
+const logger = createLogger({
+  service: 'ingest-nysse',
+  source: 'NYSSE_ALERTS',
+  environment: process.env['ENVIRONMENT'] ?? 'dev',
+});
+const s3 = new S3Client({});
+const sqs = new SQSClient({});
+const ssm = new SSMClient({});
 
 const SOURCE = 'NYSSE_ALERTS' as const;
 const ARCHIVE_PREFIX = 'nysse';
@@ -55,7 +61,9 @@ async function saveCheckpoint(
     source: SOURCE,
     status: checkpoint.status,
     itemsReceived: checkpoint.itemsReceived,
-    ...(checkpoint.lastSuccessfulFetch ? { lastSuccessfulFetch: checkpoint.lastSuccessfulFetch } : {}),
+    ...(checkpoint.lastSuccessfulFetch
+      ? { lastSuccessfulFetch: checkpoint.lastSuccessfulFetch }
+      : {}),
     ...(checkpoint.error ? { error: checkpoint.error } : {}),
     ...(sentItems ? { sentItems } : {}),
   });
@@ -95,7 +103,12 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
   // Hae Basic Auth -avain SSM:sta (/tampere360/{env}/sources/nysse/api-key)
   let apiKey = '';
   try {
-    const r = await ssm.send(new GetParameterCommand({ Name: `/tampere360/${env}/sources/nysse/api-key`, WithDecryption: true }));
+    const r = await ssm.send(
+      new GetParameterCommand({
+        Name: `/tampere360/${env}/sources/nysse/api-key`,
+        WithDecryption: true,
+      }),
+    );
     apiKey = r.Parameter?.Value ?? '';
   } catch {
     // SSM-haku epäonnistui — käsitellään alla puuttuvana avaimena.
@@ -154,9 +167,14 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
         alerts.push({
           // GTFS-RT entity.id on pysyvä tunniste → idempotenssi toimii
           entityId: e.id || undefined,
-          header: t(a.headerText), description: t(a.descriptionText),
-          start: a.activePeriod?.[0]?.start ? new Date(Number(a.activePeriod[0].start) * 1000).toISOString() : undefined,
-          end: a.activePeriod?.[0]?.end ? new Date(Number(a.activePeriod[0].end) * 1000).toISOString() : undefined,
+          header: t(a.headerText),
+          description: t(a.descriptionText),
+          start: a.activePeriod?.[0]?.start
+            ? new Date(Number(a.activePeriod[0].start) * 1000).toISOString()
+            : undefined,
+          end: a.activePeriod?.[0]?.end
+            ? new Date(Number(a.activePeriod[0].end) * 1000).toISOString()
+            : undefined,
         });
       }
     }
@@ -182,8 +200,11 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
   // processingKeyta (muuten sama häiriö lois uuden tilanteen joka minuutti).
   const candidates: NysseCandidate[] = alerts.map((a) => {
     const core = {
-      entityId: a['entityId'], header: a['header'], description: a['description'],
-      start: a['start'], end: a['end'],
+      entityId: a['entityId'],
+      header: a['header'],
+      description: a['description'],
+      start: a['start'],
+      end: a['end'],
     };
     const c = sha256Hex(JSON.stringify(core));
     const sourceId = a['entityId'] ?? `alert-${c.slice(0, 16)}`;
@@ -245,12 +266,19 @@ export async function handler(): Promise<{ status: string; itemsProcessed: numbe
 
     for (const c of changed) {
       const sourceEvent = {
-        parsedId: ulid(), batchId, source: SOURCE, sourceId: c.sourceId,
-        processingKey: c.processingKey, raw: c.raw,
+        parsedId: ulid(),
+        batchId,
+        source: SOURCE,
+        sourceId: c.sourceId,
+        processingKey: c.processingKey,
+        raw: c.raw,
         extractedAt: new Date().toISOString(),
       };
       const ingestMessage = {
-        schemaVersion: '1.0' as const, batch, events: [sourceEvent], correlationId: invocationId,
+        schemaVersion: '1.0' as const,
+        batch,
+        events: [sourceEvent],
+        correlationId: invocationId,
       };
       try {
         await sqs.send(
@@ -282,7 +310,9 @@ function t(obj: unknown): string {
   const o = obj as Record<string, unknown>;
   if (o.translation) {
     const arr = Array.isArray(o.translation) ? o.translation : [o.translation];
-    return String(arr.find((tx: Record<string, unknown>) => tx.language === 'fi')?.text ?? arr[0]?.text ?? '');
+    return String(
+      arr.find((tx: Record<string, unknown>) => tx.language === 'fi')?.text ?? arr[0]?.text ?? '',
+    );
   }
   return '';
 }

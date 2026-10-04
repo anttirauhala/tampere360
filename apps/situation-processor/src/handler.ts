@@ -34,14 +34,20 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
 
   const rawEvent = detail.event as unknown as Record<string, unknown>;
   if (!isTampere360Event(rawEvent)) {
-    logger.warn('Validaatio hylkäsi', { processingKey: rawEvent.processingKey as string | undefined });
+    logger.warn('Validaatio hylkäsi', {
+      processingKey: rawEvent.processingKey as string | undefined,
+    });
     return;
   }
 
   const e: Tampere360Event = rawEvent;
 
   const areaCodes = e.location?.areaCodes ?? [];
-  if (!areaCodes.includes('TAMPERE') && !areaCodes.includes('PIRKANMAA') && !areaCodes.includes('TAMPERE_REGION')) {
+  if (
+    !areaCodes.includes('TAMPERE') &&
+    !areaCodes.includes('PIRKANMAA') &&
+    !areaCodes.includes('TAMPERE_REGION')
+  ) {
     logger.debug('Ohitettu — ei Tampere-aluetta', { processingKey: e.processingKey });
     return;
   }
@@ -54,20 +60,22 @@ export async function handler(event: EventBridgeEvent<string, unknown>): Promise
 
   // Idempotentti SourceEvents-kirjoitus
   try {
-    await doc.send(new PutCommand({
-      TableName: tables.sourceEvents,
-      Item: {
-        processingKey: e.processingKey,
-        source: e.source.system,
-        sourceId: e.source.sourceId,
-        event: e,
-        publishedAt: e.publishedAt,
-        firstSeenAt: e.firstSeenAt,
-        receivedAt: now,
-        expiresAt: Math.floor(Date.now() / 1000) + 90 * 86400,
-      },
-      ConditionExpression: 'attribute_not_exists(processingKey)',
-    }));
+    await doc.send(
+      new PutCommand({
+        TableName: tables.sourceEvents,
+        Item: {
+          processingKey: e.processingKey,
+          source: e.source.system,
+          sourceId: e.source.sourceId,
+          event: e,
+          publishedAt: e.publishedAt,
+          firstSeenAt: e.firstSeenAt,
+          receivedAt: now,
+          expiresAt: Math.floor(Date.now() / 1000) + 90 * 86400,
+        },
+        ConditionExpression: 'attribute_not_exists(processingKey)',
+      }),
+    );
   } catch (err: unknown) {
     const aerr = err as { name?: string };
     if (aerr.name === 'ConditionalCheckFailedException') {

@@ -70,9 +70,7 @@ export function NysseMapPage() {
   return (
     <section className="page page--map">
       <h1 className="page__title">Nysse</h1>
-      <p className="page__lead">
-        Tampereen joukkoliikenteen ajoneuvot reaaliajassa.
-      </p>
+      <p className="page__lead">Tampereen joukkoliikenteen ajoneuvot reaaliajassa.</p>
 
       <div className="vehicle-toolbar">
         <div className="vehicle-toolbar__modes" role="group" aria-label="Ajoneuvotyyppi">

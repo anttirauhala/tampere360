@@ -5,13 +5,7 @@
  * muuntaa lokirivin automaattisesti mittariksi ilman erillistä agenttia.
  */
 
-export type MetricUnit =
-  | 'Count'
-  | 'Milliseconds'
-  | 'Seconds'
-  | 'Bytes'
-  | 'Percent'
-  | 'None';
+export type MetricUnit = 'Count' | 'Milliseconds' | 'Seconds' | 'Bytes' | 'Percent' | 'None';
 
 export interface MetricDatum {
   name: string;

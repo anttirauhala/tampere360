@@ -37,9 +37,10 @@ export function stripOnwardCalls(xml: string): string {
 /** ISO 8601 -kesto sekunteina (`Delay`). Palauttaa `null`, jos arvoa ei voi tulkita. */
 export function parseIsoDurationSeconds(raw: string | null | undefined): number | null {
   if (!raw) return null;
-  const match = /^(-)?P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(
-    raw.trim(),
-  );
+  const match =
+    /^(-)?P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(
+      raw.trim(),
+    );
   if (!match) return null;
   const [, sign, years, months, days, hours, minutes, seconds] = match;
   // Vuodet ja kuukaudet eivät ole muunnettavissa sekunneiksi — palautetaan

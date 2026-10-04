@@ -13,13 +13,13 @@ tallenneta DynamoDB:hen eikä niistä synny tilanteita.
 
 ## Tietolähde
 
-| Asia | Arvo |
-|---|---|
-| Rajapinta | Waltti SIRI **VehicleMonitoring** v1.3 (`POST`, Basic-auth) |
-| Päätepiste | `https://data.waltti.fi/tampere/api/sirirealtime/v1.3/ws` |
-| Avain | SSM `/tampere360/{env}/sources/nysse/api-key` (`WithDecryption`) — sama kuin Nysse-adapterilla |
-| Vastauksen koko | ~1,83 Mt XML (142 kt gzip), 177 ajoneuvoa |
-| Pyyntö | kiinteä `VehicleMonitoringRequest` (`VEHICLEMONITORINGREF = VEHICLES_ALL`) |
+| Asia            | Arvo                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| Rajapinta       | Waltti SIRI **VehicleMonitoring** v1.3 (`POST`, Basic-auth)                                    |
+| Päätepiste      | `https://data.waltti.fi/tampere/api/sirirealtime/v1.3/ws`                                      |
+| Avain           | SSM `/tampere360/{env}/sources/nysse/api-key` (`WithDecryption`) — sama kuin Nysse-adapterilla |
+| Vastauksen koko | ~1,83 Mt XML (142 kt gzip), 177 ajoneuvoa                                                      |
+| Pyyntö          | kiinteä `VehicleMonitoringRequest` (`VEHICLEMONITORINGREF = VEHICLES_ALL`)                     |
 
 **Miksi SIRI eikä GTFS-RT:** Nyssen GTFS-RT `VehiclePositions` antaa vain
 dokumentoimattoman `routeId`-numeron (esim. `806990`) eikä määränpäätä, joten
@@ -66,9 +66,14 @@ tyhjänä karttana. Vastaus:
       "type": "Feature",
       "geometry": { "type": "Point", "coordinates": [23.76, 61.498] },
       "properties": {
-        "id": "…", "mode": "TRAM", "line": "1", "operator": "56920",
-        "destination": "Hervantajärvi A", "bearing": 213.4,
-        "delaySeconds": 120, "recordedAt": "2026-09-26T17:33:05Z"
+        "id": "…",
+        "mode": "TRAM",
+        "line": "1",
+        "operator": "56920",
+        "destination": "Hervantajärvi A",
+        "bearing": 213.4,
+        "delaySeconds": 120,
+        "recordedAt": "2026-09-26T17:33:05Z"
       }
     }
   ]
@@ -79,17 +84,16 @@ tyhjänä karttana. Vastaus:
 että vastaus tuli varafallbackista (ks. välimuisti). Vastauksessa on
 `cache-control: public, max-age=5`.
 
-
 ## Kustannusmalli
 
 Karttasivu pollaa 5 sekunnin välein, joten reitti on API:n vilkkain. Kolme
 suojaa (`infra/lib/config.ts`):
 
-| Suoja | Arvo | Tehtävä |
-|---|---|---|
-| `VEHICLE_CACHE_MS` | 5 000 | N selainta → enintään yksi Waltti-kutsu per TTL per lämmin kontti |
-| `VEHICLE_RESERVED_CONCURRENCY` | 2 | kova katto yhtäaikaisille konttikerroksille; erottaa reitin query-Lambdan katosta (`QUERY_RESERVED_CONCURRENCY = 5`) |
-| `VEHICLE_MAX_AGE_MINUTES` | 5 | liian vanhat havainnot pudotetaan → ei "haamuja" kartalle |
+| Suoja                          | Arvo  | Tehtävä                                                                                                              |
+| ------------------------------ | ----- | -------------------------------------------------------------------------------------------------------------------- |
+| `VEHICLE_CACHE_MS`             | 5 000 | N selainta → enintään yksi Waltti-kutsu per TTL per lämmin kontti                                                    |
+| `VEHICLE_RESERVED_CONCURRENCY` | 2     | kova katto yhtäaikaisille konttikerroksille; erottaa reitin query-Lambdan katosta (`QUERY_RESERVED_CONCURRENCY = 5`) |
+| `VEHICLE_MAX_AGE_MINUTES`      | 5     | liian vanhat havainnot pudotetaan → ei "haamuja" kartalle                                                            |
 
 Lisäksi `VEHICLE_STALE_MAX_MS` = 60 000: jos Waltti epäonnistuu, palvellaan
 viimeisin onnistunut snapshot ja merkitään `stale: true`; ilman sitä kartta
@@ -109,13 +113,13 @@ tarkistusta eikä geokoodausta.
 
 ## Frontend
 
-| Osa | Tiedosto |
-|---|---|
-| Karttasivu | `apps/web/src/pages/NysseMapPage.tsx` |
+| Osa             | Tiedosto                                                                          |
+| --------------- | --------------------------------------------------------------------------------- |
+| Karttasivu      | `apps/web/src/pages/NysseMapPage.tsx`                                             |
 | Karttakerrokset | `apps/web/src/components/MapView.tsx` (yksi GeoJSON-lähde, kaksi symbolikerrosta) |
-| Ikonit | `apps/web/src/lib/vehicle-icons.ts` (canvas, 2× pikselitiheys) |
-| Haku + pollaus | `apps/web/src/api/vehicles.ts`, `api/queries.ts` (`useVehicles`) |
-| Esityslogiikka | `apps/web/src/lib/vehicles.ts` (puhtaat funktiot + testit) |
+| Ikonit          | `apps/web/src/lib/vehicle-icons.ts` (canvas, 2× pikselitiheys)                    |
+| Haku + pollaus  | `apps/web/src/api/vehicles.ts`, `api/queries.ts` (`useVehicles`)                  |
+| Esityslogiikka  | `apps/web/src/lib/vehicles.ts` (puhtaat funktiot + testit)                        |
 
 Ikonit piirretään ajonaikaisesti `canvas`ille, joten **linjanumero on poltettu
 ikoniin** — MapLibren glyph-lähdettä (fonttitiedostoja) ei tarvita eikä CSP:tä
@@ -179,15 +183,15 @@ aws logs tail /aws/lambda/tampere360-dev-vehicles --follow --region eu-north-1
 
 Tyypilliset syyt tyhjään karttaan:
 
-| Oire | Syy |
-|---|---|
-| `count: 0`, `stale: false` | Waltti palauttaa ajoneuvot vain liikennöintiaikana (yö) |
-| `stale: true` toistuvasti | Waltti-virhe tai avain vanhentunut |
-| `502 UPSTREAM_UNAVAILABLE` | SSM-avain puuttuu tai Waltti ei vastaa |
-| Kartta näkyy, ikonit eivät | MapLibren työntekijä ei lataudu → ks. §27.1 |
-| Popupin teksti on himmeää / häviää taustaan | MapLibren oletus-CSS voitti omat popup-säännöt (latausjärjestys) tai säännöt puuttuvat → ks. §27.3 |
-| Ikonit näkyvät, klikkaus ei avaa popupia | kerroskohtaiset kuuntelijat rekisteröitiin ennen kerroksen luontia (korjattu 26.9.2026, ks. §27.1.1) |
-| Ikonit eivät päivity | Selain pollaa 5 s; taustavälilehdellä `refetchIntervalInBackground: false` |
+| Oire                                        | Syy                                                                                                  |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `count: 0`, `stale: false`                  | Waltti palauttaa ajoneuvot vain liikennöintiaikana (yö)                                              |
+| `stale: true` toistuvasti                   | Waltti-virhe tai avain vanhentunut                                                                   |
+| `502 UPSTREAM_UNAVAILABLE`                  | SSM-avain puuttuu tai Waltti ei vastaa                                                               |
+| Kartta näkyy, ikonit eivät                  | MapLibren työntekijä ei lataudu → ks. §27.1                                                          |
+| Popupin teksti on himmeää / häviää taustaan | MapLibren oletus-CSS voitti omat popup-säännöt (latausjärjestys) tai säännöt puuttuvat → ks. §27.3   |
+| Ikonit näkyvät, klikkaus ei avaa popupia    | kerroskohtaiset kuuntelijat rekisteröitiin ennen kerroksen luontia (korjattu 26.9.2026, ks. §27.1.1) |
+| Ikonit eivät päivity                        | Selain pollaa 5 s; taustavälilehdellä `refetchIntervalInBackground: false`                           |
 
 Huom: Waltti-avain on vietävä **erikseen jokaiseen ympäristöön**
 (`/tampere360/{dev,prod}/sources/nysse/api-key`) — CDK ei luo salaisuuksia.

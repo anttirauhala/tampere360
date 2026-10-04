@@ -15,11 +15,7 @@ import type { IngestionStatus } from '@tampere360/event-contracts';
 
 /** Yhden ajokerran lopputulos. */
 export type NysseOutcome =
-  | 'SUCCESS'
-  | 'NO_ALERTS'
-  | 'API_KEY_MISSING'
-  | 'FETCH_FAILED'
-  | 'PARSE_FAILED';
+  'SUCCESS' | 'NO_ALERTS' | 'API_KEY_MISSING' | 'FETCH_FAILED' | 'PARSE_FAILED';
 
 export interface NysseCheckpoint {
   status: IngestionStatus;

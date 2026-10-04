@@ -18,9 +18,7 @@ describe('planExpirations', () => {
   it('sulkee tilanteen, jonka endsAt on ohitettu (VALIDITY_ENDED)', () => {
     // Dev-tapaus 20.9.2026: varoitus päättyi 10:00, siivous ajettiin 17:00.
     const result = planExpirations([row({ endsAt: '2026-09-20T10:00:00.000Z' })], NOW);
-    expect(result).toEqual([
-      { situationId: 'sid-1', status: 'ENDED', reason: 'VALIDITY_ENDED' },
-    ]);
+    expect(result).toEqual([{ situationId: 'sid-1', status: 'ENDED', reason: 'VALIDITY_ENDED' }]);
   });
 
   it('ei sulje tilannetta, jonka endsAt on tulevaisuudessa', () => {
@@ -72,7 +70,11 @@ describe('planExpirations', () => {
     const result = planExpirations(
       [
         row({ situationId: 'jo-loppunut', status: 'ENDED', endsAt: '2026-09-01T00:00:00.000Z' }),
-        row({ situationId: 'eri', canonicalKey: 'FMI_CAP:alert-2', endsAt: '2026-09-20T20:00:00.000Z' }),
+        row({
+          situationId: 'eri',
+          canonicalKey: 'FMI_CAP:alert-2',
+          endsAt: '2026-09-20T20:00:00.000Z',
+        }),
       ],
       NOW,
     );

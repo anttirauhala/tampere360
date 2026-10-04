@@ -51,10 +51,7 @@ export interface EventSourceAdapter {
  * @param environment Ympäristö: dev | test | prod
  * @param invocationId Lambda-invokaation ULID-tunniste
  */
-export function createFetchContext(
-  environment: string,
-  invocationId: string,
-): FetchContext {
+export function createFetchContext(environment: string, invocationId: string): FetchContext {
   return {
     invocationId,
     environment,

@@ -94,7 +94,12 @@ export async function fetchWithRetry(
 
       const retryable = retryStatuses.includes(response.status);
       if (!retryable) {
-        throw new HttpFetchError(`HTTP ${response.status} from ${url}`, url, response.status, attempt);
+        throw new HttpFetchError(
+          `HTTP ${response.status} from ${url}`,
+          url,
+          response.status,
+          attempt,
+        );
       }
       lastError = new HttpFetchError(
         `HTTP ${response.status} from ${url}`,

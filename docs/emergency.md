@@ -17,12 +17,12 @@ tässä palvelussa on:
 
 **Kiireellisyysjärjestys:**
 
-| Tilanne | Tee tämä |
-|---|---|
-| Kulu kasvaa nopeasti, syytä ei vielä tiedossa | Vaihe 0 (mittaa) → Vaihe 1 profiili **B** (1 req/s) |
+| Tilanne                                       | Tee tämä                                                    |
+| --------------------------------------------- | ----------------------------------------------------------- |
+| Kulu kasvaa nopeasti, syytä ei vielä tiedossa | Vaihe 0 (mittaa) → Vaihe 1 profiili **B** (1 req/s)         |
 | Selvästi väärinkäyttö / skannaus API:a vasten | Vaihe 1 profiili **B** + tarvittaessa **C** (Lambda kiinni) |
-| Oma liikenne (frontend/bugi) | Vaihe 3 (CloudFront pois) — suurin vaikutus |
-| Kulu jatkaa kasvua rajoista huolimatta | Kulu ei tule API:sta → Vaihe 0 uudelleen, laajempi selvitys |
+| Oma liikenne (frontend/bugi)                  | Vaihe 3 (CloudFront pois) — suurin vaikutus                 |
+| Kulu jatkaa kasvua rajoista huolimatta        | Kulu ei tule API:sta → Vaihe 0 uudelleen, laajempi selvitys |
 
 Kaikki Vaiheen 1–3 komennot ovat **peruttavissa yhdellä komennolla** (ks. §5).
 
@@ -70,11 +70,11 @@ done
 
 Tulkinta:
 
-| Havainto | Johtopäätös |
-|---|---|
-| API `Count` suuri + Lambda invokaatiot yhtä suuret | Liikenne tulee API:n kautta → Vaihe 1 |
-| API `Count` pieni, mutta DynamoDB-lukemat suuret | Jokin muu lukee taulua (oma putki/koodi) → tarkista Lambdat |
-| Kaikki pienet, mutta lasku kasvaa | Kulu ei tule tästä palvelusta (sama AWS-tili!) → Cost Explorer, ks. §8 |
+| Havainto                                           | Johtopäätös                                                            |
+| -------------------------------------------------- | ---------------------------------------------------------------------- |
+| API `Count` suuri + Lambda invokaatiot yhtä suuret | Liikenne tulee API:n kautta → Vaihe 1                                  |
+| API `Count` pieni, mutta DynamoDB-lukemat suuret   | Jokin muu lukee taulua (oma putki/koodi) → tarkista Lambdat            |
+| Kaikki pienet, mutta lasku kasvaa                  | Kulu ei tule tästä palvelusta (sama AWS-tili!) → Cost Explorer, ks. §8 |
 
 ---
 
@@ -85,11 +85,11 @@ reittikohtaista throttlausta), joten nämä kaksi vipua riittävät.
 
 ### Profiilit
 
-| Profiili | Asetus | Vaikutus | API-osuuden katto |
-|---|---|---|---|
-| **A – kevyt** | 2 req/s, purske 4 | Palvelu toimii; yksittäinen tykittäjä ei pääse läpi | ~0,17 $/vrk |
-| **B – tiukka** | 1 req/s, purske 1 | Vain satunnainen liikenne menee läpi, loput **429** | ~0,09 $/vrk |
-| **C – kiinni** | B + Lambda-concurrency 0 | API vastaa virhettä; Lambda ja DynamoDB eivät kuluta lainkaan | ~0,09 $/vrk |
+| Profiili       | Asetus                   | Vaikutus                                                      | API-osuuden katto |
+| -------------- | ------------------------ | ------------------------------------------------------------- | ----------------- |
+| **A – kevyt**  | 2 req/s, purske 4        | Palvelu toimii; yksittäinen tykittäjä ei pääse läpi           | ~0,17 $/vrk       |
+| **B – tiukka** | 1 req/s, purske 1        | Vain satunnainen liikenne menee läpi, loput **429**           | ~0,09 $/vrk       |
+| **C – kiinni** | B + Lambda-concurrency 0 | API vastaa virhettä; Lambda ja DynamoDB eivät kuluta lainkaan | ~0,09 $/vrk       |
 
 ### Profiili A / B — rajoita stage
 
@@ -236,11 +236,11 @@ cd infra
 npx cdk destroy tampere360-prod-api -c env=prod --region eu-north-1
 ```
 
-| Asia | Vaikutus |
-|---|---|
-| Poistaa | HTTP API, custom domain `api.tampere247.online`, API:n ACM-sertifikaatti (eu-north-1), Route 53 -tietueet |
-| Data | **Ei katoa** — Situations/SourceEvents/IngestionState ovat eri stackissa ja `RETAIN`-suojattuja |
-| Frontend | Jää toimimaan, mutta API-kutsut epäonnistuvat (virhetila) |
+| Asia     | Vaikutus                                                                                                                         |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Poistaa  | HTTP API, custom domain `api.tampere247.online`, API:n ACM-sertifikaatti (eu-north-1), Route 53 -tietueet                        |
+| Data     | **Ei katoa** — Situations/SourceEvents/IngestionState ovat eri stackissa ja `RETAIN`-suojattuja                                  |
+| Frontend | Jää toimimaan, mutta API-kutsut epäonnistuvat (virhetila)                                                                        |
 | Palautus | `npx cdk deploy tampere360-prod-api -c env=prod -c wafEnabled=false --region eu-north-1` (sertifikaatin DNS-validointi ~2–3 min) |
 
 > Pelkkä Route 53 -tietueen poisto **ei riitä**: suora
@@ -250,13 +250,13 @@ npx cdk destroy tampere360-prod-api -c env=prod --region eu-north-1
 
 ## 5. Palautus normaalitilaan
 
-| Asia | Normaaliarvo (koodissa) | Palautus |
-|---|---|---|
-| Stage-throttlaus | **10 req/s**, purske 20 | `update-stage … --default-route-settings '{"ThrottlingRateLimit":10,"ThrottlingBurstLimit":20}'` |
-| Query-Lambda | varattu concurrency **5** | `put-function-concurrency … --reserved-concurrent-executions 5` |
-| Muut Lambdat | ei varausta | `aws lambda delete-function-concurrency --function-name tampere360-prod-<nimi>` |
-| Ajastukset | `ENABLED` | `update-schedule … --state ENABLED` (sama rutiini kuin §2) |
-| CloudFront | `Enabled=true` | sama rutiini kuin §3 |
+| Asia             | Normaaliarvo (koodissa)   | Palautus                                                                                         |
+| ---------------- | ------------------------- | ------------------------------------------------------------------------------------------------ |
+| Stage-throttlaus | **10 req/s**, purske 20   | `update-stage … --default-route-settings '{"ThrottlingRateLimit":10,"ThrottlingBurstLimit":20}'` |
+| Query-Lambda     | varattu concurrency **5** | `put-function-concurrency … --reserved-concurrent-executions 5`                                  |
+| Muut Lambdat     | ei varausta               | `aws lambda delete-function-concurrency --function-name tampere360-prod-<nimi>`                  |
+| Ajastukset       | `ENABLED`                 | `update-schedule … --state ENABLED` (sama rutiini kuin §2)                                       |
+| CloudFront       | `Enabled=true`            | sama rutiini kuin §3                                                                             |
 
 **Nopein ja varmin palautus koko ympäristölle:**
 
@@ -274,13 +274,13 @@ deploy. Silloin arvot ovat versionhallinnassa ja regressiosuojan piirissä
 
 ## 6. Mitä ei pidä tehdä hätätilanteessa
 
-| Älä | Miksi |
-|---|---|
-| Poista DynamoDB-tauluja tai S3-bucketteja | Tietojen menetys. `RETAIN` pitää ne myös stackin poiston jälkeen, joten ne jäisivät roikkumaan. |
-| Muuta S3-lifecyclea tai EventBridge-arkistoa | Ei vaikuta akuuttiin kuluun, mutta rikkoo datan säilytyksen ja uudelleenajon. |
-| Poista API Gateway -stagea käsin | CloudFormation ei palauta sitä hallitusti → seuraava deploy voi kaatua. Käytä throttlea (§1) tai Lambdaa (§1 C). |
-| Muokkaa CloudFrontia ilman `--if-match "$ETAG"` | Päivitys epäonnistuu tai ylikirjoittaa toisen muutoksen. |
-| Oleta, että kulu tulee tästä palvelusta | Sama AWS-tili sisältää dev-ympäristön, WAF:n (jos päällä), muut projektit ja koko tilin budjetin. |
+| Älä                                             | Miksi                                                                                                            |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Poista DynamoDB-tauluja tai S3-bucketteja       | Tietojen menetys. `RETAIN` pitää ne myös stackin poiston jälkeen, joten ne jäisivät roikkumaan.                  |
+| Muuta S3-lifecyclea tai EventBridge-arkistoa    | Ei vaikuta akuuttiin kuluun, mutta rikkoo datan säilytyksen ja uudelleenajon.                                    |
+| Poista API Gateway -stagea käsin                | CloudFormation ei palauta sitä hallitusti → seuraava deploy voi kaatua. Käytä throttlea (§1) tai Lambdaa (§1 C). |
+| Muokkaa CloudFrontia ilman `--if-match "$ETAG"` | Päivitys epäonnistuu tai ylikirjoittaa toisen muutoksen.                                                         |
+| Oleta, että kulu tulee tästä palvelusta         | Sama AWS-tili sisältää dev-ympäristön, WAF:n (jos päällä), muut projektit ja koko tilin budjetin.                |
 
 ---
 

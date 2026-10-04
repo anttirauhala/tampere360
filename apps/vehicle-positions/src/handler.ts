@@ -73,7 +73,9 @@ async function getApiKey(): Promise<string> {
   const now = Date.now();
   if (cachedApiKey && now - cachedApiKey.fetchedAt < API_KEY_TTL_MS) return cachedApiKey.value;
 
-  const result = await ssm.send(new GetParameterCommand({ Name: apiKeyPath, WithDecryption: true }));
+  const result = await ssm.send(
+    new GetParameterCommand({ Name: apiKeyPath, WithDecryption: true }),
+  );
   const value = result.Parameter?.Value ?? '';
   if (!value) throw new Error(`Nysse API-avain puuttuu SSM:stä (${apiKeyPath})`);
 
@@ -144,7 +146,8 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     if (!path.endsWith('/v1/vehicles')) return jsonResponse(404, { error: 'NOT_FOUND' });
 
     const mode = parseMode((event.queryStringParameters ?? {})['mode']);
-    if (mode === null) return jsonResponse(400, { error: 'INVALID_MODE', allowed: ['TRAM', 'BUS'] });
+    if (mode === null)
+      return jsonResponse(400, { error: 'INVALID_MODE', allowed: ['TRAM', 'BUS'] });
 
     try {
       const { value, stale } = await cache.get();

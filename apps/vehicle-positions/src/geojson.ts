@@ -61,14 +61,16 @@ export function buildVehicleFeatureCollection(
     if (!Number.isFinite(age) || age > options.maxAgeMs) continue;
 
     const existing = newest.get(vehicle.vehicleId);
-    if (!existing || existing.recordedAt < vehicle.recordedAt) newest.set(vehicle.vehicleId, vehicle);
+    if (!existing || existing.recordedAt < vehicle.recordedAt)
+      newest.set(vehicle.vehicleId, vehicle);
   }
 
   const counts: Record<VehicleMode, number> = { TRAM: 0, BUS: 0 };
   const features: VehicleFeature[] = [...newest.values()]
     .sort(
       (a, b) =>
-        a.line.localeCompare(b.line, 'fi', { numeric: true }) || a.vehicleId.localeCompare(b.vehicleId),
+        a.line.localeCompare(b.line, 'fi', { numeric: true }) ||
+        a.vehicleId.localeCompare(b.vehicleId),
     )
     .map((vehicle) => {
       const mode = deriveVehicleMode(vehicle.operatorRef, vehicle.line);

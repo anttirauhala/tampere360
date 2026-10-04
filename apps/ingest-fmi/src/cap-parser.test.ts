@@ -41,8 +41,7 @@ function capXml(opts: {
 </alert>`;
 }
 
-const ORIGINAL_ID =
-  'urn:oid:2.49.0.1.246.0.0.2026.22679640.22296924345210491597258633185039950592';
+const ORIGINAL_ID = 'urn:oid:2.49.0.1.246.0.0.2026.22679640.22296924345210491597258633185039950592';
 const CANCEL_CAP = capXml({
   status: 'Actual',
   msgType: 'Cancel',
@@ -79,7 +78,9 @@ describe('parseCapXml — elinkaaritila', () => {
   });
 
   it('merialuevaroitusta ei pidetä Tampereen seudun varoituksena', () => {
-    const parsed = parseCapXml(capXml({ status: 'Actual', msgType: 'Update', areaDesc: 'Perämeren eteläosa' }));
+    const parsed = parseCapXml(
+      capXml({ status: 'Actual', msgType: 'Update', areaDesc: 'Perämeren eteläosa' }),
+    );
     expect(parsed?.relevantForTampereRegion).toBe(false);
   });
 
@@ -132,8 +133,7 @@ describe('parseReferences', () => {
  * Tunnisteet ovat FMI:n todellisia muotoja (dev 3.10.2026).
  */
 describe('warningIdentity', () => {
-  const ALERT_ID =
-    'urn:oid:2.49.0.1.246.0.0.2026.23693788.304779733920130434618294129618267851721';
+  const ALERT_ID = 'urn:oid:2.49.0.1.246.0.0.2026.23693788.304779733920130434618294129618267851721';
   const UPDATE_ID =
     'urn:oid:2.49.0.1.246.0.0.2026.23791817.304779733920130434618294129618267851721';
   const TAIL = '304779733920130434618294129618267851721';

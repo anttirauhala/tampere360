@@ -8,8 +8,8 @@
 
 Näyttää Tampereen seudun **liikenteen mittausasemien** (TMS = Traffic
 Measurement System / LAM) reaaliaikainen nopeus ja liikennemäärä sekä
-asemakohtainen historia. Tavoite on vastata kysymykseen *"miltä liikenne näyttää
-juuri nyt ja miten se on kehittynyt"* — ei siis tuottaa tilanteita tai
+asemakohtainen historia. Tavoite on vastata kysymykseen _"miltä liikenne näyttää
+juuri nyt ja miten se on kehittynyt"_ — ei siis tuottaa tilanteita tai
 hälytyksiä.
 
 Tämä on ensimmäinen **Fintraffic Road** -tason toteutus (arkkitehtuuri §9:
@@ -23,36 +23,36 @@ Selvityksen kohteena oli `anttirauhala/traffic-stations`
 (Digitraffic LAM -kerääjä, CDK + SQS + DynamoDB + API Gateway + React).
 Se todettiin toimivaksi mutta **ei sopivaksi tuotantoriippuvuudeksi**:
 
-| Havainto 27.9.2026 | Seuraus |
-|---|---|
-| `GET /api/traffic/station/{id}/daily` palauttaa aina 0 riviä (GSI:n partition key on koko ISO-aikaleima, mutta kysely käyttää pelkkää päivää) | osa rajapinnasta on rikki |
-| `hourly-average` toimii, mutta on heidän oma laskelmansa kuukauden jaksolta | sama tieto + enemmän saadaan virallisesta lähteestä |
-| Kerääjä ajaa kerran tunnissa; dynamo-taulussa vain `timeWindowStart`-suodatetut arvot | data on osajoukko |
-| Ei API-avainta eikä usage plania CDK-stackissa | ei tunnettua kiintiötä eikä SLA:ta |
-| Sivun oma teksti: *"Kaikki oikeudet pidätetään"* | ristiriita oman CC BY -attribuutiomallin kanssa |
+| Havainto 27.9.2026                                                                                                                            | Seuraus                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `GET /api/traffic/station/{id}/daily` palauttaa aina 0 riviä (GSI:n partition key on koko ISO-aikaleima, mutta kysely käyttää pelkkää päivää) | osa rajapinnasta on rikki                           |
+| `hourly-average` toimii, mutta on heidän oma laskelmansa kuukauden jaksolta                                                                   | sama tieto + enemmän saadaan virallisesta lähteestä |
+| Kerääjä ajaa kerran tunnissa; dynamo-taulussa vain `timeWindowStart`-suodatetut arvot                                                         | data on osajoukko                                   |
+| Ei API-avainta eikä usage plania CDK-stackissa                                                                                                | ei tunnettua kiintiötä eikä SLA:ta                  |
+| Sivun oma teksti: _"Kaikki oikeudet pidätetään"_                                                                                              | ristiriita oman CC BY -attribuutiomallin kanssa     |
 
 **Ratkaisu:** luetaan sama data suoraan Digitrafficilta, joka on sen alkuperäinen
 lähde ja jonka kanssa meillä on jo käytössä oleva malli (kelikamerat §25).
 
 ## Tietolähteet
 
-| Asia | Arvo |
-|---|---|
-| Asemaluettelo | `GET https://tie.digitraffic.fi/api/tms/v1/stations` (simplified) |
+| Asia              | Arvo                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| Asemaluettelo     | `GET https://tie.digitraffic.fi/api/tms/v1/stations` (simplified)                             |
 | Aseman metatiedot | `GET .../api/tms/v1/stations/{id}` (detailed: kunta, `names.fi`, suunnat, `freeFlowSpeed1/2`) |
-| Reaaliaika | `GET .../api/tms/v1/stations/data` — **kaikki asemat yhdellä kutsulla** |
-| Historia | `GET .../api/tms/v1/history` (CSV, sama rajapinta Digitrafficin oman tilastotyökalun takana) |
-| Tunnistautuminen | `Digitraffic-User: Tampere247` (ei avainta) |
-| Lisenssi | Fintraffic / Digitraffic, CC BY 4.0 |
+| Reaaliaika        | `GET .../api/tms/v1/stations/data` — **kaikki asemat yhdellä kutsulla**                       |
+| Historia          | `GET .../api/tms/v1/history` (CSV, sama rajapinta Digitrafficin oman tilastotyökalun takana)  |
+| Tunnistautuminen  | `Digitraffic-User: Tampere247` (ei avainta)                                                   |
+| Lisenssi          | Fintraffic / Digitraffic, CC BY 4.0                                                           |
 
 ### Mitatut koot ja viiveet (27.9.2026)
 
-| Kutsu | Siirto (gzip) | Purettu | Aika |
-|---|---|---|---|
-| `/stations` (518 asemaa) | ~100 kt | — | 0,3 s |
-| `/stations/data` (518 asemaa) | **144 kt** | 3,4 Mt | 0,25 s |
-| `/stations/{id}/data` (yksi asema) | 859 t | ~9 kt | 0,25 s |
-| `/history` (14 vrk, yksi asema) | ~1 kt | — | 0,3 s |
+| Kutsu                              | Siirto (gzip) | Purettu | Aika   |
+| ---------------------------------- | ------------- | ------- | ------ |
+| `/stations` (518 asemaa)           | ~100 kt       | —       | 0,3 s  |
+| `/stations/data` (518 asemaa)      | **144 kt**    | 3,4 Mt  | 0,25 s |
+| `/stations/{id}/data` (yksi asema) | 859 t         | ~9 kt   | 0,25 s |
+| `/history` (14 vrk, yksi asema)    | ~1 kt         | —       | 0,3 s  |
 
 **Yksi kutsu kaikille asemille valittiin 20 asemakohtaisen kutsun sijaan:**
 siirtoa on enemmän (144 kt vs. 17 kt), mutta pyyntöjä 20× vähemmän ja
@@ -76,13 +76,13 @@ Kutsuja rakennetaan `historyQuery()`-funktiossa, joka käyttää aina
 
 Historia-rajapinnan parametrit, jotka toteutus lukitsee:
 
-| Parametri | Arvo | Miksi |
-|---|---|---|
-| `api` | `liikennemaara` \| `keskinopeus` | määrät ja nopeudet ovat eri rajapintoja |
-| `tyyppi` | `vrk` \| `h` \| `kk` | vuorokausi, tunti, kuukausi |
-| `pvm` / `loppu` | `YYYY-MM-DD` / tyhjä | aikaväli (vrk) tai yksittäinen jakso |
-| `lam_type` | `option1` | `option1` = yksi asema, `option2` = asemajoukko |
-| `piste` | `tmsNumber` | ks. yllä |
+| Parametri       | Arvo                             | Miksi                                           |
+| --------------- | -------------------------------- | ----------------------------------------------- |
+| `api`           | `liikennemaara` \| `keskinopeus` | määrät ja nopeudet ovat eri rajapintoja         |
+| `tyyppi`        | `vrk` \| `h` \| `kk`             | vuorokausi, tunti, kuukausi                     |
+| `pvm` / `loppu` | `YYYY-MM-DD` / tyhjä             | aikaväli (vrk) tai yksittäinen jakso            |
+| `lam_type`      | `option1`                        | `option1` = yksi asema, `option2` = asemajoukko |
+| `piste`         | `tmsNumber`                      | ks. yllä                                        |
 
 ## Aluesuodatus
 
@@ -128,11 +128,11 @@ metatietorajapinnat eivät tätä tee (144 kt vastaus tuli 0,6 s:ssa joka kerta)
 
 Seuraus ja korjaus:
 
-| Havainto | Korjaus |
-|---|---|
+| Havainto                                                                                  | Korjaus                                                                                                        |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Lambda aikakatkaisi 10 s:ssa ja käyttäjä näki 503:n (`TimeoutError` lokissa, `loadSpeed`) | yrityskohtainen timeout **8 s** + **yksi uusintayritys** 400 ms tauolla (ks. `apps/tms-stations/src/retry.ts`) |
-| Yksi hidas osa kaatoi koko historian (`Promise.all`) | `Promise.allSettled`: yhden osan epäonnistuminen → `partial: true` ja tyhjä sarja, muut kuvaajat näkyvät |
-| Kolme rinnakkaista selainpyyntöä throttlautui kylmällä Lambdalla | selain tekee **yhden** pyynnön (`type=all`); Lambdan sisäinen rinnakkaisuus ei kuluta varattua concurrencya |
+| Yksi hidas osa kaatoi koko historian (`Promise.all`)                                      | `Promise.allSettled`: yhden osan epäonnistuminen → `partial: true` ja tyhjä sarja, muut kuvaajat näkyvät       |
+| Kolme rinnakkaista selainpyyntöä throttlautui kylmällä Lambdalla                          | selain tekee **yhden** pyynnön (`type=all`); Lambdan sisäinen rinnakkaisuus ei kuluta varattua concurrencya    |
 
 Uusintayritys osuu tyypillisesti lämmenneeseen lähteeseen (toinen yritys vastasi
 93 ms), joten hidas vastaus korjautuu ilman että käyttäjä huomaa mitään.
@@ -140,7 +140,7 @@ Pahin mahdollinen kokonaisaika on `2 × 8 s + 0,4 s = 16,4 s`, mikä mahtuu
 Lambdan 20 s timeoutiin — tämä on varmistettu testillä
 (`infra/test/config.test.ts`).
 
-**Miksi 4xx ei uusita:** se tarkoittaa, että *pyyntömme* on väärä, joten sama
+**Miksi 4xx ei uusita:** se tarkoittaa, että _pyyntömme_ on väärä, joten sama
 pyyntö tuottaisi saman tuloksen.
 
 ## Kylmäkäynnistys ja throttlaus (havaittu 27.9.2026)
@@ -158,24 +158,24 @@ muillakin reiteillä (esim. `/v1/vehicles`) — se ei siis ole tämän reitin bu
 
 Kaksi korjausta:
 
-| Korjaus | Miksi |
-|---|---|
+| Korjaus                                                                                               | Miksi                                                                                                                                                                           |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Selain tekee enää **kaksi** kutsua sivun avauksella (tilannekuva + `type=all`-historia) kolmen sijaan | kylmän kontin throttlaus syntyi rinnakkaisten kutsujen määrästä, ei yksittäisestä kutsusta — rinnakkaisuus siirrettiin Lambdan sisään, missä se ei kuluta varattua concurrencya |
-| `TMS_RESERVED_CONCURRENCY` **3** (oli 2) | kaksi sivun omaa kutsua + yksi varalasku (toinen välilehti tai uudelleenlataus) |
+| `TMS_RESERVED_CONCURRENCY` **3** (oli 2)                                                              | kaksi sivun omaa kutsua + yksi varalasku (toinen välilehti tai uudelleenlataus)                                                                                                 |
 
 **Diagnoosimenetelmä:** `{"message": ...}`-muotoinen runko + nopea vasteaika
 (0,07 s) + lokissa onnistunut invokaatio ilman virheriviä = throttlaus, ei
 sovellusvirhe. Katso myös edellä "Lähteen latenssin vaihtelu ja uusintayritys"
-— sama 503 näkyi käyttäjälle myös silloin, kun *lähde* oli hidas, ja se
+— sama 503 näkyi käyttäjälle myös silloin, kun _lähde_ oli hidas, ja se
 korjataan eri mekanismilla (uusinta + `partial`).
 
 ## Välimuistit (kolme eri nopeutta)
 
-| Data | TTL | Vanhentumisen enimmäisikä | Perustelu |
-|---|---|---|---|
-| Reaaliaikasnapshot | **60 s** | 5 min | lähde päivittyy minuutin välein; 144 kt haku per TTL per lämmin kontti |
-| Asemien metatiedot | **24 h** | 7 vrk | nimet/kunnat/vapaa nopeus muuttuvat harvoin, mutta kokoaminen vaatii ~20 pyyntöä |
-| Historia (`tmsNumber:tyyppi:jakso`) | **6 h** | 7 vrk | tilastot päivittyvät tunneittain ja koskevat päättyneitä jaksoja |
+| Data                                | TTL      | Vanhentumisen enimmäisikä | Perustelu                                                                        |
+| ----------------------------------- | -------- | ------------------------- | -------------------------------------------------------------------------------- |
+| Reaaliaikasnapshot                  | **60 s** | 5 min                     | lähde päivittyy minuutin välein; 144 kt haku per TTL per lämmin kontti           |
+| Asemien metatiedot                  | **24 h** | 7 vrk                     | nimet/kunnat/vapaa nopeus muuttuvat harvoin, mutta kokoaminen vaatii ~20 pyyntöä |
+| Historia (`tmsNumber:tyyppi:jakso`) | **6 h**  | 7 vrk                     | tilastot päivittyvät tunneittain ja koskevat päättyneitä jaksoja                 |
 
 Virhetilanteessa palautetaan viimeisin onnistunut arvo `stale: true`na niin kauan
 kuin se ei ole vanhentumisen enimmäisikää vanhempi → sivu ei tyhjene yhden
@@ -233,12 +233,12 @@ ja voi olla vuosia vanha. `ageMinutes` lasketaan siitä, joten kartalla ei näy
 
 ### `GET /v1/tms/stations/{tmsNumber}/history`
 
-| Parametri | Arvot | Oletus |
-|---|---|---|
-| `type` | `daily`, `hourly`, `speed`, `all` | `daily` |
-| `days` | 1–31 (`daily`, `all`) | 14 |
-| `date` | `YYYY-MM-DD` (`hourly`, `all`) | eilinen |
-| `month` | `YYYY-MM` (`speed`, `all`) | kuluva kuukausi |
+| Parametri | Arvot                             | Oletus          |
+| --------- | --------------------------------- | --------------- |
+| `type`    | `daily`, `hourly`, `speed`, `all` | `daily`         |
+| `days`    | 1–31 (`daily`, `all`)             | 14              |
+| `date`    | `YYYY-MM-DD` (`hourly`, `all`)    | eilinen         |
+| `month`   | `YYYY-MM` (`speed`, `all`)        | kuluva kuukausi |
 
 `type=all` on **sivun käyttämä tyyppi**: se palauttaa kaikki kolme jaksoa yhdellä
 vastauksella (`{ daily, hourly, speed, partial }`). Syy on concurrency-katossa:
@@ -255,16 +255,16 @@ vuorokautta ei näytetä täytenä) ja `daily` viimeiset 14 täyttä vuorokautta
 
 ### CSV:n jäsennys
 
-| Erityispiirre | Käsittely |
-|---|---|
-| UTF-8 BOM vastauksen alussa | poistetaan (`\uFEFF`) |
-| erotin `;` | sarakeindeksit luetaan **otsikkoriviltä**, ei kovakoodattuja indeksejä |
-| tyhjä solu (`;;`) | `null`, **ei nolla** |
-| `pvm` muodossa `20260926` | → `2026-09-26` |
-| tuntisarakkeet `00_01 … 23_24` | tunnistetaan regexillä `^\d{2}_\d{2}$` |
-| monta ajoneuvoluokkaa | valitaan `Kaikki`/`kaikki`-summarivi |
-| `suunta=1/2`-rivit | suodatetaan pois vuorokausisarjasta (vain `*`) |
-| tuntematon muoto | tyhjä sarja, ei poikkeusta |
+| Erityispiirre                  | Käsittely                                                              |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| UTF-8 BOM vastauksen alussa    | poistetaan (`\uFEFF`)                                                  |
+| erotin `;`                     | sarakeindeksit luetaan **otsikkoriviltä**, ei kovakoodattuja indeksejä |
+| tyhjä solu (`;;`)              | `null`, **ei nolla**                                                   |
+| `pvm` muodossa `20260926`      | → `2026-09-26`                                                         |
+| tuntisarakkeet `00_01 … 23_24` | tunnistetaan regexillä `^\d{2}_\d{2}$`                                 |
+| monta ajoneuvoluokkaa          | valitaan `Kaikki`/`kaikki`-summarivi                                   |
+| `suunta=1/2`-rivit             | suodatetaan pois vuorokausisarjasta (vain `*`)                         |
+| tuntematon muoto               | tyhjä sarja, ei poikkeusta                                             |
 
 ## Frontend
 
@@ -282,18 +282,18 @@ palkkia puuttuvalle arvolle).
 
 ## Testit
 
-| Kohde | Testejä |
-|---|---|
-| `apps/tms-stations/src/history.test.ts` | 15 (CSV: BOM, tyhjät solut, summarivi, tyhjät sarjat, suunnat) |
-| `apps/tms-stations/src/snapshot.test.ts` | 13 (anturivalinta, iän laskenta, luokittelu, tunnusluvut, järjestys) |
-| `apps/tms-stations/src/cache.test.ts` | 8 (TTL, in-flight, stale, muistin raja) |
-| `apps/tms-stations/src/flow.test.ts` | 10 (kynnykset, matalan volyymin suoja, rajat) |
-| `apps/tms-stations/src/region.test.ts` | 8 (rajaus, tienumero nimestä, otsikko) |
-| `apps/tms-stations/src/params.test.ts` | 22 (tmsNumber, tyypit, päivät, päivä, kuukausi, oletusjaksot, `resolveHistoryQuery` + `type=all`) |
-| `apps/tms-stations/src/metadata.test.ts` | 5 (valinta, yhdistäminen, puuttuva tieto) |
-| `apps/tms-stations/src/retry.test.ts` | 7 (uusinta aikakatkaisun ja 5xx:n jälkeen, ei 4xx:lle) |
-| `apps/web/src/lib/tms.test.ts` | 17 (muotoilu, palkit, sujuvuusluokat, tyhjät arvot) |
-| `infra/test/config.test.ts` | 9 uutta (TTL:ien suhteet, concurrency, timeoutit, uusinnan aikabudjetti) |
+| Kohde                                    | Testejä                                                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `apps/tms-stations/src/history.test.ts`  | 15 (CSV: BOM, tyhjät solut, summarivi, tyhjät sarjat, suunnat)                                    |
+| `apps/tms-stations/src/snapshot.test.ts` | 13 (anturivalinta, iän laskenta, luokittelu, tunnusluvut, järjestys)                              |
+| `apps/tms-stations/src/cache.test.ts`    | 8 (TTL, in-flight, stale, muistin raja)                                                           |
+| `apps/tms-stations/src/flow.test.ts`     | 10 (kynnykset, matalan volyymin suoja, rajat)                                                     |
+| `apps/tms-stations/src/region.test.ts`   | 8 (rajaus, tienumero nimestä, otsikko)                                                            |
+| `apps/tms-stations/src/params.test.ts`   | 22 (tmsNumber, tyypit, päivät, päivä, kuukausi, oletusjaksot, `resolveHistoryQuery` + `type=all`) |
+| `apps/tms-stations/src/metadata.test.ts` | 5 (valinta, yhdistäminen, puuttuva tieto)                                                         |
+| `apps/tms-stations/src/retry.test.ts`    | 7 (uusinta aikakatkaisun ja 5xx:n jälkeen, ei 4xx:lle)                                            |
+| `apps/web/src/lib/tms.test.ts`           | 17 (muotoilu, palkit, sujuvuusluokat, tyhjät arvot)                                               |
+| `infra/test/config.test.ts`              | 9 uutta (TTL:ien suhteet, concurrency, timeoutit, uusinnan aikabudjetti)                          |
 
 Yhteensä **88 testiä** `apps/tms-stations`-paketissa ja 17 frontendin
 muotoilulogiikassa; koko repositorion sarja on **452 testiä**.

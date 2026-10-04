@@ -4,9 +4,7 @@ import { buildProcessingKey, sha256Hex } from './hash';
 
 describe('sha256Hex', () => {
   it('tuottaa tunnetun tarkisteen tyhjälle merkkijonolle', () => {
-    expect(sha256Hex('')).toBe(
-      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    );
+    expect(sha256Hex('')).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
   });
 
   it('tuottaa tunnetun tarkisteen "abc"-merkkijonolle', () => {

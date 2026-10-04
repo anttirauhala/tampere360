@@ -70,10 +70,7 @@ export interface TimeFormatOptions {
  * esimerkiksi UTC:llä ajettava selain (tai ulkomailla oleva käyttäjä) näkisi
  * kellonajan 3 tuntia pielessä.
  */
-export function formatTime(
-  iso: string | undefined | null,
-  options?: TimeFormatOptions,
-): string {
+export function formatTime(iso: string | undefined | null, options?: TimeFormatOptions): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
@@ -123,9 +120,7 @@ export function distinctDescription(title: string, description: string | null | 
  * `javascript:`-osoitetta ei koskaan renderöidä linkkinä. Otsikko on
  * verkkotunnus ilman `www.`-etuliitettä (esim. "poliisi.fi").
  */
-export function sourceLink(
-  url: string | null | undefined,
-): { href: string; label: string } | null {
+export function sourceLink(url: string | null | undefined): { href: string; label: string } | null {
   if (!url) return null;
   try {
     const parsed = new URL(url);
@@ -156,10 +151,7 @@ export interface SituationTimes {
  * `options.weekday` lisää viikonpäivän ajankohdan eteen (esim. Nyt-sivun
  * kortit: "la 3.10.2026 klo 07.00").
  */
-export function formatCompactTime(
-  times: SituationTimes,
-  options?: TimeFormatOptions,
-): string {
+export function formatCompactTime(times: SituationTimes, options?: TimeFormatOptions): string {
   const startsAt = times.startsAt ?? null;
   if (startsAt) {
     const label = isFuture(startsAt) ? 'Alkaa' : 'Alkoi';

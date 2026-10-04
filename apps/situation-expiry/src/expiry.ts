@@ -78,7 +78,11 @@ export function planExpirations(items: SituationRow[], nowMs: number): Retiremen
     }
 
     if (isPast(item.endsAt, nowMs)) {
-      retirements.push({ situationId: item.situationId, status: 'ENDED', reason: 'VALIDITY_ENDED' });
+      retirements.push({
+        situationId: item.situationId,
+        status: 'ENDED',
+        reason: 'VALIDITY_ENDED',
+      });
     }
   }
   return retirements;

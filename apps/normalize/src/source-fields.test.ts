@@ -18,9 +18,9 @@ describe('stripHtml', () => {
 
 describe('extractSourceUrl', () => {
   it('poimii RSS:n link-kentän', () => {
-    expect(
-      extractSourceUrl({ link: 'https://poliisi.fi/-/jalankulkija-kuoli-tampereella' }),
-    ).toBe('https://poliisi.fi/-/jalankulkija-kuoli-tampereella');
+    expect(extractSourceUrl({ link: 'https://poliisi.fi/-/jalankulkija-kuoli-tampereella' })).toBe(
+      'https://poliisi.fi/-/jalankulkija-kuoli-tampereella',
+    );
   });
 
   it('hyväksyy myös url-kentän (valmiiksi normalisoitu muoto)', () => {

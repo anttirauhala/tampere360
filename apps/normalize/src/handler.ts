@@ -17,15 +17,35 @@ import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { sourceStatus } from './event-status';
 import { descriptionIfDistinct, extractSourceUrl } from './source-fields';
 
-const logger = createLogger({ service: 'normalize', environment: process.env['ENVIRONMENT'] ?? 'dev' });
+const logger = createLogger({
+  service: 'normalize',
+  environment: process.env['ENVIRONMENT'] ?? 'dev',
+});
 const eventbridge = new EventBridgeClient({});
 
 /** Pirkanmaan kunnat (kuntanimi → aluekoodit). */
 const PIRKANMAA_MUNICIPALITIES = new Set([
-  'Nokia', 'Pirkkala', 'Ylöjärvi', 'Lempäälä', 'Kangasala', 'Vesilahti',
-  'Akaa', 'Valkeakoski', 'Sastamala', 'Ikaalinen', 'Parkano', 'Ruovesi',
-  'Mänttä-Vilppula', 'Urjala', 'Hämeenkyrö', 'Juupajoki', 'Kihniö',
-  'Kuhmoinen', 'Orivesi', 'Punkalaidun', 'Virrat',
+  'Nokia',
+  'Pirkkala',
+  'Ylöjärvi',
+  'Lempäälä',
+  'Kangasala',
+  'Vesilahti',
+  'Akaa',
+  'Valkeakoski',
+  'Sastamala',
+  'Ikaalinen',
+  'Parkano',
+  'Ruovesi',
+  'Mänttä-Vilppula',
+  'Urjala',
+  'Hämeenkyrö',
+  'Juupajoki',
+  'Kihniö',
+  'Kuhmoinen',
+  'Orivesi',
+  'Punkalaidun',
+  'Virrat',
 ]);
 
 /**
@@ -115,9 +135,12 @@ function firstIso(...values: unknown[]): string | null {
 function mapRawToFields(source: string, raw: Record<string, unknown> | undefined) {
   if (source === 'FMI_CAP') {
     const s = String(raw?.severity ?? '').toLowerCase();
-    const severity = s === 'extreme' ? 'CRITICAL' : s === 'severe' ? 'MAJOR' : s === 'moderate' ? 'MINOR' : 'INFO';
+    const severity =
+      s === 'extreme' ? 'CRITICAL' : s === 'severe' ? 'MAJOR' : s === 'moderate' ? 'MINOR' : 'INFO';
     return {
-      type: 'WEATHER_WARNING' as const, category: 'WEATHER' as const, severity,
+      type: 'WEATHER_WARNING' as const,
+      category: 'WEATHER' as const,
+      severity,
       title: { fi: String(raw?.event ?? 'Säävaroitus') },
       description: raw?.description ? { fi: String(raw.description) } : undefined,
       attribution: { name: 'Ilmatieteen laitos', required: true },
@@ -139,17 +162,24 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
   if (source === 'TAMPERE_TRAFFIC') {
     // Digitraffic on GeoJSON: kentät ovat properties-kääreen sisällä.
     // Tuetaan molempia muotoja (properties-wrapperi tai suora).
-    const props = ((raw?.properties ?? raw) ?? {}) as Record<string, unknown>;
+    const props = (raw?.properties ?? raw ?? {}) as Record<string, unknown>;
     const st = String(props.situationType ?? props.trafficAnnouncementType ?? '');
-    const type = st.toLowerCase().includes('roadwork') ? 'ROADWORK' as const : 'TRAFFIC_INCIDENT' as const;
-    const anns = Array.isArray(props.announcements) ? (props.announcements as Record<string, unknown>[]) : [];
+    const type = st.toLowerCase().includes('roadwork')
+      ? ('ROADWORK' as const)
+      : ('TRAFFIC_INCIDENT' as const);
+    const anns = Array.isArray(props.announcements)
+      ? (props.announcements as Record<string, unknown>[])
+      : [];
     const ann = (anns[0] ?? {}) as Record<string, unknown>;
     const title = ann.title ? String(ann.title).trim() : 'Liikennetapahtuma';
     const locDetails = ann.locationDetails as Record<string, unknown> | undefined;
     const roadLoc = locDetails?.roadAddressLocation as Record<string, unknown> | undefined;
     const primary = roadLoc?.primaryPoint as Record<string, unknown> | undefined;
     const secondary = roadLoc?.secondaryPoint as Record<string, unknown> | undefined;
-    const municipality = (primary?.municipality as string | undefined) ?? (secondary?.municipality as string | undefined) ?? null;
+    const municipality =
+      (primary?.municipality as string | undefined) ??
+      (secondary?.municipality as string | undefined) ??
+      null;
     const td = ann.timeAndDuration as Record<string, unknown> | undefined;
 
     // Digitraffic v2 on GeoJSON: geometria on feature-tasolla (Point tai
@@ -157,8 +187,7 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
     // jäädään alueeseen → SOURCE_AREA (§5).
     const geomSource = (raw?.['geometry'] ? raw : props) as Record<string, unknown>;
     const { geometry: point, latitude, longitude } = sourceGeometry(geomSource);
-    const locationMethod: LocationMethod =
-      latitude !== null ? 'SOURCE_COORDINATE' : 'SOURCE_AREA';
+    const locationMethod: LocationMethod = latitude !== null ? 'SOURCE_COORDINATE' : 'SOURCE_AREA';
 
     // Vakavuus: suljettu tie / kiertotie / onnettomuus → MAJOR, muuten MINOR
     const featureNames = Array.isArray(ann.features)
@@ -168,7 +197,9 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
     const severity = /suljettu|onnettomuus|kiertotie|vakava/.test(text) ? 'MAJOR' : 'MINOR';
 
     return {
-      type, category: 'TRAFFIC' as const, severity,
+      type,
+      category: 'TRAFFIC' as const,
+      severity,
       title: { fi: title },
       description: ann.comment ? { fi: String(ann.comment) } : undefined,
       attribution: {
@@ -192,7 +223,9 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
   }
   if (source === 'VISIT_TAMPERE') {
     return {
-      type: 'PUBLIC_EVENT' as const, category: 'EVENT' as const, severity: 'INFO',
+      type: 'PUBLIC_EVENT' as const,
+      category: 'EVENT' as const,
+      severity: 'INFO',
       title: { fi: String(raw?.name ?? 'Tapahtuma') },
       description: raw?.description ? { fi: String(raw.description) } : undefined,
       attribution: { name: 'Visit Tampere', required: true },
@@ -207,9 +240,12 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
   if (source === 'NYSSE_ALERTS') {
     const routeInfo = raw?.routeIds ? (raw.routeIds as string[]).join(', ') : '';
     return {
-      type: 'TRANSIT_DISRUPTION' as const, category: 'PUBLIC_TRANSPORT' as const,
+      type: 'TRANSIT_DISRUPTION' as const,
+      category: 'PUBLIC_TRANSPORT' as const,
       severity: 'MINOR',
-      title: { fi: String(raw?.header ?? 'Joukkoliikennehäiriö') + (routeInfo ? ` (${routeInfo})` : '') },
+      title: {
+        fi: String(raw?.header ?? 'Joukkoliikennehäiriö') + (routeInfo ? ` (${routeInfo})` : ''),
+      },
       description: raw?.description ? { fi: String(raw.description) } : undefined,
       attribution: { name: 'Nysse', required: true },
       areaCodes: ['TAMPERE'] as string[],
@@ -225,14 +261,17 @@ function mapRawToFields(source: string, raw: Record<string, unknown> | undefined
   if (source === 'POLICE_RSS') {
     const title = String(raw?.title ?? '');
     // Yksinkertainen päättely: onko otsikossa vakava = MAJOR, muuten INFO
-const isMajor =
-  /vakava|kuoli|kuollut|kuolema|kadonnut|kadonnut henkilö|etsitään|puukko|puukotus|puukotettu|ase|ampuminen|ammuttu|uhka|uhkaus|väkivalta|ryöstö|sieppaus|kaappaus|onnettomuus|räjähdys|tulipalo|hätä|havaintoja|etsii|pyytää havaintoja/i.test(title);
+    const isMajor =
+      /vakava|kuoli|kuollut|kuolema|kadonnut|kadonnut henkilö|etsitään|puukko|puukotus|puukotettu|ase|ampuminen|ammuttu|uhka|uhkaus|väkivalta|ryöstö|sieppaus|kaappaus|onnettomuus|räjähdys|tulipalo|hätä|havaintoja|etsii|pyytää havaintoja/i.test(
+        title,
+      );
     // RSS:n <description> on poliisin syötteessä aina sama kuin otsikko
     // (<p>otsikko</p>) → ei toisteta sitä infotekstinä. Lisätiedot ovat
     // linkin takana (event.source.url), jonka UI näyttää klikattavana.
     const description = descriptionIfDistinct(raw, title);
     return {
-      type: 'POLICE_ANNOUNCEMENT' as const, category: 'POLICE' as const,
+      type: 'POLICE_ANNOUNCEMENT' as const,
+      category: 'POLICE' as const,
       severity: isMajor ? 'MAJOR' : 'INFO',
       title: { fi: title },
       description: description ? { fi: description } : undefined,
@@ -249,11 +288,16 @@ const isMajor =
     };
   }
   return {
-    type: 'OTHER' as const, category: 'EVENT' as const, severity: 'INFO',
+    type: 'OTHER' as const,
+    category: 'EVENT' as const,
+    severity: 'INFO',
     title: { fi: String(raw?.name ?? String(raw?.title ?? 'Tapahtuma')) },
     attribution: { name: source, required: false },
-    location: null, validity: null, areaCodes: [],
-    publishedAt: null, updatedAt: null,
+    location: null,
+    validity: null,
+    areaCodes: [],
+    publishedAt: null,
+    updatedAt: null,
   };
 }
 
@@ -262,7 +306,12 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
   for (const record of event.Records) {
     const messageId = record.messageId;
     let ingestMessage: IngestMessage;
-    try { ingestMessage = JSON.parse(record.body) as IngestMessage; } catch { failIds.push(messageId); continue; }
+    try {
+      ingestMessage = JSON.parse(record.body) as IngestMessage;
+    } catch {
+      failIds.push(messageId);
+      continue;
+    }
     if (!ingestMessage.events?.length) continue;
     for (const parsedEvent of ingestMessage.events) {
       try {
@@ -281,7 +330,8 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
         const sourceUrl = extractSourceUrl(raw);
         const locationMethod = 'locationMethod' in m ? m.locationMethod : undefined;
         const normalized: Tampere360Event = {
-          schemaVersion: '1.0', id: eventId,
+          schemaVersion: '1.0',
+          id: eventId,
           canonicalKey: `${parsedEvent.source}:${parsedEvent.sourceId}`,
           processingKey: parsedEvent.processingKey,
           source: {
@@ -295,10 +345,14 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
           severity: m.severity as Tampere360Event['severity'],
           status,
           lifecycle: status,
-          title: m.title, description: m.description,
+          title: m.title,
+          description: m.description,
           location: {
-            municipality: m.location?.municipality ?? null, district: null, address: null,
-            latitude: m.location?.latitude ?? null, longitude: m.location?.longitude ?? null,
+            municipality: m.location?.municipality ?? null,
+            district: null,
+            address: null,
+            latitude: m.location?.latitude ?? null,
+            longitude: m.location?.longitude ?? null,
             geometry: m.location?.geometry ?? null,
             areaCodes: (m.areaCodes ?? []) as Tampere360Event['location']['areaCodes'],
           },
@@ -308,16 +362,26 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
           updatedAt: m.updatedAt ?? m.publishedAt ?? null,
           firstSeenAt: now,
           tags: [],
-          attribution: m.attribution, contentHash,
+          attribution: m.attribution,
+          contentHash,
           ...(locationMethod ? { locationMethod } : {}),
         };
-        await eventbridge.send(new PutEventsCommand({
-          Entries: [{
-            EventBusName: process.env['EVENT_BUS_NAME'] ?? 'tampere360-dev-events',
-            Source: 'tampere360', DetailType: 'SourceEventNormalized',
-            Detail: JSON.stringify({ event: normalized, batchId: ingestMessage.batch.batchId, occurredAt: now }),
-          }],
-        }));
+        await eventbridge.send(
+          new PutEventsCommand({
+            Entries: [
+              {
+                EventBusName: process.env['EVENT_BUS_NAME'] ?? 'tampere360-dev-events',
+                Source: 'tampere360',
+                DetailType: 'SourceEventNormalized',
+                Detail: JSON.stringify({
+                  event: normalized,
+                  batchId: ingestMessage.batch.batchId,
+                  occurredAt: now,
+                }),
+              },
+            ],
+          }),
+        );
         logger.info('Normalisoitu', { source: parsedEvent.source, type: m.type });
       } catch {
         failIds.push(messageId);
