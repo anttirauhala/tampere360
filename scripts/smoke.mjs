@@ -9,7 +9,8 @@
  *   1. GET <api>/v1/situations?limit=1 → 200, { items: [...] }
  *   2. GET <api>/v1/health/sources     → 200, status OK, ei yhtään ERROR-lähdettä
  *   3. GET <frontend>/                 → 200, sisältää brändin "Tampere 247"
- *   4. GET <frontend>/config.json      → 200, apiUrl asetettu
+ *   4. GET <frontend>/config.json      → 200, API:n juuri asetettu
+ *      (avain `apiBaseUrl` — sama, jota apps/web/src/api/client.ts lukee)
  *
  * Käyttö:
  *   node scripts/smoke.mjs --outputs infra/cdk-outputs-dev.json --env dev
@@ -174,11 +175,15 @@ async function checkFrontend({ frontend }) {
   if (!html.includes('Tampere 247')) {
     throw new Error('etusivu ei sisällä brändiä "Tampere 247"');
   }
+  // FrontendStack kirjoittaa API:n juuren avaimella `apiBaseUrl` (sama avain,
+  // jota apps/web/src/api/client.ts lukee). Hyväksytään lisäksi `apiUrl`,
+  // jotta nimeämisen muuttuminen ei kaada savutestiä turhaan.
   const config = await getJson(`${frontend}/config.json`);
-  if (typeof config.apiUrl !== 'string' || !config.apiUrl.startsWith('http')) {
-    throw new Error('config.json: apiUrl puuttuu tai ei ole http(s)-osoite');
+  const apiUrl = config.apiBaseUrl ?? config.apiUrl;
+  if (typeof apiUrl !== 'string' || !apiUrl.startsWith('http')) {
+    throw new Error('config.json: apiBaseUrl puuttuu tai ei ole http(s)-osoite');
   }
-  return `etusivu + config.json (apiUrl ${config.apiUrl})`;
+  return `etusivu + config.json (apiBaseUrl ${apiUrl})`;
 }
 
 /** Yrittää tarkistusta uudelleen: julkaisun jälkeen CloudFront päivittyy hetken. */
