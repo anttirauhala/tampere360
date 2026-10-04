@@ -1,7 +1,7 @@
 # SPA-deployn chunk-virhe ja sen ehkäisy
 
-> Havaittu ja korjattu 1.10.2026 (dev-jakelu `d36ic5wsx4b9yl.cloudfront.net`,
-> sama malli myös prodissa `tampere247.online`)
+> Havaittu ja korjattu 1.10.2026 (dev-jakelu; sama malli myös prodissa
+> `tampere247.online`)
 
 ## Oire
 
@@ -10,7 +10,7 @@ erityisesti jos sivu on ollut kauan auki"_:
 
 ```
 Uncaught TypeError: error loading dynamically imported module:
-https://d36ic5wsx4b9yl.cloudfront.net/assets/NysseMapPage-DyiIPu-z.js
+https://<dev-jakelu>/assets/NysseMapPage-DyiIPu-z.js
 ```
 
 ## Juurisyy — kolme osaa, jotka yhdessä muodostavat vian

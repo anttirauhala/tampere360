@@ -4,9 +4,10 @@
 > Tilanne: Vaiheet 0–4 ✅ (CDK-infra 8 stackia; FMI CAP, Digitraffic,
 > poliisi-RSS ja Nysse Waltti toimivat päästä päähän; React-frontend
 > julkaistu CloudFrontiin; tapahtumalähde disabloitu, API 404 — ks. §18).
-> Deploy: `tampere360-dev-*` eu-north-1.
-> Frontend: https://d36ic5wsx4b9yl.cloudfront.net
-> API: https://vllod80b6i.execute-api.eu-north-1.amazonaws.com
+> Deploy: `tampere360-dev-*` eu-north-1. **Dev-osoitteita ei kirjata tänne** —
+> ne vaihtuvat, jos resurssi (CloudFront-jakelu tai HTTP API) korvataan; hae ne
+> CloudFormationin outputeista (README §Julkaistu ympäristö, savutesti tekee
+> tämän automaattisesti `--outputs-file`-tiedostosta).
 > Seuraavaksi Vaihe 5 (testit, valvonta, CI).
 > **CI/CD ✅ (§40):** GitHub Actions -putki (`ci.yml`, `deploy-dev.yml`,
 > `deploy-prod.yml`) OIDC-tunnistautumisella + savutesti `scripts/smoke.mjs`.
@@ -1764,7 +1765,7 @@ erityisesti jos sivu on ollut kauan auki"*:
 
 ```
 Uncaught TypeError: error loading dynamically imported module:
-https://d36ic5wsx4b9yl.cloudfront.net/assets/NysseMapPage-DyiIPu-z.js
+https://<dev-jakelu>/assets/NysseMapPage-DyiIPu-z.js
 ```
 
 Virhe koski dev-jakelua, mutta sama rakenne oli myös prodissa
@@ -2269,7 +2270,7 @@ selainpyyntöä.
 saunas-testit 26 ✅. Koko sarja ✅, ESLint ✅, Prettier ✅,
 `npm run build:web` ✅.
 
-**Verifiointi 3.10.2026 (dev, `d36ic5wsx4b9yl.cloudfront.net`, headless
+**Verifiointi 3.10.2026 (dev, headless
 Chrome `--dump-dom`):** julkaistu `index.html` osoittaa omaan buildiin
 (`assets/index-DJfesDdp.js`), CSS sisältää `.page__lead-link`in, ja DOM:issa
 on **täsmälleen 3** saunahaku-linkkiä:
@@ -2458,8 +2459,7 @@ Julkaistu build on täsmälleen sama kuin paikallinen:
 `script-src 'self'`, `connect-src` API + tiilet) **ei vaatinut muutosta** —
 ulkoinen `<select>` ei aiheuta uusia origineja.
 
-**Julkaistun dev-sivuston verifiointi** (headless Chrome + CDP,
-`https://d36ic5wsx4b9yl.cloudfront.net`):
+**Julkaistun dev-sivuston verifiointi** (headless Chrome + CDP, dev-jakelu):
 
 | Tarkistus | Tulos |
 |---|---|
