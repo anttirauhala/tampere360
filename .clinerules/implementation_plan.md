@@ -2603,10 +2603,42 @@ törmäsi `already exists` (ensimmäinen dev-deploy kaatui tähän). Ne poistett
 käsin. Sama asia on pieni CloudWatch-kustannuserä (logit eivät vanhene) —
 suositus jatkoon: eksplisiittinen `logRetention` (dev 3 pv / prod 30 pv).
 
+### Prod-käyttöönotto (4.10.2026)
+
+Muutos vietiin prodiin `npm run deploy:prod -- --require-approval never`
+(8 stackia, 265 s). `cdk diff` ennen deployta: **5 stackia erosi, kaikki
+lisäyksiä tai Lambda-koodin vaihtoja** — ei yhtään korvausta eikä poistoa:
+
+| Stack | Muutos |
+|---|---|
+| `prod-data` | vain `BucketKeyEnabled: true` raakabucketiin |
+| `prod-event-processing` | `SituationProcessorFunction`-koodi (SDK-bundle) |
+| `prod-ingestion` | 5 adapteri-Lambdaa + normalisointi |
+| `prod-api` | `QueryFunction`-koodi |
+| `prod-frontend` | asset-versiointi (uusi JS-bundle) |
+| foundation / eventing / monitoring | *(no differences)* |
+
+**Deploy-järjestys toteutui korjatusti:** event-processing (5/8) ennen
+ingestionia (6/8), joten situation-processor oli valmiina ennen kuin uudet
+Schedulerit alkoivat ajaa.
+
+Verifiointi prodissa:
+
+| Tarkistus | Tulos |
+|---|---|
+| Kategoriat ennen/jälkeen | TRAFFIC 3/3, POLICE 38/38, WEATHER 1/1, PUBLIC_TRANSPORT 10/10 — **ei datamenetystä** ✅ |
+| `/v1/health/sources` | 4 lähdettä `OK`, `sentItems` ei vuoda ✅ |
+| `sentItems` prodin taulussa | asetettu kaikille 4 lähteelle; tyhjennettiin ja adapterit ajettiin kerran varmistuksena ✅ |
+| **SQS-lähetykset** `prod-ingestion` | 132 → 94 → **0** / 5 min ✅ |
+| **SQS-lähetykset** `dev-ingestion` | **0, 0, 0** / 5 min ✅ |
+| Frontend | `tampere247.online` + `www.` → 200, `index-_ARMzK6y.js` = **sama build kuin devissä**, dokumentti `no-store` ✅ |
+
+Huom: prodin frontend-build päivittyi samalla kertaa devin kanssa
+(`index-CESABh7N.js` → `index-_ARMzK6y.js`), joten dev ja prod tarjoavat nyt
+täsmälleen saman bundlen.
+
 ### Rajaukset
 
-Muutokset vietiin **vain deviin**. Prod toistetaan samana muutoksena
-(`npm run deploy:prod`) ja sen jälkeen prodin `sentItems`-kartat on tyhjennettävä
-kertaalleen, jotta tuoreen deploin aikana mahdollisesti menetetyt tapahtumat
-syntyvät uudelleen.
+`cdk destroy` ei poista Lambda-logiryhmiä (oletus `RETAIN`) — ks. kohta (2)
+yllä. Jatkoon suositellaan eksplisiittistä `logRetention`ia.
 
