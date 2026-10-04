@@ -30,7 +30,17 @@ _rulesetin_ ollessa kyseessä jobin nimi `checks` — ks. §3.
 
 **Settings → Actions → General**
 
-- Actions permissions: _Allow all actions and reusable workflows_
+- **Actions permissions: valitse "Allow all actions and reusable workflows".**
+  Tämä on pakollista. Jos valitset _"Allow select actions and reusable
+  workflows"_ ilman lisävalintoja, GitHub estää **kaikki**
+  marketplace-actionit ja työnkulut kaatuvat heti `startup_failure`ina
+  (0 jobia, ei lokia, ei check-runia). Työnkulun sivulla lukee silloin
+  esimerkiksi: _"The action actions/checkout@v4 is not allowed in
+  anttirauhala/tampere360 because all actions must be from a repository owned
+  by anttirauhala."_ Yhtä toimiva vaihtoehto: pidä "Allow select" mutta rastita
+  **"Allow actions created by GitHub"** ja **"Allow Marketplace actions by
+  verified creators"** — ne kattavat `actions/checkout`, `actions/setup-node`
+  ja `aws-actions/configure-aws-credentials`.
 - Workflow permissions: **Read repository contents and packages** (työnkulut
   korottavat oikeutensa itse: deploy tarvitsee `id-token: write`)
 - Ei rastia kohtaan "Allow GitHub Actions to create and approve pull requests"
@@ -63,6 +73,14 @@ Nämä ovat **variableita, eivät salaisuuksia** — rooli-ARN ei ole salaisuus.
 Repositorioon **ei tarvita yhtään GitHub-salaisuutta**: tunnistautuminen
 tapahtuu OIDC:llä (periaate: "Do not commit secrets" toteutuu rakenteellisesti).
 
+> **Tarkista arvon muoto.** `configure-aws-credentials` validoi ARN:n ennen
+> STS-kutsua, ja virheellinen arvo näkyy deployn lokissa muodossa
+> _`Could not assume role with OIDC: Request ARN is invalid`_ (ks. §7).
+> Liitä arvo **AWS:stä**, älä käsin kirjoitettuna — esim.
+> `aws iam get-role --role-name tampere360-github-dev-deploy --query 'Role.Arn' --output text`.
+> Arvossa ei saa olla välilyöntiä eikä rivinvaihtoa lopussa; roolin **nimi**
+> tai OIDC-**providerin** ARN eivät kelpaa.
+
 ### 2.4 Branch protection
 
 **Settings → Branches** (tai Rulesets): vaadi `main`-haaralle
@@ -90,6 +108,15 @@ viikoittain).
 Tili `132339120388`, alue `eu-north-1`. Tavoite: **ei pitkäikäisiä avaimia** —
 GitHub saa lyhytaikaisen tokenin OIDC:n kautta.
 
+> **Tila 4.10.2026: tehty ✅** (luotu AWS CLI:llä, ks. §3.1–3.4):
+>
+> - `arn:aws:iam::132339120388:oidc-provider/token.actions.githubusercontent.com`
+> - `arn:aws:iam::132339120388:role/tampere360-github-dev-deploy` (PowerUserAccess + IAMFullAccess)
+> - `arn:aws:iam::132339120388:role/tampere360-github-prod-deploy` (samat policyt)
+> - `cdk bootstrap aws://132339120388/eu-north-1 --trust <molemmat roolit>`
+>   → _Environment aws://132339120388/eu-north-1 bootstrapped_ (CDKToolkit
+>   `UPDATE_COMPLETE`, deploy-roolin luottamus sisältää molemmat roolit)
+
 ### 3.1 GitHub OIDC -identiteettipalvelu
 
 **IAM → Identity providers → Add provider → OpenID Connect**
@@ -103,7 +130,24 @@ GitHub saa lyhytaikaisen tokenin OIDC:n kautta.
 ### 3.2 Kaksi deploy-roolia
 
 Molemmat luodaan konsolissa (IAM → Roles → Create role → Web identity →
-GitHub) tai CLI:llä. Trust policy jätetään **tarkasti rajatulle subille**:
+GitHub) tai CLI:llä. Trust policy jätetään **tarkasti rajatulle subille**.
+
+> **Tärkeää — GitHubin `sub`-väitteen muoto (päivitetty 4.10.2026):** GitHub
+> lähettää nykyään **ID-pohjaisen** `sub`-väitteen, jossa on omistajan ja repon
+> pysyvät numerotunnukset:
+>
+> ```
+> repo:anttirauhala@20150993/tampere360@1359212266:environment:dev
+>      └── omistaja ──┘└─ id ─┘└── repo ──┘└── id ──┘
+> ```
+>
+> Pelkkä `repo:anttirauhala/tampere360:environment:dev` **ei osu** tähän, jolloin
+> STS vastaa `AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity`.
+> Siksi ehtoon laitetaan **molemmat muodot** (taulukko `StringLike`-arvossa) —
+> vanha muoto ei haittaa, ja uusi toimii riippumatta siitä, milloin GitHub on
+> ottanut muutoksen käyttöön repossa. Numerotunnukset näkee omasta repossa
+> CloudTrailista (ks. alla) tai GitHubin API:sta
+> (`GET /repos/<omistaja>/<repo>` → `id`, ja omistajan `id`).
 
 `tampere360-github-dev-deploy`:
 
@@ -120,7 +164,10 @@ GitHub) tai CLI:llä. Trust policy jätetään **tarkasti rajatulle subille**:
       "Condition": {
         "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:anttirauhala/tampere360:environment:dev"
+          "token.actions.githubusercontent.com:sub": [
+            "repo:anttirauhala/tampere360:environment:dev",
+            "repo:anttirauhala@*/tampere360@*:environment:dev"
+          ]
         }
       }
     }
@@ -128,8 +175,29 @@ GitHub) tai CLI:llä. Trust policy jätetään **tarkasti rajatulle subille**:
 }
 ```
 
-`tampere360-github-prod-deploy`: sama, mutta `sub` =
-`repo:anttirauhala/tampere360:environment:prod`.
+`tampere360-github-prod-deploy`: sama, mutta molemmat arvot muodossa
+`…:environment:prod`.
+
+Päivitys olemassa olevaan rooliin (tiedosto `trust-<env>.json`):
+
+```bash
+aws iam update-assume-role-policy --role-name tampere360-github-dev-deploy \
+  --policy-document file://trust-dev.json
+```
+
+**Tarkista, mikä `sub` todella saapui** (ei näy GitHubin lokista eikä IAM:sta):
+
+```bash
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity \
+  --max-results 5 --region eu-north-1 \
+  --query 'Events[].CloudTrailEvent' --output text \
+  | grep -o 'environment:[a-z]*'
+```
+
+Tapahtuman `userIdentity.principalId` sisältää koko `sub`-väitteen
+(`…oidc-provider/token.actions.githubusercontent.com:sts.amazonaws.com:<sub>`)
+ja `errorMessage` kertoo, hylättiinkö oletus.
 
 ### 3.3 Roolien oikeudet
 
@@ -188,12 +256,12 @@ node scripts/smoke.mjs --api https://api.tampere247.online \
                        --frontend https://tampere247.online
 ```
 
-| Tarkistus                         | Kriteeri                                          |
-| --------------------------------- | ------------------------------------------------- |
-| `GET <api>/v1/situations?limit=1` | 200, `{ items: [...] }`, rivillä `situationId`    |
-| `GET <api>/v1/health/sources`     | 200, `status: OK`, **ei yhtään** `ERROR`-lähdettä |
-| `GET <frontend>/`                 | 200, sisältää brändin `Tampere 247`               |
-| `GET <frontend>/config.json`      | 200, `apiUrl` on http(s)-osoite                   |
+| Tarkistus                         | Kriteeri                                                                   |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `GET <api>/v1/situations?limit=1` | 200, `{ items: [...] }`, rivillä `situationId`                             |
+| `GET <api>/v1/health/sources`     | 200, `status: OK`, **ei yhtään** `ERROR`-lähdettä                          |
+| `GET <frontend>/`                 | 200, sisältää brändin `Tampere 247`                                        |
+| `GET <frontend>/config.json`      | 200, API:n juuri asetettu avaimella `apiBaseUrl` (sama, jota selain lukee) |
 
 **Puuttuva lähde on varoitus, ei virhe.** Tuoreessa ympäristössä Schedulerit
 kirjaavat tilan vasta ensimmäisellä ajokerralla (FMI 5 min, POLICE 2–5 min);
@@ -301,14 +369,17 @@ samoja npm-skriptejä ja -konteksteja.
 
 ## 7. Vianetsintä
 
-| Oire                                                      | Todennäköinen syy                                                                                                                              |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Roolin trust policyn `sub` ei vastaa environmentia/haaraa, tai OIDC-provideria ei ole luotu                                                    |
-| `is not authorized to perform: cloudformation:...`        | Deploy-roolilta puuttuu oikeuksia (ks. §3.3)                                                                                                   |
-| `Access Denied` bootstrap-bucketiin                       | `cdk bootstrap --trust` puuttuu (§3.4)                                                                                                         |
-| `npm ci` kaatuu                                           | `package-lock.json` ja `package.json` eri versiossa — aja `npm install` paikallisesti ja committoi lock                                        |
-| CI vihreä, deploy ei käynnisty                            | `workflow_run` vaatii, että **CI on määritelty `main`-haarassa** ja että ajo päättyi `success`iin; manuaalinen ajo löytyy Actions → Deploy dev |
-| Savutesti: `HTTP 403` frontendistä                        | CloudFront-invalidointi kesken — yritykset jatkuvat automaattisesti                                                                            |
-| Savutesti: `lähteet virhetilassa: ...`                    | Oikea havainto: katso syykoodi (`error`) ja SSM-parametri                                                                                      |
-| Savutesti: `ei vielä kirjausta: FMI_CAP`                  | Varoitus; FMI kirjaa tilan 5 min välein                                                                                                        |
-| `Workflow permissions` -virhe `id-token`                  | Työnkulun jobilta puuttuu `permissions: id-token: write` tai repossa ei ole sallittu OIDC:tä                                                   |
+| Oire                                                          | Todennäköinen syy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Ajo päättyy heti `startup_failure`iin, 0 jobia, ei lokia**  | **Actions permissions estää marketplace-actionit.** Aseta Settings → Actions → General → _Allow all actions and reusable workflows_ (§2.1). Virhe näkyy työnkulun sivulla: _"The action actions/checkout@v4 is not allowed … because all actions must be from a repository owned by …"_.                                                                                                                                                                                                                     |
+| **`Could not assume role with OIDC: Request ARN is invalid`** | `DEV_DEPLOY_ROLE_ARN` / `PROD_DEPLOY_ROLE_ARN` -muuttujan arvo ei ole validi ARN. Action tarkistaa muodon **ennen** STS-kutsua, joten tämä havaitaan nopeasti. Tyypilliset syyt: välilyönti tai rivinvaihto arvon lopussa, roolin **nimi** ARN:n sijaan, OIDC-**providerin** ARN roolin ARN:n sijaan tai väärä tilinumeron pituus. Odotettu muoto: `arn:aws:iam::<12 numeroa>:role/<roolin-nimi>`. Oikea arvo: `aws iam get-role --role-name tampere360-github-dev-deploy --query 'Role.Arn' --output text`. |
+
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` (CloudTrailissa `AccessDenied`) | Yleisin syy: trust policyn `sub`-ehto on **vanhassa muodossa** (`repo:omistaja/repo:environment:dev`) eikä osu GitHubin nykyiseen **ID-pohjaiseen** väitteeseen (`repo:anttirauhala@20150993/tampere360@1359212266:environment:dev`) — ks. §3.2 ja CloudTrail-komento. Muita syitä: väärä environment/haara, puuttuva OIDC-provider tai providerin `aud`-lista ilman `sts.amazonaws.com`ia. |
+| `is not authorized to perform: cloudformation:...` | Deploy-roolilta puuttuu oikeuksia (ks. §3.3) |
+| `Access Denied` bootstrap-bucketiin | `cdk bootstrap --trust` puuttuu (§3.4) |
+| `npm ci` kaatuu | `package-lock.json` ja `package.json` eri versiossa — aja `npm install` paikallisesti ja committoi lock |
+| CI vihreä, deploy ei käynnisty | `workflow_run` vaatii, että **CI on määritelty `main`-haarassa** ja että ajo päättyi `success`iin; manuaalinen ajo löytyy Actions → Deploy dev |
+| Savutesti: `HTTP 403` frontendistä | CloudFront-invalidointi kesken — yritykset jatkuvat automaattisesti |
+| Savutesti: `lähteet virhetilassa: ...` | Oikea havainto: katso syykoodi (`error`) ja SSM-parametri |
+| Savutesti: `ei vielä kirjausta: FMI_CAP` | Varoitus; FMI kirjaa tilan 5 min välein |
+| `Workflow permissions` -virhe `id-token` | Työnkulun jobilta puuttuu `permissions: id-token: write` tai repossa ei ole sallittu OIDC:tä |

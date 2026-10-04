@@ -242,8 +242,8 @@ Aja: `npm test` (koko sarja 298 testiä 27.9.2026).
 
 ## Selainverifiointi (dev, 27.9.2026)
 
-Headless Chrome (CDP), puhdas sivulataus osoitteessa
-`https://d36ic5wsx4b9yl.cloudfront.net/nysse-kartta`. Karttaolio haettiin
+Headless Chrome (CDP), puhdas sivulataus dev-jakelussa (polku
+`/nysse-kartta`). Karttaolio haettiin
 React-fiberistä, jotta tarkistukset tehtiin MapLibren omilla API:lla
 (`querySourceFeatures`, `queryRenderedFeatures`, `project`).
 
