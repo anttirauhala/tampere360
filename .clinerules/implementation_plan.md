@@ -2808,6 +2808,28 @@ Opetus: erota *actionin oma validaatio* AWS:n virheestä — edellinen tarkoitta
 että AWS:ään ei ole vielä yritettykään. Sama tarkistus koskee
 `PROD_DEPLOY_ROLE_ARN`ia.
 
+### AWS-esiedellytykset toteutettu (4.10.2026)
+
+Selvisi, että §3.1–3.4 oli kokonaan tekemättä: `OpenIDConnectProviderList` oli
+tyhjä eikä kumpaakaan `tampere360-github-*-deploy`-roolia ollut olemassa
+(`NoSuchEntity`). Luotiin AWS CLI:llä (idempotentti skripti, ks. runbook §3):
+
+| Resurssi | Tulos |
+|---|---|
+| OIDC-provider | `arn:aws:iam::132339120388:oidc-provider/token.actions.githubusercontent.com` ✅ |
+| dev-rooli | `arn:aws:iam::132339120388:role/tampere360-github-dev-deploy` + `PowerUserAccess`, `IAMFullAccess` ✅ (trust: `…:environment:dev`) |
+| prod-rooli | `arn:aws:iam::132339120388:role/tampere360-github-prod-deploy` + samat policyt ✅ (trust: `…:environment:prod`) |
+| bootstrap | `cdk bootstrap aws://132339120388/eu-north-1 --trust <molemmat>` → *bootstrapped*; CDKToolkit `UPDATE_COMPLETE`; deploy-roolin luottamus sisältää molemmat roolit ✅ |
+
+GitHub-muuttujiin tulee siis **täsmälleen** yllä olevat kaksi ARN:ia. Koska
+ARN:t ovat deterministisiä (tili + roolin nimi), arvot voi kirjoittaa käsin —
+ne eivät riipu mistään kopioitavasta merkkijonosta.
+
+> Diagnoosimenetelmä, joka kannattaa muistaa: **repo-muuttujan arvoa ei näe
+> API:sta eikä lokista**, mutta AWS:n IAM-lista paljastaa heti, onko roolia
+> olemassa (`aws iam get-role --role-name …`). Tyhjä OIDC-providerilista
+> (`aws iam list-open-id-connect-providers`) kertoo samasta asiasta.
+
 
 ### Rajaukset
 

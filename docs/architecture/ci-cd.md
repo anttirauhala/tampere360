@@ -108,6 +108,15 @@ viikoittain).
 Tili `132339120388`, alue `eu-north-1`. Tavoite: **ei pitkäikäisiä avaimia** —
 GitHub saa lyhytaikaisen tokenin OIDC:n kautta.
 
+> **Tila 4.10.2026: tehty ✅** (luotu AWS CLI:llä, ks. §3.1–3.4):
+>
+> - `arn:aws:iam::132339120388:oidc-provider/token.actions.githubusercontent.com`
+> - `arn:aws:iam::132339120388:role/tampere360-github-dev-deploy` (PowerUserAccess + IAMFullAccess)
+> - `arn:aws:iam::132339120388:role/tampere360-github-prod-deploy` (samat policyt)
+> - `cdk bootstrap aws://132339120388/eu-north-1 --trust <molemmat roolit>`
+>   → _Environment aws://132339120388/eu-north-1 bootstrapped_ (CDKToolkit
+>   `UPDATE_COMPLETE`, deploy-roolin luottamus sisältää molemmat roolit)
+
 ### 3.1 GitHub OIDC -identiteettipalvelu
 
 **IAM → Identity providers → Add provider → OpenID Connect**
