@@ -8,8 +8,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1144.0",
-    "@aws-sdk/lib-dynamodb": "^3.1144.0",
+    "@aws-sdk/client-dynamodb": "^3.1145.0",
+    "@aws-sdk/lib-dynamodb": "^3.1145.0",
     "@tampere360/event-contracts": "0.1.0",
     "@tampere360/observability": "0.1.0"
   }
