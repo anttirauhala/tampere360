@@ -7,9 +7,9 @@ import { NAV, NAV_SELECT_PLACEHOLDER, activeNavPath } from './Layout';
  *
  * Järjestys ja nimet ovat muuttuneet käyttäjän pyynnöstä useasti:
  * §29 lyhensi nimet ja poisti "Joukkoliikenne poikkeustilanteet" -välilehden
- * (sisältö on Nysse-välilehden sivupaneelissa), commit 808d50e tarkensi nimiä
- * ja §30 lisäsi Liikennemäärät-välilehden. Testi varmistaa, ettei järjestys,
- * nimet tai reitit muutu vahingossa.
+ * (sisältö on Nysse-välilehden sivupaneelissa), commit 808d50e tarkensi nimiä,
+ * §30 lisäsi Liikennemäärät-välilehden ja §43 Kamerahavainnot-välilehden.
+ * Testi varmistaa, ettei järjestys, nimet tai reitit muutu vahingossa.
  */
 describe('NAV', () => {
   it('on pyydetyssä järjestyksessä ja nimillä', () => {
@@ -18,6 +18,7 @@ describe('NAV', () => {
       'Tapahtumat kartalla',
       'Nysse kartalla',
       'Kamerat',
+      'Kamerahavainnot',
       'Liikennemäärät',
       'Saunat',
       'Lähteiden tila',
@@ -32,6 +33,7 @@ describe('NAV', () => {
   it('osoittaa välilehdet olemassa oleviin reitteihin', () => {
     expect(NAV.find((item) => item.label === 'Nysse kartalla')?.to).toBe('/nysse-kartta');
     expect(NAV.find((item) => item.label === 'Kamerat')?.to).toBe('/kamerat');
+    expect(NAV.find((item) => item.label === 'Kamerahavainnot')?.to).toBe('/kamerahavainnot');
     expect(NAV.find((item) => item.label === 'Liikennemäärät')?.to).toBe('/liikennemaarat');
     expect(NAV.find((item) => item.label === 'Saunat')?.to).toBe('/saunat');
   });

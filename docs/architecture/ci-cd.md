@@ -373,6 +373,15 @@ samoja npm-skriptejä ja -konteksteja.
     koko CI olisi ollut punainen ensimmäisestä ajosta lähtien (todennettu
     `npm ci --dry-run`illa). Muistisääntö: kun workspacen `package.json`
     muuttuu, myös lukitustiedosto on päivitettävä.
+    **Toistui §43:ssa (11.10.2026):** uusi `apps/camera-detections`-workspace
+    jäi lukitustiedostosta, joten CI kaatui heti ensimmäisessä stepissä
+    (_Missing: @tampere360/camera-detections@0.1.0 from lock file_) ja kaikki
+    loput stepit ohitettiin. Paikallinen `npm run build` **ei** validoi
+    lukitustiedostoa, joten vihreä build ei todista synkronia — aja `npm ci`
+    (tai vähintään `npm ci --dry-run`) ennen pushia, kun workspacen
+    `package.json` on muuttunut. Korjaus on `npm install --package-lock-only`,
+    joka lisää workspace-merkinnän ja repon **sisäisen** suhteellisen
+    workspace-linkin (ei viittausta repon ulkopuolelle).
 11. **`npm audit --audit-level=high` on tällä hetkellä punainen** (1 high,
     2 moderate): transitiiviset `brace-expansion`-DoS-advisoryt
     `aws-cdk-lib`:n, `glob`in ja `@typescript-eslint`in alla sekä

@@ -1312,6 +1312,19 @@ a {
   cursor: progress;
 }
 
+/*
+ * Toissijainen painike (esim. "Näytä myös vanhemmat havainnot"): sama muoto ja
+ * koko, hillitympi väri — ensisijainen toiminto erottuu ilman toista tyyliä.
+ */
+.button--secondary {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.button--secondary:hover:not(:disabled) {
+  background: var(--surface);
+}
+
 /* --- Liikennekamerat --- */
 
 /* Työkalurivi: päivityspainike ja tietojen hakuaika. */
@@ -1830,4 +1843,145 @@ a {
 .sauna-water__meta {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+/* --- Kamerahavainnot (§43) --- */
+
+/*
+ * Sarakkeen minimi rajataan säiliön leveyteen (sama periaate kuin `.cards`in ja
+ * `.camera-grid`in kohdalla): kiinteä pikseliminimi valuisi kapealla näytöllä
+ * reunan yli. Regressiosuoja: apps/web/src/styles.test.ts.
+ */
+.detection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  gap: 12px;
+}
+
+.detection-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/*
+ * Kehys on `position: relative`, jotta bounding boxit voi sijoittaa
+ * prosentteina kuvan päälle. Kuvaa EI rajata (`object-fit`/kiinteä
+ * `aspect-ratio`): jos kuvaa leikattaisiin, prosenttilaatikot eivät enää osuisi
+ * kohteeseen. Siksi `width: 100%; height: auto`.
+ */
+.detection-card__frame {
+  position: relative;
+  background: var(--surface-2);
+}
+
+.detection-card__link {
+  display: block;
+}
+
+.detection-card__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--bg);
+}
+
+.detection-card__image-missing {
+  margin: 0;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Bounding box: koriste — klikkaus menee läpi kuvan linkille. */
+.detection-box {
+  position: absolute;
+  border: 2px solid var(--accent);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.detection-box--person {
+  border-color: var(--critical);
+}
+
+.detection-box--animal {
+  border-color: var(--ok);
+}
+
+.detection-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 14px;
+}
+
+.detection-card__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.detection-card__camera,
+.detection-card__time {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.detection-card__classes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Luokkamerkki: väri JA teksti — pelkkä väri ei riitä, koska havainto on
+   konepäätelmä eikä vahvistettu tieto. */
+.detection-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.detection-badge--person {
+  border-color: var(--critical);
+}
+
+.detection-badge--animal {
+  border-color: var(--ok);
+}
+
+.detection-badge--unknown {
+  color: var(--text-muted);
+}
+
+/* Tarkat tiedot: dt/dd ilman oletusmarginaaleja, arvo korostevärillä. */
+.detection-card__details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 4px 0 0;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  font-size: 12px;
+}
+
+.detection-card__details dt {
+  color: var(--text-muted);
+}
+
+.detection-card__details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detection-more {
+  margin-top: 16px;
 }

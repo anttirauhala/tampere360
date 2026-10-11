@@ -5,6 +5,7 @@ import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { lazyPage } from './lib/lazy-page';
 import { CamerasPage } from './pages/CamerasPage';
+import { CameraDetectionsPage } from './pages/CameraDetectionsPage';
 import { CategoryPage } from './pages/CategoryPage';
 import { NowPage } from './pages/NowPage';
 import { SaunasPage } from './pages/SaunasPage';
@@ -71,6 +72,7 @@ export function App() {
               }
             />
             <Route path="kamerat" element={<CamerasPage />} />
+            <Route path="kamerahavainnot" element={<CameraDetectionsPage />} />
             <Route path="liikennemaarat" element={<TmsPage />} />
             <Route path="saunat" element={<SaunasPage />} />
             <Route path="saa" element={<CategoryPage category="WEATHER" />} />

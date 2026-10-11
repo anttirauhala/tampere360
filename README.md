@@ -197,3 +197,10 @@ attribuoinnit (esim. `© OpenStreetMap contributors` karttatiileille,
 Ilmatieteen laitos säävaroituksille ja -havainnoille, Fintraffic / Digitraffic
 liikennetiedotteille, kelikameroille ja liikennemittauksille, Nysse / Waltti
 joukkoliikenteelle sekä saunahaku.fi saunatiedoille).
+
+**Kamerahavainnot** eivät tule avoimesta datasta vaan omasta erillisestä
+analyysipalvelusta [`anttirauhala/traffic-cam-analyzer`](https://github.com/anttirauhala/traffic-cam-analyzer)
+(YOLO World XL / Replicate, MIT), joka analysoi Digitrafficin kamerakuvia.
+Havainto on **automaattinen konepäätelmä, ei vahvistettu tieto**, ja siksi
+käyttöliittymä näyttää aina mallin confidencen:
+[`docs/architecture/camera-detections.md`](./docs/architecture/camera-detections.md).

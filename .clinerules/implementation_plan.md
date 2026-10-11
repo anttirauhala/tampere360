@@ -3004,3 +3004,173 @@ ruudukko, ei uusia mediaqueryjä eikä JS:ää, eikä työpöytäasettelu muutu.
   *erilaista* ylivuotosyytä (esim. `nowrap`-elementtiä), vain tämän vikaluokan.
 
 
+
+
+## 43. Kamerahavainnot-välilehti (11.10.2026)
+
+Uusi välilehti `/kamerahavainnot` näyttää **uusimmat kamerahavainnot, joissa
+kuvassa on ihminen tai eläin**, sekä jokaisesta havainnosta alkuperäisen kuvan
+ja analyysin tarkat tiedot. Data tulee erillisestä
+`anttirauhala/traffic-cam-analyzer`-palvelusta. Tarkka kuvaus:
+[`docs/architecture/camera-detections.md`](../docs/architecture/camera-detections.md).
+
+### Lähteen tila verifioitiin livenä (11.10.2026) — ja se muuttui kesken työn
+
+| Aika (UTC) | Havainto |
+| --- | --- |
+| 08:31 | `?hasPerson=true` ja `?hasWildlife=true` → **HTTP 500** (heidän GSI:nsä eivät vastaa avaimia) |
+| **08:33** | Lähderepossa committi `f0d30c5`: *"add hasDetection index and ?hasDetection=true filter"* |
+| 08:36 | `?hasDetection=true` → **HTTP 200**, uusin kuvausaika ensin ✅ (199 osumaa: `hasPerson` 196, `hasWildlife` 4, 0 ilman kumpaakaan; luokat vain `person` ja `animal`) |
+
+→ `hasPerson`/`hasWildlife` ovat **yhä rikki**, mutta niitä ei enää tarvita:
+yksi kutsu `?hasDetection=true&limit=N` riittää. Rivi tarkistetaan silti itse,
+koska `hasDetection` tarkoittaa "analyysi löysi jotain".
+
+### Lambda vai suora frontend-haku?
+
+**Valittiin Lambda** (metatiedot ja detaljit) + **presigned-kuvat suoraan
+selaimesta**. Ratkaisevat perusteet:
+
+| Peruste | Lambda | Suoraan selaimesta |
+| --- | --- | --- |
+| Yksi kortti = 3 upstream-kutsua (lista, detalji, presigned) | ~26 kutsua / 5 min / lämmin kontti **kaikille yhteensä** | ~26 kutsua **per kävijä** heidän 10 000/vrk-kiintiöstään |
+| Havainto on muuttumaton | detalji välimuistiin 7 vrk → kutsu kerran per havainto | ei välimuistia selainten välillä |
+| Dokumentoitu rajapinta on osoittautunut epävakaaksi | vikakierto ja kenttämuutokset yhdessä paikassa | rikkoutuu suoraan UI:ssa |
+| Virhetilanteet | 503 + `stale`-varafallback, rauhallinen huomautus | raaka virhe |
+| Kuvat | ei voi allekirjoittaa itse (bucket on heidän tilillään) → presigned | sama |
+
+Kuvia **ei** proksata Lambdan läpi: se maksaisi jokaisen kuvan (~212 kt)
+Lambda-ajassa ja hidastaisi sivua. Hinta on yksi CSP-lisäys.
+
+### Kolme tietolähteen erityispiirrettä, jotka on koodattu sisään
+
+1. **Suodatin `hasDetection=true`** (ei `hasPerson`/`hasWildlife`).
+2. **Kameratunniste polussa raakana** — `%3A` → HTTP 404. Tunniste validoidaan
+   (`^[A-Za-z0-9:_-]{1,32}$`), jotta polkuun ei voi injektoida.
+3. **Kuvat arkistoidaan 90 pv jälkeen** (raw-bucket → Glacier): presign onnistuu
+   mutta kuvan GET palauttaa **403**. Mitattu: tämän päivän kuva 206 ✅,
+   22.2.2026 ja 19.1.2026 → 403 ❌. Koska presign onnistuu aina, arkistointi
+   näkyy **selaimen kuvanlatauksen epäonnistumisena** — siksi oletusnäkymässä on
+   **aikaikkuna** (oletus 30 vrk): ilman sitä 12 kortin sivu näyttäisi pääosin
+   havaintoja ilman kuvaa, ja alkuperäinen kuva on näkymän pointti. Käyttäjä voi
+   laajentaa ikkunan 365 päivään, jolloin vanhat havainnot näytetään ilman kuvaa
+   (tiedostaen).
+
+### Toteutus
+
+| Osa | Muutos |
+| --- | --- |
+| `apps/camera-detections` (uusi) | `analyzer.ts` (URL-rakennus + puolustava normalisointi), `detections.ts` (suodatus, kameraliitos, järjestys), `cache.ts`, `retry.ts`, `concurrency.ts` (mapLimit), `params.ts`, `handler.ts` |
+| Välimuistit | hakukimppu **5 min** (stale 60 min), detalji **7 vrk** (muuttumaton), kameraluettelo **24 h**, presigned-URL **45 min** (alle 1 h voimassaolon — vanhentunutta URL:ia ei koskaan tarjoilla) |
+| Rinnakkaisuus | `mapLimit` 3 + 3 detaljille ja kuva-URLeille → pysytään lähdepalvelun 50 req/s -throttlen alla (30 havaintoa ilman rajausta = 60 rinnakkaista kutsua) |
+| Vastaus | `limit` 12 (max 30, muuten **400 `INVALID_LIMIT`**), `cursor` (upstreamin `nextToken`), `hasMore`, `imagesUnavailable`, `stale`, `source` |
+| `infra/lib/api-stack.ts` | `CameraDetectionsFunction` (nodejs22.x, 256 Mt, 20 s, varattu concurrency **2**) + reitti `/v1/camera-detections` |
+| `infra/lib/csp.ts` | `DETECTION_IMAGE_ORIGINS = ['https://*.s3.eu-north-1.amazonaws.com']` → `img-src` (presigned-kuvat). `connect-src` ei tarvitse muutosta (`*.amazonaws.com` oli jo). |
+| `infra/bin/app.ts` | Lambda mukaan valvontaan (`errors-camera-detections`) |
+| `package.json` | `typecheck:apps` kattaa `camera-detections` |
+| Frontend | `api/camera-detections.ts`, `useCameraDetections(limit)` (10 min pollaus, ei taustalla), `lib/camera-detections.ts`, `pages/CameraDetectionsPage.tsx`, `components/DetectionCard.tsx`, NAV + footer, `.detection-grid` (`minmax(min(320px, 100%), 1fr)` §42:n invariantilla), `.detection-card*` |
+
+### Kolme suunnitteluratkaisua, jotka syntyivät mittausten perusteella
+
+**1. Bounding boxit piirretään itse.** Lähdepalvelun `processedImageKey` on
+`null` **myös osumilla** (tarkistettu henkilöhavainnosta), joten merkittyä kuvaa
+ei ole saatavilla — mutta `bbox`, `label` ja `score` tulevat detaljivastauksessa.
+Laatikot sijoitetaan prosentteina kuvan luonnollisesta koosta (`<img onLoad>` →
+`naturalWidth`) ja rajataan kuvan sisään. **Kuvaa ei rajata**
+(`object-fit`/`aspect-ratio`): leikkaus siirtäisi laatikot pois kohteesta —
+sama ansa kuin §25:n kamerakorteissa, mutta siellä ei ollut overlaytä.
+
+**2. Sivutus sivukoon kasvatuksella.** "Näytä enemmän" kasvattaa `limit`iä
+(12 → 30) sen sijaan että ketjuttaisi kursoreita. Yksi pyyntö per päivitys, ei
+peräkkäisriippuvuuksia, ja `limit` on kyselyavain → edellinen sivu jää
+TanStack Queryn välimuistiin. API tukee kursoria (`nextCursor`), jos pidempi
+historia halutaan myöhemmin.
+
+**3. Aikaikkuna on kiinteä 60 vrk.** Lähdepalvelu arkistoi kuvat 90 pv jälkeen,
+joten ilman ikkunaa näkymä olisi täynnä kuvattomia kortteja — ja kuva on näkymän
+pointti. **Vanhempia havaintoja ei näytetä eikä niitä voi pyytää:** API:ssa ei ole
+`days`-parametria eikä UI:ssa "näytä vanhemmat" -valintaa (ensimmäinen versio
+kokeili 30 vrk + laajennusnappia; käyttäjä päätti 60 vrk:n kiinteästä rajasta).
+Sivukoon ja ikkunan `hasMore` on konservatiivinen: sitä ei luvata, jos haetun
+sivun vanhin rivi on jo ikkunan ulkopuolella (sivut ovat laskevassa
+kuvausaikajärjestyksessä).
+
+### Rehellisyys- ja tietosuojarajaukset (pakollisia)
+
+- **Confidence näytetään aina prosentteina.** Esimerkkiosuma: `person` score
+  **0,337** → "ihminen · 34 %". Sivu ja footer kertovat, että havainto on
+  **automaattinen konepäätelmä, ei vahvistettu havainto** (§20: epävarmaa ei
+  esitetä varmana; sama linja kuin vakavuusluokittelu §24).
+- Kuvat ovat julkisia liikennekameroita; näytetään alkuperäinen kuva, ei
+  kasvojentunnistusta eikä suurennusta kasvoihin, eikä **meille tallenneta
+  mitään** (ei DynamoDB- eikä S3-kirjoituksia).
+- Analyysi ajetaan tunneittain klo 9–16 → UI kertoo, ettei tieto ole
+  reaaliaikaista.
+- Sivun alaviite kertoo, että **kamerakuvia analysoidaan 5 km etäisyydellä
+  Tampereen keskustasta** ja että analyysi ajetaan tunneittain klo 9–16
+  (ei reaaliaikainen). Arkistointia ei mainita UI:ssa: 60 vrk:n ikkuna tekee
+  siitä käyttäjälle näkymättömän.
+
+### Testit ja verifiointi
+
+| Kohde | Testejä |
+| --- | --- |
+| `apps/camera-detections/src/*.test.ts` | **56** (analyzer 16, params 12, handler 10, detections 9, cache 5, concurrency 4) |
+| `apps/web/src/lib/camera-detections.test.ts` | 20 |
+| `apps/web/src/components/layout.test.ts` | 8 kohdetta (NAV + reitti) |
+| `infra/test/config.test.ts` | +9 (TTL-suhteet, **presigned-TTL < 1 h**, rinnakkaisuus, concurrency, uusinnan aikabudjetti, **oletusikkuna < 90 pv**) |
+| `infra/test/csp.test.ts` | +2 (kuvat `img-src`:ssä, ei koko `*.amazonaws.com`ia) |
+| Koko sarja | **736 testiä** ✅, ESLint ✅, Prettier ✅, `npm run build` ✅ |
+| `cdk synth` (dev + prod) | ✅ 8 + 8 stackia |
+
+#### Live-mittaukset dev-ympäristöstä (11.10.2026)
+
+| Tarkistus | Tulos |
+| --- | --- |
+| Handleri paikallisesti oikeaa lähdettä vasten (ennen deployta) | 200, 4 havaintoa, kameranimet liitetty, bboxit, kuvat ✅ |
+| `GET /v1/camera-detections?limit=3` (kylmä) | **200, 6,6 s** (sisältää ~10 upstream-kutsua) |
+| Sama (lämmin, välimuistista) | **0,08–0,10 s** ✅ |
+| `?limit=12` (vanhin sivu) | 200, korkeintaan 12 havaintoa, kaikki 60 vrk:n ikkunan sisällä ✅ |
+| `?limit=999` | **400 `INVALID_LIMIT`** ✅ |
+| `?days=365` (vanhentunut parametri) | 200 mutta **ei laajenna ikkunaa** — ikkuna pysyy 60 vrk:ssa ✅ |
+| CSP-otsake julkaistusta jakelusta | `img-src … https://*.s3.eu-north-1.amazonaws.com` ✅ |
+| Selain (headless Chrome, julkaistu dev) | otsikko, **2 korttia**, **2 kuvaa**, 3 bbox-laatikkoa, merkit `ihminen · 34 %` / `ihminen · 41 %` / `eläin · 26 %`, työkalurivi `2 havaintoa viimeisen 60 vrk ajalta`, **0 CSP-rikkomusta** ✅ |
+| Sivun alaviite | sisältää "Kamerakuvia analysoidaan 5 km etäisyydellä Tampereen keskustasta" ✅ |
+| "Näytä enemmän" -nappi | ei vanhempien katselumahdollisuutta; sivukoko kasvaa 12 → 30 ✅ |
+| 390 px -näkymä | osiovalitsimessa `Kamerahavainnot` ✅ |
+
+### Deploy ja ympäristön uudelleenluonti (11.10.2026)
+
+Dev-ympäristö oli **purettu aiemmin** (kaikki `tampere360-dev-*`-stackit
+`DELETE_COMPLETE`), joten deploy rakensi sen uudelleen: foundation → eventing →
+data → event-processing → ingestion → api → frontend → monitoring (8 stackia).
+
+Uudelleenluonti törmäsi **§39:ssä dokumentoituun tunnettuun esteeseen**:
+CDK:n hallitsemat Lambda-logiryhmät jäävät poistossa `RETAIN`-tilaan, joten
+`AWS::Logs::LogGroup … already exists` kaatoi event-processing-stackin
+(`Resource handler returned message: … already exists`). Korjaus:
+
+```bash
+# 1) poista devin jääneet logiryhmät (20 kpl, vain dev-nimiavaruus)
+aws logs describe-log-groups --log-group-name-prefix /aws/lambda/tampere360-dev- \
+  --query 'logGroups[].logGroupName' --output text | tr '\t' '\n' |
+  while read -r g; do [ -n "$g" ] && aws logs delete-log-group --log-group-name "$g"; done
+# 2) ROLLBACK_COMPLETE-stack on poistettava ennen uutta luontia
+aws cloudformation delete-stack --stack-name tampere360-dev-event-processing
+# 3) deploy uudelleen
+npx cdk deploy tampere360-dev-api tampere360-dev-monitoring tampere360-dev-frontend -c env=dev
+```
+
+Tämä on sama juurisyy kuin §39:ssä ja **suositus pysyy**: eksplisiittinen
+`logRetention` (dev 3 pv / prod 30 pv) poistaisi ongelman pysyvästi.
+
+### Rajaukset
+
+- **Deploy vain deviin** (`tampere360-dev-*`, 8 stackia); prodia ei muutettu.
+- Ei suodattimia (ihminen/eläin-erottelu) eikä hakua; ei karttakerrosta.
+- Sivukoon yläraja on 30, joten pidempi historia vaatii `cursor`-sivutuksen
+  käyttöönoton UI:ssa.
+- Jos lähdepalvelun `dev`-stage poistetaan tai rikkoontuu, reitti palauttaa
+  503 + `stale`-varafallbackin (tunti) — sovellus ei rikkoudu.
+- `hasPerson`/`hasWildlife`-suodattimet ovat yhä rikki lähdepalvelussa;
+  kannattaa raportoida heille, mutta **me emme tarvitse niitä**.
