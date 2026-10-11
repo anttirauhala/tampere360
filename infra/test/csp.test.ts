@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { CAMERA_ORIGINS, TILE_ORIGINS, buildContentSecurityPolicy } from '../lib/csp';
+import {
+  CAMERA_ORIGINS,
+  DETECTION_IMAGE_ORIGINS,
+  TILE_ORIGINS,
+  buildContentSecurityPolicy,
+} from '../lib/csp';
 
 const API_ORIGIN = 'https://abc123.execute-api.eu-north-1.amazonaws.com';
 const csp = buildContentSecurityPolicy({ apiOrigin: API_ORIGIN });
@@ -76,5 +81,19 @@ describe('buildContentSecurityPolicy', () => {
     const custom = buildContentSecurityPolicy({ apiOrigin: API_ORIGIN, cameraOrigins: [] });
     expect(custom).not.toContain('weathercam.digitraffic.fi');
     expect(custom).not.toContain('tie.digitraffic.fi');
+  });
+
+  it('sallii kamerahavaintokuvat img-src:ssä (presigned S3, §43)', () => {
+    // Regressiosuoja: ilman tätä kamerahavaintokorttien <img>-kuvat estyvät.
+    for (const origin of DETECTION_IMAGE_ORIGINS) {
+      expect(directive('img-src')).toContain(origin);
+    }
+  });
+
+  it('ei salli koko amazonaws.comia, jos havainto-kuvat on kytketty pois', () => {
+    const custom = buildContentSecurityPolicy({ apiOrigin: API_ORIGIN, detectionImageOrigins: [] });
+    expect(custom).not.toContain('s3.eu-north-1.amazonaws.com');
+    // connect-src saa yhä olla väljempi (CSP:n nykyinen malli).
+    expect(directive('connect-src')).toContain('https://*.amazonaws.com');
   });
 });

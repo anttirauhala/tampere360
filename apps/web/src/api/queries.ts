@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchCameraData, fetchCameraStations } from './cameras';
+import { DETECTIONS_POLL_MS, fetchCameraDetections } from './camera-detections';
 import { apiGet } from './client';
 import { SAUNAS_STALE_TIME_MS, fetchSaunas } from './saunas';
 import {
@@ -257,5 +258,29 @@ export function useWaterTemperature() {
     refetchInterval: WATER_TEMPERATURE_POLL_MS,
     refetchIntervalInBackground: false,
     staleTime: WATER_TEMPERATURE_POLL_MS,
+  });
+}
+
+/**
+ * Kamerahavainnot (§43): lähdepalvelun automaattiset havainnot, joissa on
+ * ihminen tai eläin.
+ *
+ * Pollaus 10 min: analyysi ajetaan tunneittain klo 9–16 ja Lambdan välimuisti
+ * on 5 min, joten tiuhempi pollaus ei toisi tuoreempaa tietoa mutta kuormittaisi
+ * jaettua lähdekiintiötä jokaisen avoimen selaimen myötä. Taustavälilehti ei
+ * pollaa, ja `limit` on kyselyavaimessa, joten "Näytä enemmän" hakee oman
+ * sivunsa (edellinen jää välimuistiin).
+ *
+ * Aikaikkuna (60 vrk) on palvelimen puolella kiinteä eikä sitä välitetä
+ * parametrina.
+ */
+export function useCameraDetections(limit: number) {
+  return useQuery({
+    queryKey: ['camera-detections', limit],
+    queryFn: () => fetchCameraDetections(limit),
+    refetchInterval: DETECTIONS_POLL_MS,
+    refetchIntervalInBackground: false,
+    staleTime: DETECTIONS_POLL_MS,
+    refetchOnWindowFocus: false,
   });
 }

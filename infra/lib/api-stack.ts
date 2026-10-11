@@ -17,6 +17,7 @@
  *   GET /v1/weather/current         (Tampereen nykyinen sää, oma Lambda, ks. §31)
  *   GET /v1/saunas                  (saunat, oma Lambda, ks. §33)
  *   GET /v1/water/temperature       (Näsijärven pintaveden lämpötila, oma Lambda, ks. §34)
+ *   GET /v1/camera-detections       (kamerahavainnot, oma Lambda, ks. §43)
  */
 
 import * as path from 'path';
@@ -36,6 +37,21 @@ import { Construct } from 'constructs';
 import type { AppContext, DomainConfig } from './config';
 import {
   API_THROTTLE,
+  DETECTION_API_URL,
+  DETECTION_CAMERAS_CACHE_MS,
+  DETECTION_CAMERAS_STALE_MAX_MS,
+  DETECTION_DETAIL_CACHE_MS,
+  DETECTION_DETAIL_CONCURRENCY,
+  DETECTION_DETAIL_STALE_MAX_MS,
+  DETECTION_IMAGE_CONCURRENCY,
+  DETECTION_IMAGE_URL_CACHE_MS,
+  DETECTION_LIST_CACHE_MS,
+  DETECTION_LIST_STALE_MAX_MS,
+  DETECTION_RESERVED_CONCURRENCY,
+  DETECTION_RETRY_ATTEMPTS,
+  DETECTION_RETRY_BACKOFF_MS,
+  DETECTION_UPSTREAM_TIMEOUT_MS,
+  DETECTION_WINDOW_DAYS,
   GTFS_STOPS_CACHE_MS,
   GTFS_STOPS_STALE_MAX_MS,
   GTFS_STOPS_TIMEOUT_MS,
@@ -114,6 +130,14 @@ const API_ROUTES = [
 ];
 
 /**
+ * Kamerahavaintoreitti (§43): traffic-cam-analyzer-palvelun havainnot, joissa
+ * on ihminen tai eläin. Oma Lambda, koska data ei tule DynamoDB:stä ja koska
+ * yksi sivu tarvitsee ~26 upstream-kutsua — ne on pakko tehdä palvelimella ja
+ * välimuistaa (lähdepalvelun kiintiö on jaettu, ks. config.ts DETECTION_*).
+ */
+const CAMERA_DETECTION_ROUTES = ['/v1/camera-detections'];
+
+/**
  * Ajoneuvoreitit: sama origin ja CORS kuin muilla, mutta oma Lambda ja oma
  * varattu concurrency (ks. config.ts VEHICLE_*).
  */
@@ -176,6 +200,8 @@ export class ApiStack extends cdk.Stack {
   public readonly weatherFunction: lambdaNodejs.NodejsFunction;
   /** Veden lämpötila -Lambda valvontaa varten (§34). */
   public readonly waterTemperatureFunction: lambdaNodejs.NodejsFunction;
+  /** Kamerahavainnot-Lambda valvontaa varten (§43). */
+  public readonly cameraDetectionsFunction: lambdaNodejs.NodejsFunction;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -435,6 +461,55 @@ export class ApiStack extends cdk.Stack {
       this.waterTemperatureFunction,
     );
 
+    // --- Kamerahavainnot (§43) --------------------------------------------------
+    // Hakee traffic-cam-analyzer-palvelun osumarivit (`hasDetection=true`),
+    // liittää kameraluettelosta nimen ja sijainnin, hakee havaintojen bounding
+    // boxit ja presigned-kuva-URLit sekä palauttaa oman, vakaan JSONin. Ei
+    // DynamoDB- eikä SSM-käyttöä: rajapinta on julkinen eikä vaadi API-avainta.
+    // Välimuistit (lista 5 min, detalji 7 vrk, kuvat 45 min) pitävät
+    // upstream-kutsut kurissa — ks. config.ts DETECTION_*.
+    this.cameraDetectionsFunction = new lambdaNodejs.NodejsFunction(
+      this,
+      'CameraDetectionsFunction',
+      {
+        entry: path.join(__dirname, '../../apps/camera-detections/src/handler.ts'),
+        handler: 'handler',
+        functionName: resourceName(appContext.envName, 'camera-detections'),
+        description: 'Tampere360: kamerahavainnot (traffic-cam-analyzer: ihmiset ja eläimet)',
+        runtime: lambda.Runtime.NODEJS_22_X,
+        memorySize: 256,
+        // Yksi listakutsu + rajatusti rinnakkaisia detalji- ja kuva-URL-kutsuja
+        // (3 + 3) ehtii hyvin 20 sekunnissa.
+        timeout: cdk.Duration.seconds(20),
+        // Kustannuskatto: ks. config.ts DETECTION_RESERVED_CONCURRENCY.
+        reservedConcurrentExecutions: DETECTION_RESERVED_CONCURRENCY,
+        environment: {
+          ENVIRONMENT: appContext.envName,
+          DETECTION_API_URL,
+          DETECTION_LIST_CACHE_MS: String(DETECTION_LIST_CACHE_MS),
+          DETECTION_LIST_STALE_MAX_MS: String(DETECTION_LIST_STALE_MAX_MS),
+          DETECTION_DETAIL_CACHE_MS: String(DETECTION_DETAIL_CACHE_MS),
+          DETECTION_DETAIL_STALE_MAX_MS: String(DETECTION_DETAIL_STALE_MAX_MS),
+          DETECTION_CAMERAS_CACHE_MS: String(DETECTION_CAMERAS_CACHE_MS),
+          DETECTION_CAMERAS_STALE_MAX_MS: String(DETECTION_CAMERAS_STALE_MAX_MS),
+          DETECTION_IMAGE_URL_CACHE_MS: String(DETECTION_IMAGE_URL_CACHE_MS),
+          DETECTION_UPSTREAM_TIMEOUT_MS: String(DETECTION_UPSTREAM_TIMEOUT_MS),
+          DETECTION_RETRY_ATTEMPTS: String(DETECTION_RETRY_ATTEMPTS),
+          DETECTION_RETRY_BACKOFF_MS: String(DETECTION_RETRY_BACKOFF_MS),
+          DETECTION_DETAIL_CONCURRENCY: String(DETECTION_DETAIL_CONCURRENCY),
+          DETECTION_IMAGE_CONCURRENCY: String(DETECTION_IMAGE_CONCURRENCY),
+          DETECTION_WINDOW_DAYS: String(DETECTION_WINDOW_DAYS),
+          DETECTION_DETAIL_ENABLED: 'true',
+          LOG_LEVEL: 'INFO',
+        },
+      },
+    );
+
+    const cameraDetectionsIntegration = new apigwv2Integrations.HttpLambdaIntegration(
+      'CameraDetectionsIntegration',
+      this.cameraDetectionsFunction,
+    );
+
     const integration = new apigwv2Integrations.HttpLambdaIntegration(
       'QueryIntegration',
       this.queryFunction,
@@ -517,6 +592,14 @@ export class ApiStack extends cdk.Stack {
         path: route,
         methods: [apigwv2.HttpMethod.GET],
         integration: waterTemperatureIntegration,
+      });
+    }
+
+    for (const route of CAMERA_DETECTION_ROUTES) {
+      this.httpApi.addRoutes({
+        path: route,
+        methods: [apigwv2.HttpMethod.GET],
+        integration: cameraDetectionsIntegration,
       });
     }
 

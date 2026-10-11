@@ -391,3 +391,77 @@ export const API_CLIENT_ERRORS_PER_5MIN = 100; // 429-throttlaukset + virhepyynn
  * "aktiivinen"-tila ei ehdi vanhentua näkyvästi.
  */
 export const EXPIRY_SWEEP_MINUTES = 5;
+
+/**
+ * Kamerahavainnot (`/v1/camera-detections`, arkkitehtuuri §43).
+ *
+ * Lähde on **traffic-cam-analyzer**-palvelu (API Gateway REST, edge-optimized):
+ *   `https://qwypy5x3c6.execute-api.eu-north-1.amazonaws.com/dev`
+ * → ei API-avainta (CORS `*`), mutta **kiintiöt ovat heidän tilillään**
+ *   (50 req/s, burst 100, 10 000 req/vrk). Siksi oma Lambda ja välimuistit:
+ *   ilman niitä 12 kortin sivu olisi ~26 upstream-pyyntöä **per kävijä**
+ *   (lista + 12 detaljia + 12 presigned-URLia) jaettuna kaikkien kesken.
+ *
+ * Kolme asiaa, jotka on pakko muistaa (verifioitu 11.10.2026):
+ *  1. **Suodatin on `hasDetection=true`.** `hasPerson`/`hasWildlife`
+ *     palauttavat HTTP 500 (heidän GSI:nsä eivät vastaa avaimia), joten
+ *     ihmis-/eläinosuma tarkistetaan itse (apps/camera-detections/detections.ts).
+ *  2. **Kameratunniste menee detaljipolkuun raakana** — `%3A` → HTTP 404.
+ *  3. **Raw-kuvat siirtyvät 90 pv jälkeen Glacier-luokkaan**, jolloin
+ *     presigned-GET palauttaa 403. Se ei ole virhe vaan tiedossa oleva
+ *     rajoite: vastauksessa on `imagesUnavailable` ja UI näyttää
+ *     "kuvaa ei enää saatavilla".
+ */
+
+/** Rajapinnan juuri (dev-stage). */
+export const DETECTION_API_URL = 'https://qwypy5x3c6.execute-api.eu-north-1.amazonaws.com/dev';
+/** Hakukimppu: analyysi ajetaan tunneittain klo 9–16 → 5 min TTL riittää. */
+export const DETECTION_LIST_CACHE_MS = 5 * 60_000;
+/** Varafallback: lähdepalvelun hetkellinen katkos ei tyhjennä sivua. */
+export const DETECTION_LIST_STALE_MAX_MS = 60 * 60_000;
+/**
+ * Havaintodetalji on **muuttumaton** (`cameraId` + kuvausaika yksilöi sen),
+ * joten TTL on viikko: upstream-kutsu tapahtuu käytännössä kerran per havainto.
+ */
+export const DETECTION_DETAIL_CACHE_MS = 7 * 86_400_000;
+export const DETECTION_DETAIL_STALE_MAX_MS = 7 * 86_400_000;
+/** Kameraluettelo: nimet, kunnat ja sijainnit muuttuvat harvoin. */
+export const DETECTION_CAMERAS_CACHE_MS = 24 * 3_600_000;
+export const DETECTION_CAMERAS_STALE_MAX_MS = 7 * 86_400_000;
+/**
+ * Presigned-kuva-URL on voimassa **1 h** → välimuisti 45 min. `staleMaxMs` on
+ * sama kuin TTL, joten vanhentunutta URL:ia ei koskaan tarjoilla: epäonnistunut
+ * uusinta tuottaa mieluummin `null`in kuin rikkinäisen kuvan.
+ */
+export const DETECTION_IMAGE_URL_CACHE_MS = 45 * 60_000;
+/** Yksittäisen upstream-kutsun aikakatkaisu (mitattu ~0,3 s). */
+export const DETECTION_UPSTREAM_TIMEOUT_MS = 6_000;
+/** Yksi uusintayritys 5xx/verkkovirheelle (ks. apps/camera-detections/src/retry.ts). */
+export const DETECTION_RETRY_ATTEMPTS = 2;
+export const DETECTION_RETRY_BACKOFF_MS = 300;
+/**
+ * Rinnakkaisuus **Lambdan sisällä**: yksi havainto tarvitsee kaksi
+ * upstream-kutsua (detalji + presigned-URL), joten 30 havaintoa olisi 60
+ * rinnakkaista kutsua — se osuisi lähdepalvelun 50 req/s -throttlaukseen ja
+ * tuottaisi osittaisia epäonnistumisia.
+ */
+export const DETECTION_DETAIL_CONCURRENCY = 3;
+export const DETECTION_IMAGE_CONCURRENCY = 3;
+/**
+ * Näytettävä aikaikkuna vuorokausina — **kiinteä 60**, ei käyttäjän valinta.
+ *
+ * Lähdepalvelu siirtää raw-kuvat 90 päivän jälkeen Glacier-luokkaan ja
+ * presigned-GET palauttaa silloin 403 (mitattu 11.10.2026: 22.2.2026 → 403,
+ * sama päivä → 206). 60 vrk jää selvästi sen alle, joten näkymän jokaisella
+ * kortilla on lähtökohtaisesti alkuperäinen kuva — ja alkuperäinen kuva on
+ * näkymän pointti. **Vanhempia havaintoja ei näytetä eikä niitä voi pyytää**
+ * (API:ssa ei ole `days`-parametria).
+ */
+export const DETECTION_WINDOW_DAYS = 60;
+/**
+ * Varattu concurrency: pieni ja **erillään** query-Lambdasta (5) sekä muista
+ * reittikohtaisista Lambdoista, jotta yksi vilkas sivu ei syö toisen
+ * kustannuskattoa. Sivun avaus tekee yhden kutsun (detaljit ja kuvien URLit
+ * ovat saman kutsun sisällä), joten 2 riittää.
+ */
+export const DETECTION_RESERVED_CONCURRENCY = 2;

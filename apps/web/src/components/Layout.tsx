@@ -9,13 +9,15 @@ import { SAUNA_SOURCE_URL } from '../lib/saunas';
  * Historia: §29 lyhensi nimet ja siirsi joukkoliikenteen poikkeustilanteet
  * Nysse-välilehden sivupaneeliin; commit 808d50e tarkensi nimiä edelleen
  * ("Etusivu", "Tapahtumat kartalla", "Nysse kartalla"). §30 lisäsi
- * Liikennemäärät-välilehden (mittausasemat) Kameroiden jälkeen.
+ * Liikennemäärät-välilehden (mittausasemat) Kameroiden jälkeen ja §43
+ * Kamerahavainnot-välilehden heti Kamerat-välilehden jälkeen.
  */
 export const NAV = [
   { to: '/', label: 'Etusivu', end: true },
   { to: '/kartta', label: 'Tapahtumat kartalla', end: false },
   { to: '/nysse-kartta', label: 'Nysse kartalla', end: false },
   { to: '/kamerat', label: 'Kamerat', end: false },
+  { to: '/kamerahavainnot', label: 'Kamerahavainnot', end: false },
   { to: '/liikennemaarat', label: 'Liikennemäärät', end: false },
   { to: '/saunat', label: 'Saunat', end: false },
   { to: '/lahteet', label: 'Lähteiden tila', end: false },
@@ -120,7 +122,8 @@ export function Layout() {
           <a href={SAUNA_SOURCE_URL} target="_blank" rel="noopener noreferrer">
             saunahaku.fi
           </a>
-          . Veden lämpötila: SYKE (CC BY 4.0).
+          . Veden lämpötila: SYKE (CC BY 4.0). Kamerahavainnot: traffic-cam-analyzer (YOLO World XL,
+          Replicate) — automaattinen konepäätelmä kamerakuvista.
         </p>
         {/*
           Vakavuusluokittelu on oma arviomme (otsikon ja lähdetietojen

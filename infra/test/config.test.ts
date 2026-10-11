@@ -4,6 +4,21 @@ import {
   API_CLIENT_ERRORS_PER_5MIN,
   API_REQUEST_SPIKE_PER_5MIN,
   API_THROTTLE,
+  DETECTION_API_URL,
+  DETECTION_CAMERAS_CACHE_MS,
+  DETECTION_CAMERAS_STALE_MAX_MS,
+  DETECTION_DETAIL_CACHE_MS,
+  DETECTION_DETAIL_CONCURRENCY,
+  DETECTION_DETAIL_STALE_MAX_MS,
+  DETECTION_IMAGE_CONCURRENCY,
+  DETECTION_IMAGE_URL_CACHE_MS,
+  DETECTION_LIST_CACHE_MS,
+  DETECTION_LIST_STALE_MAX_MS,
+  DETECTION_RESERVED_CONCURRENCY,
+  DETECTION_RETRY_ATTEMPTS,
+  DETECTION_RETRY_BACKOFF_MS,
+  DETECTION_UPSTREAM_TIMEOUT_MS,
+  DETECTION_WINDOW_DAYS,
   ENVIRONMENT_DOMAINS,
   EXPIRY_SWEEP_MINUTES,
   GTFS_STOPS_CACHE_MS,
@@ -383,5 +398,73 @@ describe('veden lämpötilan kustannussuojat', () => {
   it('Lambdan varattu concurrency on pieni ja erillään muista reiteistä', () => {
     expect(WATER_TEMPERATURE_RESERVED_CONCURRENCY).toBeGreaterThan(0);
     expect(WATER_TEMPERATURE_RESERVED_CONCURRENCY).toBeLessThanOrEqual(3);
+  });
+});
+
+/**
+ * Kamerahavaintojen kustannussuojat (§43).
+ *
+ * Lähdepalvelun (traffic-cam-analyzer) kiintiö on **heidän tilillään**
+ * (50 req/s, 10 000 req/vrk) ja jaettu kaikkien käyttäjien kesken. Yksi
+ * havaintokortti maksaa kolme upstream-kutsua (lista, detalji, presigned-URL),
+ * joten ilman välimuisteja 12 kortin sivu olisi ~26 pyyntöä **per kävijä**.
+ */
+describe('kamerahavaintojen kustannussuojat', () => {
+  it('lähde on HTTPS-rajapinta eu-north-1:ssä (ei avainta)', () => {
+    expect(DETECTION_API_URL.startsWith('https://')).toBe(true);
+    expect(DETECTION_API_URL).toContain('eu-north-1');
+  });
+
+  it('hakukimppu on minuuttien välimuistissa ja varafallback sitä pidempi', () => {
+    // Analyysi ajetaan tunneittain klo 9–16 → tiuhempi TTL ei toisi tuoreutta.
+    expect(DETECTION_LIST_CACHE_MS).toBeGreaterThanOrEqual(60_000);
+    expect(DETECTION_LIST_CACHE_MS).toBeLessThanOrEqual(30 * 60_000);
+    expect(DETECTION_LIST_STALE_MAX_MS).toBeGreaterThan(DETECTION_LIST_CACHE_MS);
+    expect(DETECTION_LIST_STALE_MAX_MS).toBeLessThanOrEqual(24 * 3_600_000);
+  });
+
+  it('havaintodetalji on pitkään välimuistissa (havainto on muuttumaton)', () => {
+    expect(DETECTION_DETAIL_CACHE_MS).toBeGreaterThanOrEqual(86_400_000);
+    expect(DETECTION_DETAIL_STALE_MAX_MS).toBeGreaterThanOrEqual(DETECTION_DETAIL_CACHE_MS);
+  });
+
+  it('presigned-kuva-URL vanhenee tunnissa → välimuisti on selvästi lyhyempi', () => {
+    // Kriittinen invariantti: jos URL ehtii vanhentua välimuistissa, käyttäjä
+    // näkee rikkinäisen kuvan (403) sen sijaan että saisimme tuoreen URLin.
+    expect(DETECTION_IMAGE_URL_CACHE_MS).toBeLessThan(3_600_000);
+    expect(DETECTION_IMAGE_URL_CACHE_MS).toBeGreaterThanOrEqual(5 * 60_000);
+  });
+
+  it('kameraluettelo on pitkään välimuistissa, mutta ei ikuisesti', () => {
+    expect(DETECTION_CAMERAS_CACHE_MS).toBeGreaterThanOrEqual(60 * 60_000);
+    expect(DETECTION_CAMERAS_CACHE_MS).toBeLessThanOrEqual(7 * 86_400_000);
+    expect(DETECTION_CAMERAS_STALE_MAX_MS).toBeGreaterThanOrEqual(DETECTION_CAMERAS_CACHE_MS);
+    expect(DETECTION_CAMERAS_STALE_MAX_MS).toBeLessThanOrEqual(30 * 86_400_000);
+  });
+
+  it('upstream-timeout ja uusinnat mahtuvat Lambdan timeoutiin (20 s)', () => {
+    const budget =
+      DETECTION_RETRY_ATTEMPTS * DETECTION_UPSTREAM_TIMEOUT_MS + DETECTION_RETRY_BACKOFF_MS;
+    expect(DETECTION_UPSTREAM_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(budget).toBeLessThan(20_000);
+  });
+
+  it('Lambdan sisäinen rinnakkaisuus pysyy lähdepalvelun throttlen alla', () => {
+    // 3 + 3 rinnakkaista kutsua kerrallaan; lähde sallii 50 req/s.
+    expect(DETECTION_DETAIL_CONCURRENCY).toBeGreaterThan(0);
+    expect(DETECTION_DETAIL_CONCURRENCY).toBeLessThanOrEqual(5);
+    expect(DETECTION_IMAGE_CONCURRENCY).toBeGreaterThan(0);
+    expect(DETECTION_IMAGE_CONCURRENCY).toBeLessThanOrEqual(5);
+  });
+
+  it('aikaikkuna on 60 vrk ja selvästi alle kuvien arkistointirajan (90 pv)', () => {
+    // Kiinteä raja: vanhempia havaintoja ei näytetä eikä niitä voi pyytää.
+    expect(DETECTION_WINDOW_DAYS).toBe(60);
+    expect(DETECTION_WINDOW_DAYS).toBeLessThan(90);
+  });
+
+  it('Lambdan varattu concurrency on pieni ja erillään muista reiteistä', () => {
+    expect(DETECTION_RESERVED_CONCURRENCY).toBeGreaterThan(0);
+    expect(DETECTION_RESERVED_CONCURRENCY).toBeLessThanOrEqual(3);
   });
 });

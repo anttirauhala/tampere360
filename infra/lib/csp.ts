@@ -27,6 +27,22 @@ export const TILE_ORIGINS = [
  */
 export const CAMERA_ORIGINS = ['https://tie.digitraffic.fi', 'https://weathercam.digitraffic.fi'];
 
+/**
+ * Kamerahavaintokuvat (Kamerahavainnot-välilehti §43, ks.
+ * apps/camera-detections).
+ *
+ * Lähdepalvelun raw-kuvat ovat S3:ssa, ja heidän `GET /images` palauttaa
+ * **presigned** URLin, jonka host on muotoa
+ * `traffic-cam-dev-wf-raw-bucket.s3.eu-north-1.amazonaws.com`. Bucketin nimi on
+ * ympäristökohtainen, joten sallitaan alueen S3-kanta kokonaisuudessaan —
+ * ei kuitenkaan koko `*.amazonaws.com`ia.
+ *
+ * Vain `img-src` tarvitsee tämän: kuva renderöidään `<img>`-elementillä.
+ * `connect-src`:ssä on jo `https://*.amazonaws.com`, joten sama origin toimii
+ * myös, jos kuvat joskus haetaan `fetch`:llä (esim. välimuisti).
+ */
+export const DETECTION_IMAGE_ORIGINS = ['https://*.s3.eu-north-1.amazonaws.com'];
+
 export interface CspOptions {
   /** API:n origin, esim. `https://abc123.execute-api.eu-north-1.amazonaws.com`. */
   apiOrigin: string;
@@ -34,6 +50,11 @@ export interface CspOptions {
   tileOrigins?: string[];
   /** Kelikameroiden originit. Oletus: CAMERA_ORIGINS. */
   cameraOrigins?: string[];
+  /**
+   * Kamerahavaintokuvien originit (presigned S3). Oletus:
+   * DETECTION_IMAGE_ORIGINS.
+   */
+  detectionImageOrigins?: string[];
   /** Sallitaanko `blob:` (MapLibren Web Worker). Oletus: true. */
   allowBlob?: boolean;
 }
@@ -44,15 +65,18 @@ export function buildContentSecurityPolicy(options: CspOptions): string {
     apiOrigin,
     tileOrigins = TILE_ORIGINS,
     cameraOrigins = CAMERA_ORIGINS,
+    detectionImageOrigins = DETECTION_IMAGE_ORIGINS,
     allowBlob = true,
   } = options;
   const tiles = tileOrigins.join(' ');
   const cameras = cameraOrigins.length > 0 ? ` ${cameraOrigins.join(' ')}` : '';
+  const detectionImages =
+    detectionImageOrigins.length > 0 ? ` ${detectionImageOrigins.join(' ')}` : '';
   const blob = allowBlob ? ' blob:' : '';
 
   return [
     "default-src 'self'",
-    `img-src 'self' data:${blob} ${tiles}${cameras}`,
+    `img-src 'self' data:${blob} ${tiles}${cameras}${detectionImages}`,
     "style-src 'self' 'unsafe-inline'",
     "script-src 'self'",
     `connect-src 'self' ${apiOrigin} https://*.amazonaws.com ${tiles}${cameras}${blob}`,
