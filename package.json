@@ -5,7 +5,7 @@
   "description": "Tampere360 — Tampereen seudun reaaliaikainen tilannekuva. Serverless, tapahtumavetoinen AWS-arkkitehtuuri (CDK v2, TypeScript).",
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "workspaces": [
     "packages/*",
@@ -33,7 +33,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/aws-lambda": "^8.10.164",
-    "@types/node": "^26.6.4",
+    "@types/node": "^24.19.2",
     "esbuild": "^0.28.0",
     "eslint": "^10.11.0",
     "prettier": "^3.9.9",

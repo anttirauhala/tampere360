@@ -213,7 +213,7 @@ export class ApiStack extends cdk.Stack {
       handler: 'handler',
       functionName: resourceName(appContext.envName, 'api'),
       description: 'Tampere360 query-API: /v1/situations, /v1/sources, /v1/health/sources, ...',
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: 256,
       timeout: cdk.Duration.seconds(30),
       // Kustannuskatto: varattu concurrency rajaa sekä Lambda-aikaa että
@@ -240,7 +240,7 @@ export class ApiStack extends cdk.Stack {
       handler: 'handler',
       functionName: resourceName(appContext.envName, 'vehicles'),
       description: 'Tampere360: joukkoliikenteen ajoneuvosijainnit (Nysse / Waltti SIRI VM)',
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: 256,
       timeout: cdk.Duration.seconds(10),
       // Kustannuskatto: ks. config.ts VEHICLE_RESERVED_CONCURRENCY.
@@ -281,7 +281,7 @@ export class ApiStack extends cdk.Stack {
       handler: 'handler',
       functionName: resourceName(appContext.envName, 'stops'),
       description: 'Tampere360: Nysse-pysäkit ja pysäkkimonitori (GTFS static + Waltti SIRI SM)',
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       // GTFS-paketin purku (17 Mt zip → stops.txt) on selvästi raskaampi
       // operaatio kuin pelkkä HTTP-haku, joten muistia on enemmän kuin
       // ajoneuvo- ja query-Lambdoilla (256 Mt).
@@ -325,7 +325,7 @@ export class ApiStack extends cdk.Stack {
       handler: 'handler',
       functionName: resourceName(appContext.envName, 'tms-stations'),
       description: 'Tampere360: liikenteen mittausasemat (Digitraffic TMS)',
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: 256,
       // Kylmäkäynnistys hakee metatiedot (~20 asemaa) ja reaaliaikasnapshotin
       // rinnakkain; historia-CSV ehtii hyvin mukaan 20 sekunnissa.
@@ -364,7 +364,7 @@ export class ApiStack extends cdk.Stack {
       handler: 'handler',
       functionName: resourceName(appContext.envName, 'weather'),
       description: 'Tampere360: Tampereen nykyinen sää (FMI avoin WFS)',
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: 256,
       // Yksi WFS-kutsu (WaterML-jäsennys) ehtii hyvin 10 sekunnissa.
       timeout: cdk.Duration.seconds(10),
@@ -397,7 +397,7 @@ export class ApiStack extends cdk.Stack {
       handler: 'handler',
       functionName: resourceName(appContext.envName, 'saunas'),
       description: 'Tampere360: saunat (saunahaku.fi)',
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: 256,
       // Yksi pieni JSON-kutsu (~55 kt) ehtii hyvin 10 sekunnissa.
       timeout: cdk.Duration.seconds(10),
@@ -433,7 +433,7 @@ export class ApiStack extends cdk.Stack {
         handler: 'handler',
         functionName: resourceName(appContext.envName, 'water-temperature'),
         description: 'Tampere360: Näsijärven pintaveden lämpötila (SYKE Hydrologiarajapinta)',
-        runtime: lambda.Runtime.NODEJS_22_X,
+        runtime: lambda.Runtime.NODEJS_24_X,
         memorySize: 256,
         // Yksi pieni OData-kutsu ehtii hyvin 10 sekunnissa.
         timeout: cdk.Duration.seconds(10),
@@ -476,7 +476,7 @@ export class ApiStack extends cdk.Stack {
         handler: 'handler',
         functionName: resourceName(appContext.envName, 'camera-detections'),
         description: 'Tampere360: kamerahavainnot (traffic-cam-analyzer: ihmiset ja eläimet)',
-        runtime: lambda.Runtime.NODEJS_22_X,
+        runtime: lambda.Runtime.NODEJS_24_X,
         memorySize: 256,
         // Yksi listakutsu + rajatusti rinnakkaisia detalji- ja kuva-URL-kutsuja
         // (3 + 3) ehtii hyvin 20 sekunnissa.

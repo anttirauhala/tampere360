@@ -1,6 +1,6 @@
 name: Setup (Node, riippuvuudet, build)
 description: >
-  Asentaa Node 22:n (.nvmrc), npm-riippuvuudet (npm ci) ja ajaa koko buildin
+  Asentaa Node 24:n (.nvmrc), npm-riippuvuudet (npm ci) ja ajaa koko buildin
   (paketit → infra → apps-typecheck → web). Yksi paikka, jotta CI ja deployt
   eivät eriydy toisistaan (implementation_plan §15).
 
@@ -9,7 +9,7 @@ runs:
   steps:
     - name: Node (.nvmrc)
       # v7 ajaa Node 24:llä (v4 varoittaisi "Node.js 20 is deprecated").
-      # Itse projektin Node tulee .nvmrc:stä (22) — ks. infra (nodejs22.x).
+      # Itse projektin Node tulee .nvmrc:stä (24.22.1) — ks. infra (nodejs24.x).
       uses: actions/setup-node@v7
       with:
         node-version-file: .nvmrc

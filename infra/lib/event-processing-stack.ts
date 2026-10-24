@@ -69,7 +69,7 @@ export class EventProcessingStack extends cdk.Stack {
         functionName: resourceName(appContext.envName, 'situation-processor'),
         description:
           'Tampere360 situation-processor: validointi, aluesuodatus, dedup, DynamoDB-kirjoitukset',
-        runtime: lambda.Runtime.NODEJS_22_X,
+        runtime: lambda.Runtime.NODEJS_24_X,
         memorySize: 256,
         timeout: cdk.Duration.seconds(60),
         environment: {
@@ -120,7 +120,7 @@ export class EventProcessingStack extends cdk.Stack {
       functionName: resourceName(appContext.envName, 'situation-expiry'),
       description:
         'Tampere360: sulkee vanhentuneet tilanteet (validity.endsAt ohitettu tai lähde perunut)',
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: 256,
       timeout: cdk.Duration.seconds(60),
       environment: {

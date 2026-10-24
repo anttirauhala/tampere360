@@ -46,12 +46,12 @@ docs/adr/                   # Arkkitehtuuripäätökset (ADR)
 
 ## Vaatimukset
 
-- **Node.js 22** (AWS Lambda -runtime `nodejs22.x`; hallitaan nvm:llä)
-- npm 10+
+- **Node.js 24.22.1** (AWS Lambda -runtime `nodejs24.x`; hallitaan nvm:llä)
+- npm 11+
 - AWS CLI + kredentiaalit (region `eu-west-1`)
 - AWS CDK v2 (`npm install -g aws-cdk`)
 
-Node 22:n asennus: ks. `.clinerules/implementation_plan.md` §2.
+Node 24:n asennus: ks. `.clinerules/implementation_plan.md` §2.
 
 ## Kehitys
 
@@ -110,7 +110,7 @@ npm run format:check && npx vitest run && (cd infra && npx cdk synth -c env=dev)
 
 `infra/` sisältää koko AWS-arkkitehtuurin kahdeksana stackina
 (foundation, data, eventing, ingestion, event-processing, api, frontend,
-monitoring). Komennot (Node 22 + CDK CLI vaaditaan):
+monitoring). Komennot (Node 24 + CDK CLI vaaditaan):
 
 ```bash
 npm run synth        # syntesoi kaikki stackit (cdk synth)
