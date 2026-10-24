@@ -16,6 +16,9 @@
 > (+ www), API `api.tampere247.online`, WAF (us-east-1, opt-in), TLS 1.2,
 > RETAIN/PITR-kovennukset. Deploy: `npm run deploy:prod`;
 > runbook: `docs/architecture/prod-deploy.md`.
+> **Node 24.22.1 ✅ (§44):** Lambda-runtime `nodejs24.x` (12 funktiota),
+> `.nvmrc` tarkka `24.22.1`, `@types/node` 24-linjalla — kehitys, CI ja
+> ajonaikainen ymparisto samalla major-versiolla.
 
 ## 1. Yhteenveto
 
@@ -35,47 +38,52 @@ prosesseihin.
 | Asia | Arvo |
 |---|---|
 | Hakemisto | `/home/opti/projects/fibo2` (tyhjä, ei git-repoa) |
-| Node.js | nykyisin v18.20.8 → päivitetään 22:een (asennusohje alla) |
-| npm | 10.8.2 |
+| Node.js | v24.22.1 (nvm, `.nvmrc`; asennusohje alla, ks. §44) |
+| npm | 11.19.1 (tulee Node 24:n mukana) |
 | AWS CLI | 2.33.17, kredentiaalit OK |
 | AWS CDK | 2.1105.0 |
 | Region | `eu-west-1` |
-| Lambda-runtime | `nodejs22.x` (nodejs18.x deprecated 1.9.2025, nodejs20.x deprecated 30.4.2026 AWS:ssä) |
+| Lambda-runtime | `nodejs24.x` (22 → 24 24.10.2026, ks. §44; nodejs20.x deprecated 30.4.2026, nodejs22.x deprecation 30.4.2027 AWS:ssä) |
 | IaC | AWS CDK v2 + TypeScript |
 | Testaus | Vitest, MSW (frontend), fixture-pohjaiset yksikkötestit |
 
-### Paikallisen Node 22:n asennus (nvm)
+### Paikallisen Node 24:n asennus (nvm)
 
-Node hallitaan nvm:llä (nykyinen versio: v18.20.8). AWS Lambda -runtime on
-`nodejs22.x`, joten paikallinen Node päivitetään versioon 22:
+Node hallitaan nvm:llä. AWS Lambda -runtime on `nodejs24.x`, joten paikallinen
+Node on sama major-versio — **tarkka 24.22.1** (`.nvmrc`), joka sisältää
+21.10.2026 julkaistut tietoturvakorjaukset (ks. §44):
 
 ```bash
-# 1) Asennetaan Node 22 (LTS) ja otetaan se käyttöön
-nvm install 22
-nvm use 22
+# 1) Asennetaan tarkka versio ja otetaan se käyttöön
+nvm install 24.22.1
+nvm use 24.22.1
 
 # 2) Asetetaan oletusversioksi (uudet terminaalit käyttävät tätä)
-nvm alias default 22
+nvm alias default 24.22.1
 
-# 3) Siirretään globaalit npm-paketit Node 18:sta Node 22:een
-#    (mm. aws-cdk on asennettu Node 18:n alle, eikä näy automaattisesti)
-nvm reinstall-packages 18
+# 3) Siirretään globaalit npm-paketit edellisestä Nodesta
+#    (mm. aws-cdk on asennettu versiokohtaisesti, eikä näy automaattisesti)
+nvm reinstall-packages 22
 #    Vaihtoehtoisesti käsin: npm install -g aws-cdk
 
 # 4) Varmistetaan versiot
-node -v          # v22.x.x
-npm -v           # 10.x
-cdk --version    # 2.1105.0 (build ...)
+node -v          # v24.22.1
+npm -v           # 11.x
+cdk --version    # 2.1140.0 (build ...)
 ```
 
 Huomiot:
-- nvm asentaa globaalit paketit versio­kohtaisesti — `nvm use 22` jälkeen
+- nvm asentaa globaalit paketit versiokohtaisesti — `nvm use 24.22.1` jälkeen
   `cdk`-komento ei toimi, ennen kuin paketit on siirretty
-  (`nvm reinstall-packages 18`) tai asennettu uudelleen.
-- AWS CDK ja Lambda-ajo tukevat Node 22:ta; CDK:n `NodejsFunction`
-  (esbuild-bundlaus) toimii sellaisenaan.
+  (`nvm reinstall-packages 22`) tai asennettu uudelleen.
+- `.nvmrc` on **tarkka versio** (24.22.1), joten myös CI asentaa täsmälleen
+  saman version (`actions/setup-node` lukee `.nvmrc`in). Tietoturvapatchin
+  jälkeen versio nostetaan `.nvmrc`iin ja `@types/node` pidetään samalla
+  major-linjalla — regressiosuoja: `infra/test/runtime.test.ts`.
+- AWS CDK ja Lambda-ajo tukevat Node 24:ää; CDK:n `NodejsFunction`
+  (esbuild-bundlaus) johtaa `--target`in runtimesta (`node24`).
 - Mikäli nvm ei ole käytössä, vaihtoehto: lataa asennuspaketti
-  https://nodejs.org/ (LTS 22.x) tai `sudo apt install nodejs`
+  https://nodejs.org/ (LTS 24.22.1) tai `sudo apt install nodejs`
   (jakelun versio voi olla vanha — suositus nvm).
 
 ## 3. Kokonaisarkkitehtuuri
@@ -606,8 +614,9 @@ käyttäjäilmoitukset.
 
 - Yksi AWS-tili, `dev`-ympäristö ensin (region eu-west-1)
 - Ei omaa domainia vielä → CloudFrontin oletusdomain (`*.cloudfront.net`)
-- Lambda-runtime `nodejs22.x`; paikallinen Node 22 (asennusohje §2) —
-  nodejs20.x deprekoitiin AWS Lambdassa 30.4.2026
+- Lambda-runtime `nodejs24.x` (12 funktiota); paikallinen Node 24.22.1
+  (asennusohje §2, päivitys §44) — nodejs20.x deprekoitiin AWS Lambdassa
+  30.4.2026 ja nodejs22.x deprekoituu 30.4.2027
 - Kustannusarvio MVP-liikenteellä: free tier -tasoa (+ WAF myöhemmin ~5 €/kk)
 
 
@@ -3174,3 +3183,119 @@ Tämä on sama juurisyy kuin §39:ssä ja **suositus pysyy**: eksplisiittinen
   503 + `stale`-varafallbackin (tunti) — sovellus ei rikkoudu.
 - `hasPerson`/`hasWildlife`-suodattimet ovat yhä rikki lähdepalvelussa;
   kannattaa raportoida heille, mutta **me emme tarvitse niitä**.
+
+## 44. Node 22 → 24: Lambda `nodejs24.x` ja tarkka paikallinen 24.22.1 (24.10.2026)
+
+**Lähtökohta:** projekti oli Node 22:ssa (`.nvmrc` = `22`, `engines` = `>=22`,
+12 funktiota `nodejs22.x`). Node 22 on ollut **maintenance-LTS** 21.10.2025
+alkaen ja sen tuki päättyy **30.4.2027**; AWS Lambdan `nodejs22.x` deprekoituu
+samana päivänä, minkä jälkeen uusien funktioiden luonti estyy 29.7.2027 ja
+päivitys 31.8.2027. Sama työ oli siis edessä joka tapauksessa — nyt se tehtiin
+rauhassa eikä 6 kuukauden määräajalla.
+
+### Miksi 24 eikä 26
+
+| Versio | Node.js-tuki | AWS Lambda | Tuotantoon |
+|---|---|---|---|
+| 22 "Jod" | maintenance-LTS 21.10.2025 → EOL **30.4.2027** | `nodejs22.x`, deprecation 30.4.2027, block create 29.7.2027, block update 31.8.2027 | ✅ mutta enää ~6 kk |
+| **24 "Krypton"** | LTS 28.10.2025 → maintenance 20.10.2026 → EOL **30.4.2028** | `nodejs24.x`, deprecation 30.4.2028, block create 1.6.2028, block update 1.7.2028 | ✅ **GA, valittu** |
+| 26 | Current; LTS 28.10.2026 → EOL 30.4.2029 | `nodejs26.x` **vain public preview** (ei SLA:ta) | ❌ |
+
+24 on myös CDK:n `Runtime.NODEJS_LATEST` (`nodejs24.x` = viimeisin kaikilla
+alueilla) ja sama Amazon Linux 2023 -pohja kuin 22 → **ei OS-muutosta**.
+Node 26:een siirrytään aikaisintaan 2027, kun Lambda GA:aa sen.
+
+### Päätökset (24.10.2026)
+
+1. **`.nvmrc` = tarkka `24.22.1`**, ei liukuva major: 21.10.2026 julkaistu
+   24.22.1 on tietoturvakorjaus (CVE-2026-106069, -106072, -105482, -111497,
+   -105481 — TLS/DNS/Brotli/http). Sama korjaus on 22.23.4:ssä, joten
+   22-linjalla pysyminen olisi vaatinut patch-noston joka tapauksessa.
+2. **`@types/node` 26-linjalta 24-linjalle** (`^26.6.3` → `^24.19.2`): tyypit
+   vastaavat nyt ajonaikaista major-versiota eivätkä enää salli API:a, jota
+   runtime ei tue (aiemmin tyypit olivat Node 26:sta, runtime 22).
+3. **Runtime-korvaus suoraan** (12 literaalia kolmeen tiedostoon), ei uutta
+   `config.ts`-vakiota — pieni diff, ei uutta käsitettä.
+4. **Deploy dev ensin**, prod erikseen devin verifioinnin jälkeen.
+
+### Muutokset
+
+| Tiedosto | Muutos |
+|---|---|
+| `.nvmrc` | `22` → `24.22.1` (tarkka versio) |
+| `package.json` | `engines.node` `>=22` → `>=24`; `@types/node` `^26.6.3` → `^24.19.2` |
+| `infra/lib/api-stack.ts` | 8 × `Runtime.NODEJS_22_X` → `NODEJS_24_X` (query, vehicles, stops, tms-stations, weather, saunas, water-temperature, camera-detections) |
+| `infra/lib/event-processing-stack.ts` | 2 × (situation-processor, situation-expiry) |
+| `infra/lib/ingestion-stack.ts` | 2 × (normalize + adapterisilmukka → 6 adapteria) |
+| `infra/test/runtime.test.ts` (uusi) | regressiosuoja, ks. alla |
+| `.github/actions/setup/action.yml`, `eslint.config.mjs`, `packages/source-adapter-sdk/src/http.ts` | kommentit Node 24:ään |
+| `README.md` | Node 24.22.1, npm 11+, asennusviittaus |
+| tämä luku | §2 (taulukko + asennusohje), §19 ja otsikkoblokki päivitetty |
+
+Funktioita on yhteensä **17** (api 8, event-processing 2, ingestion 7 = 6
+adapteria + normalize), mutta lähdekoodissa on 12 runtime-literaalia, koska
+adapterit syntyvät silmukassa.
+
+### Regressiosuoja: `infra/test/runtime.test.ts` (8 testiä)
+
+Runtime on kirjoitettu jokaiseen funktioon erikseen, joten yksittäinen funktio
+voi jäädä vanhalle runtimelle hiljaisesti — juuri siksi korvaus oli tehtävä
+käsin kolmeen tiedostoon. Testi lukee lähteet tekstitasolla (sama menetelmä
+kuin `apps/web/src/styles.test.ts`), joten se **ei vaadi CDK-synteesiä eikä
+esbuild-bundlausta**, ja valvoo:
+
+- jokainen `runtime:`-rivi käyttää samaa konstanttia ja niitä on vähintään 12
+  (jos määrä putoaa, testi ei enää valvo kaikkia funktioita);
+- yhtään vanhentunutta runtimea (`NODEJS_14/16/18/20/22_X`) ei esiinny;
+- `.nvmrc` on tarkka versio **ja ≥ 24.22.1** (tietoturvataso — sallii
+  uudemmat patchit, estää vanhemmat);
+- `.nvmrc`:n, `engines`:in, `@types/node`in ja Lambda-runtimen major-versiot
+  ovat samat → kehitys, CI ja ajonaikainen ympäristö eivät voi eriytyä.
+
+### Verifiointi (24.10.2026)
+
+| Vaihe | Tulos |
+|---|---|
+| `nvm install 24.22.1` | v24.22.1, npm 11.19.1; `nvm alias default 24.22.1` |
+| `npm install` (lock-synkronointi) | ✅ `@types/node` 24.19.2 |
+| `npm run build` | ✅ (paketit → infra → 17 appin `tsc --noEmit` → web) |
+| `npm run lint` / `npm run format:check` | ✅ |
+| `npx vitest run` | ✅ 70 tiedostoa / **744 testiä** (736 + 8 uutta) |
+| `cdk synth -c env=dev` | ✅ `Runtime: nodejs24.x` — api 8, ingestion 7, event-processing 2 |
+| `cdk synth -c env=prod -c wafEnabled=false` | ✅ samat luvut |
+| `cdk diff -c env=dev` | exit 0; dev oli purettu → kaikki resurssit `[+]`, ei korvauksia |
+| `npm audit --audit-level=critical` (CI:n portti) | ✅ 0 kriittistä (`high`-raportti: 4, ks. alla) |
+| **Dev-deploy** | ✅ `cdk deploy --all -c env=dev`, exit 0, **737 s**, 8 stackia luotu uudelleen |
+| AWS: dev-funktioiden runtime | **19 × `nodejs24.x`** (+ 1 CDK:n oma python3.13-custom-resource) |
+| AWS: prod-funktioiden runtime | 17 × `nodejs22.x` — **prodia ei muutettu** |
+| Savutesti `scripts/smoke.mjs` | ✅ exit 0: tilannelista, 4 lähdettä ilman `ERROR`-tiloja, frontend + `config.json` |
+| `/v1/health/sources` (dev) | ✅ TAMPERE_TRAFFIC 4, FMI_CAP 1, NYSSE_ALERTS 9, POLICE_RSS 35 — kaikki `OK`, haku 14:55–14:56 UTC |
+| `/v1/situations` (dev) | ✅ putki tuottaa tilanteita (esim. FMI `Tuulivaroitus maa-alueille`) → adapteri → normalize → processor → DynamoDB → API toimii Node 24:llä |
+| DLQ-jonot (dev) | ✅ kaikki 0 viestiä |
+| Paikalliset globaalit | `aws-cdk@2.1140.0` asennettu Node 24:lle; `nvm reinstall-packages 22` ei toiminut npm 11:llä ("No linked global packages found") → asennettiin käsin |
+
+`npm audit --audit-level=high` raportoi 4 korkeaa löydöstä (vite, source-map-js,
+markdown-it) — ne ovat **transitiivisia ja build-aikaisia**, korjattavissa
+`npm audit fix`illä, ja CI:ssä `high` on tarkoituksella vain raportti
+(`continue-on-error`), portti on `critical`. Dependabot seuraa.
+
+### Esiedellytys, joka tuli vastaan: dev oli purettu
+
+Dev-ympäristön kaikki 8 stackia olivat `DELETE_COMPLETE`, mutta **20 Lambda-
+logiryhmää oli jäänyt `RETAIN`-tilaan** (sama juurisyy kuin §39 ja §43). Ilman
+siivousta deploy olisi kaatunut `AWS::Logs::LogGroup … already exists`.
+Poisto tehtiin vain dev-nimiavaruudesta ennen deployta — **suositus pysyy**:
+eksplisiittinen `logRetention` (dev 3 pv / prod 30 pv) poistaisi ongelman
+pysyvästi. Nysse-avain oli valmiina SSM:ssä sekä deville että prodille, joten
+salaisuuksia ei tarvinnut siirtää.
+
+### Rajaukset
+
+- **Prod on vielä `nodejs22.x`**: prod-runtime vaihdetaan erikseen devin
+  verifioinnin jälkeen (`npm run deploy:prod`), koska devin piti valmistua
+  ensin. Tässä työssä ei koskettu prodiin eikä committoitu muutoksia.
+- Node 26 jää odottamaan Lambdan GA:ta (arvio 2027).
+- `infra/cdk-outputs-dev.json` on gitignoroitu, kuten ennenkin.
+
+
+

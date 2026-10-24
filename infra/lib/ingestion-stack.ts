@@ -123,7 +123,7 @@ export class IngestionStack extends cdk.Stack {
       handler: 'handler',
       functionName: resourceName(appContext.envName, 'normalize'),
       description: 'Tampere360 normalisointi: SQS raakaerä -> Tampere360Event -> EventBridge',
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: 256,
       timeout: cdk.Duration.seconds(60),
       environment: {
@@ -171,7 +171,7 @@ export class IngestionStack extends cdk.Stack {
       handler: 'handler',
       functionName: resourceName(env, `ingest-${source.id}`),
       description: source.description,
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: 256,
       timeout: cdk.Duration.seconds(60),
       environment: {

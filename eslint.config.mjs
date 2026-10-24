@@ -18,7 +18,7 @@ export default [
   },
   // Paljaat .js/.mjs-tiedostot (esim. scripts/smoke.mjs) ajetaan Nodessa, eikä
   // niillä ole TypeScript-tyyppejä antamassa globaaleja. Luetellaan tarvittavat
-  // Node 22 -globaalit, jotta js.configs.recommendedin `no-undef` ei laukea.
+  // Node 24 -globaalit, jotta js.configs.recommendedin `no-undef` ei laukea.
   {
     files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
     languageOptions: {

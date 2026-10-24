@@ -1,6 +1,6 @@
 /**
  * HTTP-haku uudelleenyrityksillä (eksponentiaalinen backoff + jitter).
- * Käyttää Node 22:n globaalia fetch-apiä.
+ * Käyttää Node 24:n globaalia fetch-apiä.
  */
 
 export interface FetchWithRetryOptions {
